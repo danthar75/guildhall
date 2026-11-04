@@ -292,6 +292,33 @@ describe("Compat", function()
       assert.is_nil(Compat.new(e):GroupSnapshot().leader)
     end)
 
+    it("a party snapshot names same-realm members Name-Realm with the home realm", function()
+      local e = {
+        IsInRaid = function() return false end,
+        GetNumGroupMembers = function() return 2 end,
+        GetNormalizedRealmName = function() return "Home Realm" end,
+        UnitName = function(u) if u == "player" then return "Me" elseif u == "party1" then return "Bob", "" end end,
+      }
+      assert.same({ "Me-HomeRealm", "Bob-HomeRealm" }, Compat.new(e):GroupSnapshot().members)
+    end)
+
+    it("a raid that cannot be read as one gives nil, never a partial snapshot", function()
+      local rows = {}
+      for i = 1, 8 do rows[i] = { "P" .. i, 0 } end
+      -- IsInRaid secret with more than 5 members
+      assert.is_nil(Compat.new(raidEnv(rows, { issecretvalue = function(v) return v == true end })):GroupSnapshot())
+      -- IsInRaid missing with more than 5 members
+      local e = raidEnv(rows); e.IsInRaid = nil
+      assert.is_nil(Compat.new(e):GroupSnapshot())
+      -- a raid without GetRaidRosterInfo
+      e = raidEnv(rows); e.GetRaidRosterInfo = nil
+      assert.is_nil(Compat.new(e):GroupSnapshot())
+      -- IsInRaid missing with a party-sized group: read as a party
+      e = raidEnv({ { "Me", 2 }, { "Bob", 0 } }); e.IsInRaid = nil
+      e.UnitName = function(u) if u == "player" then return "Me" elseif u == "party1" then return "Bob" end end
+      assert.same({ "Me-Realm", "Bob-Realm" }, Compat.new(e):GroupSnapshot().members)
+    end)
+
     it("InstanceKey is GetInstanceInfo return 8, nil when missing or secret", function()
       local id = 409
       local e = { GetInstanceInfo = function() return "Molten Core", "raid", 9, "40 Player", 40, 0, false, id end }

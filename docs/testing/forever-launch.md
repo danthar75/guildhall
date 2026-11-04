@@ -120,3 +120,10 @@ Needs Forever. Account A and account B are your two accounts, both in the guild 
 - [ ] **Month save waits for sync to settle.** On A (guild master or officer), stay offline for a few days of a finished month, then log in at least 3 days after the month ends while B is online. Expected: the month is not saved at 90 s while observations are still arriving; it is saved once the Log has been quiet for a minute (within 15 min of login), and Past months then matches what B shows. If sync never goes quiet within 15 min, nothing is saved that session.
 - [ ] **Fresh install catches up on permission-dependent records.** With a rank granted "Review bank contributions" and an exclusion made by that rank, install Guildhall fresh on B (delete its SavedVariables) and log in. Expected: within about two minutes B shows the exclusion (the member's score drops on B too) with no /reload, and B's Log shows at most one "author lacks permission" line for it.
 - [ ] **Long message check (later).** In a test guild (or later, once the real guild has 5 or more saved months), install Guildhall fresh on one account and log in. Expected: it receives every saved month, with none missing from Past months.
+
+## Groups
+
+### Solo
+
+- [ ] **Which BFD encounter ids fire.** Run `/etrace` filtered to ENCOUNTER_END, then kill bosses in Blackfathom Deeps. Expected: the first value is in 2761-2767 (Aku'mai 2767) or in 2910-2916 (Aku'mai 2910). Note which set fires; Guildhall accepts both, and the unused set can be dropped later.
+- [ ] **Optional bosses map to the right wing.** With `/etrace` filtered to ENCOUNTER_END, kill Postmaster Malown (2798) and Skul (2799) in Stratholme, and Tsu'zee (2794) and Lord Hel'nurath (2793) in Dire Maul. Expected: Malown and Skul are on the Live side (Strat Live), Tsu'zee and Hel'nurath in Dire Maul West. If a boss was in the other wing, move its id in `Modules/Groups/Instances.lua`.

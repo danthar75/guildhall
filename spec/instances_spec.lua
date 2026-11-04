@@ -25,6 +25,18 @@ describe("Instances", function()
         if id == e.final then hasFinal = true end
       end
       assert.is_true(hasFinal, "final not in bosses: " .. e.key)
+      if e.alias then
+        local hasAliasFinal = false
+        for _, id in ipairs(e.alias) do
+          assert.is_number(id)
+          assert.is_nil(encounters[id], "alias collides: " .. id)
+          encounters[id] = e.key
+          if id == e.aliasFinal then hasAliasFinal = true end
+        end
+        assert.is_true(hasAliasFinal, "aliasFinal not in alias: " .. e.key)
+      else
+        assert.is_nil(e.aliasFinal, e.key)
+      end
       assert.equal(e, Instances.Get(e.key))
     end
   end)
@@ -68,6 +80,15 @@ describe("Instances", function()
     e, isFinal = Instances.ByEncounter(ud.bosses[1] == ud.final and ud.bosses[2] or ud.bosses[1])
     assert.equal(ud, e)
     assert.is_false(isFinal)
+    e, isFinal = Instances.ByEncounter(2910) -- BFD's alias set
+    assert.equal("bfd", e.key)
+    assert.is_true(isFinal)
+    e, isFinal = Instances.ByEncounter(2916)
+    assert.equal("bfd", e.key)
+    assert.is_false(isFinal)
+    e, isFinal = Instances.ByEncounter(2767)
+    assert.equal("bfd", e.key)
+    assert.is_true(isFinal)
     assert.is_nil(Instances.ByEncounter(999999))
     assert.is_nil(Instances.ByEncounter(nil))
   end)

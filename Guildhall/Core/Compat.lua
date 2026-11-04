@@ -396,15 +396,22 @@ end
 -- or nil when not grouped, the size is unreadable, or fewer than 2 names can be read. Secret or nil
 -- names are left out; a secret rank or leader flag makes that member neither leader nor assist.
 -- In a raid the rank comes from GetRaidRosterInfo (2 leader, 1 assistant); in a party, from
--- UnitIsGroupLeader (a party has no assistants).
+-- UnitIsGroupLeader (a party has no assistants). A raid that cannot be read as one (IsInRaid
+-- secret or missing with more than 5 members, or no GetRaidRosterInfo) gives nil, never a partial
+-- snapshot with the wrong size.
 function Compat:GroupSnapshot()
   local env = self.env
   if not (env.GetNumGroupMembers and env.UnitName) then return nil end
   local n = self:Safe((env.GetNumGroupMembers()))
   if type(n) ~= "number" or n < 2 then return nil end
   local members, assists, leader = {}, {}, nil
-  local inRaid = env.IsInRaid and self:Safe((env.IsInRaid())) == true
-  if inRaid and env.GetRaidRosterInfo then
+  local inRaid = env.IsInRaid and self:Safe((env.IsInRaid()))
+  if type(inRaid) ~= "boolean" then
+    if n > 5 then return nil end
+    inRaid = false
+  end
+  if inRaid and not env.GetRaidRosterInfo then return nil end
+  if inRaid then
     for i = 1, math.min(n, 40) do
       local rawName, rawRank = env.GetRaidRosterInfo(i)
       local name = self:_fullName(rawName)
@@ -478,6 +485,7 @@ local CLASS_WEAPON, CLASS_ARMOR, SUBCLASS_SHIELD = 2, 4, 6
 -- Names of the equipped enchantable slots without an enchant, or nil when the API is missing or
 -- any link is secret (a partial answer could wrongly say "all enchanted"). Empty slots are
 -- skipped. The enchant id is the third ':' field of the item string; 0 or empty is unenchanted.
+-- A bare "item:123" link (no enchant field at all) is treated as unknown and not reported.
 function Compat:UnenchantedSlots()
   local env = self.env
   if not env.GetInventoryItemLink then return nil end

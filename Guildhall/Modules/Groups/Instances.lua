@@ -7,17 +7,22 @@ local ADDON, ns = ...
 --   https://wago.tools/db2/Map/csv?build=1.15.9.70576               (instanceId = Map ID, GetInstanceInfo return 8)
 -- The Era build also carries Season of Discovery encounters. Where a map has several sets,
 -- the Era 5-player set (DifficultyID 201) is used: BFD, Gnomeregan and Sunken Temple.
+-- BFD also has a second 5-player set (DifficultyID 1, 2910-2916). Which one fires in game is not
+-- known yet, so it is listed as `alias` (with `aliasFinal`); ByEncounter treats it like bosses/final.
+-- Gnomeregan's DifficultyID 198 set and Sunken Temple's 215 set are the SoD 10- and 20-player
+-- raid versions, and are deliberately not aliased.
 -- Wings of one instance share its instanceId; the encounter tells the wings apart.
 -- Which wing a rare or summoned boss belongs to (Strat, Dire Maul) is from game knowledge.
 --
--- Entry: { key, name, short, kind = "dungeon"|"raid", size, instanceId, bosses = {...}, final, tier }
+-- Entry: { key, name, short, kind = "dungeon"|"raid", size, instanceId, bosses = {...}, final, tier,
+--          alias = {...}?, aliasFinal? }
 -- tier orders raids in the picker (release order). Names are plain ASCII.
 local Instances = {}
 ns.Instances = Instances
 
-local function dungeon(key, name, short, instanceId, bosses, final, size)
+local function dungeon(key, name, short, instanceId, bosses, final, size, alias, aliasFinal)
   return { key = key, name = name, short = short, kind = "dungeon", size = size or 5,
-    instanceId = instanceId, bosses = bosses, final = final }
+    instanceId = instanceId, bosses = bosses, final = final, alias = alias, aliasFinal = aliasFinal }
 end
 
 local function raid(key, name, short, instanceId, size, tier, bosses, final)
@@ -30,7 +35,8 @@ Instances.LIST = {
   dungeon("wc", "Wailing Caverns", "WC", 43, { 585, 586, 587, 588, 589, 590, 591, 592 }, 592),
   dungeon("deadmines", "The Deadmines", "VC", 36, { 2741, 2742, 2743, 2744, 2745, 2746, 2747 }, 2747),
   dungeon("sfk", "Shadowfang Keep", "SFK", 33, { 2748, 2749, 2750, 2751, 2752, 2753, 2754, 2755 }, 2755),
-  dungeon("bfd", "Blackfathom Deeps", "BFD", 48, { 2761, 2762, 2763, 2764, 2765, 2766, 2767 }, 2767),
+  dungeon("bfd", "Blackfathom Deeps", "BFD", 48, { 2761, 2762, 2763, 2764, 2765, 2766, 2767 }, 2767, nil,
+    { 2910, 2911, 2912, 2913, 2914, 2915, 2916 }, 2910),
   dungeon("stocks", "The Stockade", "Stocks", 34, { 2756, 2757, 2758, 2759, 2760 }, 2760),
   dungeon("gnomer", "Gnomeregan", "Gnomer", 90, { 2768, 2769, 2770, 2771, 2772 }, 2772),
   dungeon("rfk", "Razorfen Kraul", "RFK", 47, { 2773, 2774, 2775, 2776, 2777, 2778 }, 2778),
@@ -70,17 +76,19 @@ local byKey, byEncounter = {}, {}
 for _, e in ipairs(Instances.LIST) do
   byKey[e.key] = e
   for _, id in ipairs(e.bosses) do byEncounter[id] = e end
+  for _, id in ipairs(e.alias or {}) do byEncounter[id] = e end
 end
 
 function Instances.Get(key)
   return byKey[key]
 end
 
--- The entry an encounter belongs to, and whether it is that entry's final boss. nil when unknown.
+-- The entry an encounter (boss or alias) belongs to, and whether it is that entry's final boss
+-- (final or aliasFinal). nil when unknown.
 function Instances.ByEncounter(encounterId)
   local e = encounterId ~= nil and byEncounter[encounterId] or nil
   if not e then return nil end
-  return e, e.final == encounterId
+  return e, e.final == encounterId or (e.aliasFinal ~= nil and e.aliasFinal == encounterId)
 end
 
 -- A new array of one kind's entries: dungeons by name, raids by tier.
