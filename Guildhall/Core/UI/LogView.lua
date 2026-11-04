@@ -31,13 +31,14 @@ function LogView.Export(log, list, seeDetail)
   end
   for _, e in ipairs(list) do
     if e.set == OBSERVATIONS then
-      if not run then
-        local ts = type(e.t) == "number" and log.fmtTime(e.t) or tostring(e.t or "")
-        run = { time = ts, n = 0, kinds = {}, counts = {} }
-      end
-      run.n = run.n + 1
+      -- only accepted records count as received; ignored or rejected ones are left out
       local kind = type(e.after) == "table" and e.after.kind or nil
-      if type(kind) == "string" then
+      if e.result == "accepted" and type(kind) == "string" then
+        if not run then
+          local ts = type(e.t) == "number" and log.fmtTime(e.t) or tostring(e.t or "")
+          run = { time = ts, n = 0, kinds = {}, counts = {} }
+        end
+        run.n = run.n + 1
         if not run.counts[kind] then run.counts[kind] = 0; run.kinds[#run.kinds + 1] = kind end
         run.counts[kind] = run.counts[kind] + 1
       end

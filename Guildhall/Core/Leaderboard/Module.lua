@@ -28,7 +28,10 @@ end
 
 local function invalidate()
   local lb = ns.leaderboard
-  if lb then lb.ledger:Invalidate() end
+  if lb then
+    lb.ledger:Invalidate()
+    if lb.realLedger then lb.realLedger:Invalidate() end
+  end
 end
 -- Observations, config (weights, months, exclusions) and the roster all feed the ledger.
 ns.Events:On("ObservationsChanged", invalidate)
@@ -38,15 +41,20 @@ ns.Events:On("ProfilesChanged", invalidate)
 
 -- Waits for the first sync exchange (Sync exposes no completion signal, so a fixed delay), then
 -- lets an officer client refresh the tz and freeze finished months.
+-- Always runs on the real config and ledger: while /gh lbdemo is on, ns.leaderboard holds the
+-- demo ones (lb.realConfig / lb.realLedger are the real ones), and demo data must never be saved.
+function ns.Leaderboard.RunOfficerWork(s)
+  local lb = ns.leaderboard
+  if not lb or ns.services ~= s or s.roster:IsOfficer(s.playerChar) ~= true then return end
+  local config, ledger = lb.realConfig or lb.config, lb.realLedger or lb.ledger
+  local ok, err = pcall(config.MaybeRefreshTz, config)
+  if not ok then ns.OnError(err) end
+  ok, err = pcall(config.MaybeSaveMonth, config, ledger, s.now())
+  if not ok then ns.OnError(err) end
+end
+
 local function scheduleOfficerWork(s)
-  s.after(SETTLE, function()
-    local lb = ns.leaderboard
-    if not lb or ns.services ~= s or s.roster:IsOfficer(s.playerChar) ~= true then return end
-    local ok, err = pcall(lb.config.MaybeRefreshTz, lb.config)
-    if not ok then ns.OnError(err) end
-    ok, err = pcall(lb.config.MaybeSaveMonth, lb.config, lb.ledger, s.now())
-    if not ok then ns.OnError(err) end
-  end)
+  s.after(SETTLE, function() ns.Leaderboard.RunOfficerWork(s) end)
 end
 
 local function build(n, s)

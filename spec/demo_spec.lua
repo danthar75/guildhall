@@ -114,3 +114,74 @@ describe("Leaderboard demo", function()
     assert.equal(realLedger, lb.ledger)
   end)
 end)
+
+-- Drives a REAL LbConfig (with a sync over a spy Comm) and the officer timer path with demo on.
+describe("Leaderboard demo never reaches the real guild", function()
+  local fakes = require("spec.helpers.fakes")
+  local function utc(y, m, d, h)
+    local a = math.floor((14 - m) / 12)
+    y, m = y + 4800 - a, m + 12 * a - 3
+    local jdn = d + math.floor((153 * m + 2) / 5) + 365 * y + math.floor(y / 4) - math.floor(y / 100) + math.floor(y / 400) - 32045
+    return (jdn - 2440588) * 86400 + (h or 0) * 3600
+  end
+
+  local ns, clock, timers, sent, cfg, db, lb, services
+
+  before_each(function()
+    clock = fakes.clock(utc(2026, 11, 5, 12))
+    timers = fakes.timers(clock)
+    local bus = fakes.bus(clock, timers)
+    ns = { Events = { Fire = function() end, On = function() end }, OnError = function(e) error(e) end }
+    for _, f in ipairs({ "Util", "DB", "ReplicatedSet", "Sync", "Log" }) do loadAddonFile(ns, "Guildhall/Core/" .. f .. ".lua") end
+    for _, f in ipairs({ "Activity", "Scoring", "Ledger" }) do loadAddonFile(ns, "Guildhall/Core/Leaderboard/" .. f .. ".lua") end
+    loadAddonFile(ns, "Guildhall/Modules/Exchange/Deals.lua")
+    ns.Observations = { KINDS = { trade = true, cod = true, manual = true, witness = true, bank = true } }
+    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Bank.lua")
+    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Config.lua")
+    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Demo.lua")
+    ns.RegisterModule = function() end
+    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Module.lua")
+    sent = 0
+    local comm = bus:join("Boss-Realm")
+    local realSend = comm.Send
+    comm.Send = function(...) sent = sent + 1; return realSend(...) end
+    local profile = { Id = function() return "pMe" end, IsHidden = function() return false end,
+      OnlineChar = function() return nil end, CharsOf = function() return {} end, OwnerOf = function() return nil end,
+      set = { Get = function() return nil end } }
+    local roster = { IsOfficer = function() return true end }
+    db = {}
+    cfg = ns.LbConfig.new({ comm = comm, now = clock.now, after = timers.after, random = function(lo) return lo end,
+      log = ns.Log.new({}, clock.now, function() return "" end), roster = roster, profile = profile,
+      compat = { ServerOffset = function() return 0 end }, playerChar = "Boss-Realm", db = db })
+    local realLedger = { Query = function() return { byProfile = {}, guild = {}, goldKept = 0 } end, Invalidate = function() end }
+    lb = { ledger = realLedger, config = cfg }
+    ns.leaderboard = lb
+    services = { now = clock.now, compat = { ServerOffset = function() return 0 end }, profile = profile,
+      roster = roster, playerChar = "Boss-Realm" }
+    ns.services = services
+  end)
+
+  local function count(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end
+
+  it("the officer timer during demo saves and sends nothing", function()
+    ns.Leaderboard.Demo.Set(ns, true)
+    local before = count(db)
+    ns.Leaderboard.RunOfficerWork(services)
+    assert.equal(0, sent)
+    assert.equal(before, count(db))
+    ns.Leaderboard.Demo.Set(ns, false)
+    assert.is_nil(cfg:Month("2026-10"))
+    assert.equal(0, sent)
+  end)
+
+  it("every write on the demo config is refused", function()
+    ns.Leaderboard.Demo.Set(ns, true)
+    for _, name in ipairs({ "PublishWeights", "RetakeMonth", "MaybeSaveMonth", "MaybeRefreshTz", "SetExcluded" }) do
+      local ok, err = lb.config[name](lb.config, {}, lb.ledger)
+      assert.is_false(ok)
+      assert.is_truthy(err:find("/gh lbdemo off", 1, true))
+    end
+    assert.is_nil(rawget(lb.config, "set"))
+    assert.equal(0, sent)
+  end)
+end)

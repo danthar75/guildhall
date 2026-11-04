@@ -141,15 +141,23 @@ local roster = {
   ConfigList = function() return {} end,
 }
 
--- Real settings and weights, but the saved months are the demo month.
+local REFUSED = "Demo data is only on your screen; turn it off with /gh lbdemo off to change settings."
+
+-- A whitelist, not a pass-through: only the read methods reach the real config, and every
+-- method that could publish or save refuses. The demo can never write to the real guild.
 local function configFor(real, store)
-  local c = setmetatable({}, { __index = real })
+  local c = {}
+  for _, name in ipairs({ "Weights", "WeightsInfo", "Tz" }) do
+    c[name] = function(_, ...) return real[name](real, ...) end
+  end
   function c:Months() return { store.month.ym } end
   function c:Month(ym)
     if ym == store.month.ym then return ns.Util.DeepCopy(store.month.rec) end
     return nil
   end
-  function c:RetakeMonth() return false, "demo data" end
+  for _, name in ipairs({ "PublishWeights", "RetakeMonth", "MaybeSaveMonth", "MaybeRefreshTz", "SetExcluded" }) do
+    c[name] = function() return false, REFUSED end
+  end
   return c
 end
 
@@ -173,6 +181,7 @@ function Demo.Set(n, on)
     lb.demoProfile, lb.demo = profile, true
   elseif not on and lb.demo then
     lb.ledger, lb.config = lb.realLedger, lb.realConfig
+    lb.ledger:Invalidate()
     lb.realLedger, lb.realConfig, lb.demoProfile, lb.demo = nil, nil, nil, nil
   end
   refresh()

@@ -32,6 +32,15 @@ describe("Roster", function()
     assert.equal("fast", r.mode)
   end)
 
+  it("ParseTag tolerates spaces after commas", function()
+    local ns = {}
+    loadAddonFile(ns, "Guildhall/Core/Roster.lua")
+    local r = ns.Roster.ParseTag("[Guildhall donations=3, 4 bankexclude=0 ,1 officers=2]")
+    assert.equal("3,4", r.donations)
+    assert.equal("0,1", r.bankexclude)
+    assert.equal(2, r.officers)
+  end)
+
   it("ParseTag ignores text without tag", function()
     local ns = {}
     loadAddonFile(ns, "Guildhall/Core/Roster.lua")

@@ -174,7 +174,7 @@ function SettingsView.Build(parent)
       section.status:SetText("Weights published.")
       section.refresh()
     else
-      section.status:SetText(err == "officers only" and "Only officers can publish weights."
+      section.status:SetText(lb().demo and tostring(err) or err == "officers only" and "Only officers can publish weights."
         or ("Couldn't publish the weights: " .. tostring(err) .. "."))
     end
   end)

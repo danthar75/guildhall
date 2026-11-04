@@ -15,6 +15,7 @@ function Roster.ParseTag(text)
   if type(text) ~= "string" then return out end
   -- Every [Guildhall ...] tag counts; keys merge (a later tag wins a repeated key).
   for body in text:gmatch("%[Guildhall%s+([^%]]*)%]") do
+    body = body:gsub("%s*,%s*", ",") -- "donations=3, 4" reads like "donations=3,4"
     for k, v in body:gmatch("([%w_]+)=(%S+)") do
       out[k] = tonumber(v) or v
     end

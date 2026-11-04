@@ -36,6 +36,14 @@ describe("LogView export", function()
     assert.is_truthy(text:find("| set | accepted | p1 | p1 |", 1, true))
   end)
 
+  it("N counts only accepted entries, so it equals the per-kind sum", function()
+    local ignored = obs("trade", 1700000450, "p9:o9")
+    ignored.result, ignored.after = "ignored", nil
+    table.insert(entries, 2, ignored)
+    local text = ns.UI.LogView.Export(log, entries, false)
+    assert.is_truthy(text:find("received 4 (trade 2, bank 2)", 1, true))
+  end)
+
   it("an officer export does", function()
     local text = ns.UI.LogView.Export(log, entries, true)
     assert.is_truthy(text:find("Secretchar", 1, true))
