@@ -153,4 +153,25 @@ describe("Compat", function()
     assert.equal(7, c:Now())
     assert.equal(0, env.sent)
   end)
+
+  it("ServerOffset rounds to 15 minutes and is nil when missing or secret", function()
+    assert.is_nil(Compat.new({}):ServerOffset())
+    local function env(localT, extra)
+      local e = { GetServerTime = function() return 1000 end,
+        C_DateAndTime = { GetServerTimeLocal = function() return localT end } }
+      for k, v in pairs(extra or {}) do e[k] = v end
+      return e
+    end
+    assert.equal(-28800, Compat.new(env(1000 - 28800 + 200)):ServerOffset())
+    assert.equal(3600, Compat.new(env(1000 + 3600)):ServerOffset())
+    assert.is_nil(Compat.new(env(5, { issecretvalue = function(v) return v == 5 end })):ServerOffset())
+  end)
+
+  it("SecondsUntilWeeklyReset reads the API, nil when missing or secret", function()
+    assert.is_nil(Compat.new({}):SecondsUntilWeeklyReset())
+    local e = { C_DateAndTime = { GetSecondsUntilWeeklyReset = function() return 12345 end } }
+    assert.equal(12345, Compat.new(e):SecondsUntilWeeklyReset())
+    e.issecretvalue = function() return true end
+    assert.is_nil(Compat.new(e):SecondsUntilWeeklyReset())
+  end)
 end)

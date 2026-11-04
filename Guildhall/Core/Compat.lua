@@ -145,4 +145,23 @@ function Compat:GetGuildInfoText()
   return self:Safe((gi.GetInfoText()))
 end
 
+-- Server clock offset from UTC in seconds, rounded to 15 minutes; nil when unknown or secret.
+function Compat:ServerOffset()
+  local dt = self.env.C_DateAndTime
+  if not (dt and dt.GetServerTimeLocal) or not self.env.GetServerTime then return nil end
+  local localT = self:Safe((dt.GetServerTimeLocal()))
+  local utc = self:Safe((self.env.GetServerTime()))
+  if type(localT) ~= "number" or type(utc) ~= "number" then return nil end
+  return math.floor((localT - utc) / 900 + 0.5) * 900
+end
+
+-- Seconds until the weekly reset, or nil when the API is missing or the value is secret.
+function Compat:SecondsUntilWeeklyReset()
+  local dt = self.env.C_DateAndTime
+  if not (dt and dt.GetSecondsUntilWeeklyReset) then return nil end
+  local s = self:Safe((dt.GetSecondsUntilWeeklyReset()))
+  if type(s) ~= "number" then return nil end
+  return s
+end
+
 ns.compat = Compat.new(_G)
