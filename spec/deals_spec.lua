@@ -457,13 +457,99 @@ describe("Exchange deals", function()
       assert.is_nil(bad:SendMailSnapshot())
     end)
 
+    it("an unpaid vanished take is discarded: later spends and MAIL_CLOSED publish nothing", function()
+      inbox[1] = codMail()
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      inbox[1] = nil
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      now = now + 10
+      money = money - 50000   -- an unrelated repair bill
+      w:OnEvent("PLAYER_MONEY")
+      assert.equal(0, #published)
+      -- and MAIL_CLOSED clears pending takes outright
+      inbox[1] = codMail()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      inbox[1] = nil
+      w:OnEvent("MAIL_CLOSED")
+      money = money - 50000
+      w:OnEvent("PLAYER_MONEY")
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(0, #published)
+    end)
+
+    it("one money drop is attributed once: S1 paid, S2 vanished unpaid, only S1 publishes", function()
+      inbox[1] = codMail({ cod = 70000, items = { { id = 2589, n = 5 } } })
+      inbox[2] = codMail()
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      listings[1].d.qty = 5
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      hooks.TakeInboxItem(2, 1)
+      inbox = {}
+      money = money - 70000
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(1, #published)
+      assert.equal(70000, published[1].copper)
+    end)
+
+    it("two paid takes whose drops are summed both publish", function()
+      inbox[1] = codMail({ cod = 70000, items = { { id = 2589, n = 5 } } })
+      inbox[2] = codMail()
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      listings[2] = { id = "L2", v = 1, t = 1000, by = "bob", char = "Bob-R", exp = 700000, del = false,
+        d = { kind = "WTS", item = LINK2, qty = 5, cod = true, created = 1000 } }
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      hooks.TakeInboxItem(2, 1)
+      inbox = {}
+      money = money - 120000
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(2, #published)
+    end)
+
+    it("Return cancels only one pending take (the newest with that signature)", function()
+      inbox[1] = codMail()
+      inbox[2] = codMail()
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      hooks.TakeInboxItem(2, 1)
+      hooks.ReturnInboxItem(2)
+      inbox = {}
+      money = money - 100000
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(1, #published)
+    end)
+
+    it("a slot with a name and count but no id and no link makes the snapshot nil", function()
+      local c = realCompat({ SendMailNameEditBox = { GetText = function() return "Bob-R" end },
+        GetSendMailCOD = function() return 50000 end,
+        GetSendMailItemLink = function(i) if i == 1 then return LINK2 end end,
+        GetSendMailItem = function(i) if i == 1 then return "x", 2589, nil, 20 end
+          if i == 2 then return "Mystery", nil, nil, 3 end end,
+        issecretvalue = function() return false end })
+      assert.is_nil(c:SendMailSnapshot())
+      local sec = realCompat({ SendMailNameEditBox = { GetText = function() return "Bob-R" end },
+        GetSendMailCOD = function() return 50000 end,
+        GetSendMailItemLink = function() return nil end,
+        GetSendMailItem = function(i) if i == 1 then return "x", "SECRETID", nil, 20 end end,
+        issecretvalue = function(v) return v == "SECRETID" end })
+      assert.is_nil(sec:SendMailSnapshot())
+    end)
+
     it("SendMailSnapshot: secret cod, link or count gives nil; unparseable link gives nil", function()
       local function mk(over)
         local e = { SendMailNameEditBox = { GetText = function() return "Bob-R" end },
           GetSendMailCOD = function() return 50000 end,
           GetSendMailItemLink = function(i) if i == 1 then return LINK2 end end,
-          GetSendMailItem = function(i) if i == 1 then return "x", 2589, nil, 20 end
-            if i == 2 then return "y", nil, nil, 1 end end,
+          GetSendMailItem = function(i) if i == 1 then return "x", 2589, nil, 20 end end,
           issecretvalue = function() return false end }
         for k, v in pairs(over) do e[k] = v end
         return realCompat(e)
@@ -473,15 +559,16 @@ describe("Exchange deals", function()
       assert.is_nil(mk({ issecretvalue = function(v) return v == LINK2 end }):SendMailSnapshot())
       assert.is_nil(mk({ issecretvalue = function(v) return v == 20 end }):SendMailSnapshot())
       assert.is_nil(mk({ GetSendMailItemLink = function(i) if i == 1 then return LINK2 end
-        if i == 2 then return "garbage" end end }):SendMailSnapshot())
+        if i == 2 then return "garbage" end end,
+        GetSendMailItem = function(i) if i == 1 then return "x", 2589, nil, 20 end
+          if i == 2 then return "y", nil, nil, 1 end end }):SendMailSnapshot())
     end)
 
     it("InboxCod: a secret attachment link or an unparseable link gives nil", function()
       local function mk(over)
         local e = { GetInboxHeaderInfo = function() return nil, nil, "Bob-R", "s", 0, 50000 end,
           GetInboxItemLink = function(_, i) if i == 1 then return LINK2 end end,
-          GetInboxItem = function(_, i) if i == 1 then return "x", 2589, nil, 20 end
-            if i == 2 then return "y", nil, nil, 1 end end,
+          GetInboxItem = function(_, i) if i == 1 then return "x", 2589, nil, 20 end end,
           issecretvalue = function() return false end }
         for k, v in pairs(over) do e[k] = v end
         return realCompat(e)
@@ -489,7 +576,9 @@ describe("Exchange deals", function()
       assert.equal(50000, mk({}):InboxCod(1).cod)
       assert.is_nil(mk({ issecretvalue = function(v) return v == LINK2 end }):InboxCod(1))
       assert.is_nil(mk({ GetInboxItemLink = function(_, i) if i == 2 then return "garbage" end
-        if i == 1 then return LINK2 end end }):InboxCod(1))
+        if i == 1 then return LINK2 end end,
+        GetInboxItem = function(_, i) if i == 1 then return "x", 2589, nil, 20 end
+          if i == 2 then return "y", nil, nil, 1 end end }):InboxCod(1))
     end)
 
     it("CoD observations 29 days apart pair; 31 days apart don't", function()
@@ -527,7 +616,7 @@ describe("Exchange deals", function()
         GetInboxNumItems = function() return 1 end,
         GetInboxHeaderInfo = function() return nil, nil, "SECRET", "s", 0, 50000 end,
         GetInboxItemLink = function(_, i) if i == 1 then return LINK2 end end,
-        GetInboxItem = function() return "x", 2589, nil, 20 end,
+        GetInboxItem = function(_, i) if i == 1 then return "x", 2589, nil, 20 end end,
         issecretvalue = function(v) return v == "SECRET" end,
       })
       listings[1].by = "bob"

@@ -201,20 +201,19 @@ function Compat:TradeSnapshot()
   return { give = give, get = get, giveCopper = giveCopper, getCopper = getCopper }
 end
 
--- One attachment slot: nil = unreadable (abort the whole snapshot), false = empty slot,
--- else { id, n }. The item id prefers the slot's itemID (works while the link is uncached) and
--- falls back to parsing the link. An occupied slot without an id aborts.
-function Compat:_attachment(rawLink, rawId, rawN)
+-- One attachment slot: nil = unreadable (abort the whole snapshot), false = empty slot (every raw
+-- field nil), else { id, n }. A slot with ANY non-nil field (name, link, id, count; secret counts)
+-- is occupied, and an occupied slot without a usable id aborts. The item id prefers the slot's
+-- itemID (works while the link is uncached) and falls back to parsing the link.
+function Compat:_attachment(rawName, rawLink, rawId, rawN)
+  if rawName == nil and rawLink == nil and rawId == nil and rawN == nil then return false end
   if self:Safe(rawLink) == nil and self:_isSecret(rawLink) then return nil end
   local link, id = self:Safe(rawLink), self:Safe(rawId)
   if type(id) ~= "number" then
     id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
   end
-  if link == nil and id == nil then return false end
-  if not id then return nil end
   local n = self:Safe(rawN)
-  if type(n) ~= "number" then return nil end
-  if n <= 0 then return false end
+  if not id or type(n) ~= "number" or n <= 0 then return nil end
   return { id = id, n = n }
 end
 
@@ -236,8 +235,8 @@ function Compat:SendMailSnapshot()
   if type(to) ~= "string" or to == "" or type(cod) ~= "number" or cod <= 0 then return nil end
   local items = {}
   for i = 1, env.ATTACHMENTS_MAX_SEND or 12 do
-    local _, rawId, _, rawN = env.GetSendMailItem(i)
-    local a = self:_attachment(env.GetSendMailItemLink(i), rawId, rawN)
+    local rawName, rawId, _, rawN = env.GetSendMailItem(i)
+    local a = self:_attachment(rawName, env.GetSendMailItemLink(i), rawId, rawN)
     if a == nil then return nil end
     if a then items[#items + 1] = a end
   end
@@ -261,8 +260,8 @@ function Compat:InboxCod(index)
   if type(sender) ~= "string" or sender == "" or type(cod) ~= "number" or cod <= 0 then return nil end
   local items = {}
   for i = 1, env.ATTACHMENTS_MAX_RECEIVE or 16 do
-    local _, rawId, _, rawN = env.GetInboxItem(index, i)
-    local a = self:_attachment(env.GetInboxItemLink(index, i), rawId, rawN)
+    local rawName, rawId, _, rawN = env.GetInboxItem(index, i)
+    local a = self:_attachment(rawName, env.GetInboxItemLink(index, i), rawId, rawN)
     if a == nil then return nil end
     if a then items[#items + 1] = a end
   end

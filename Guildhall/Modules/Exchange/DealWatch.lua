@@ -102,19 +102,18 @@ function W:_onTake(index)
   local money = ctx.compat:Money()
   if not mail or not money then return end
   local sig = signature(mail)
-  self.pending[#self.pending + 1] = { sig = sig, mail = mail, moneyBefore = money,
-    countBefore = self:_liveCounts()[sig] or 1, at = ctx.now() }
+  self.pending[#self.pending + 1] = { sig = sig, mail = mail, moneyBefore = money, cod = mail.cod,
+    countBefore = self:_liveCounts()[sig] or 1, t = ctx.now() }
 end
 
--- Return/Delete hooks: those pending takes will not pay, cancel them.
+-- Return/Delete hooks: one pending take of that signature (the newest) will not pay.
 function W:_onCancel(index)
   local mail = self.ctx.compat:InboxCod(index)
   if not mail then return end
-  local sig, keep = signature(mail), {}
-  for _, p in ipairs(self.pending) do
-    if p.sig ~= sig then keep[#keep + 1] = p end
+  local sig = signature(mail)
+  for i = #self.pending, 1, -1 do
+    if self.pending[i].sig == sig then table.remove(self.pending, i); return end
   end
-  self.pending = keep
 end
 
 function W:_publishTaken(mail)
@@ -137,33 +136,34 @@ function W:_sendSuccess()
     giveCopper = 0, getCopper = snap.cod, at = ctx.now() })
 end
 
--- A pending take succeeded only with proof of payment: fewer mails with its signature remain than
--- when it was taken AND the player's money fell by at least the CoD. At most one publication per
--- vanished mail. On MAIL_INBOX_UPDATE (final) takes that did not succeed are consumed, unless the
--- mail is gone and the money has not moved yet (PLAYER_MONEY may follow; stale ones expire).
-function W:_settle(final)
-  local compat, ctx = self.ctx.compat, self.ctx
+-- Settlement with one shared ledger. A pending take succeeds only when (a) fewer mails with its
+-- signature remain than when it was taken (less takes already counted in this walk), (b) the money
+-- spent since the oldest pending take still covers its CoD (each success deducts it), and
+-- (c) it is at most PENDING_TTL seconds old. Older takes are discarded at any settle, unreadable
+-- money discards everything, and unbacked takes wait for the next event until they expire.
+function W:_settle()
+  local ctx = self.ctx
   if #self.pending == 0 then return end
-  local counts, money, now = self:_liveCounts(), compat:Money(), ctx.now()
-  local groups, order = {}, {}
+  local money, now = ctx.compat:Money(), ctx.now()
+  if not money then self.pending = {}; return end
+  local live = {}
   for _, p in ipairs(self.pending) do
-    local g = groups[p.sig]
-    if not g then g = { list = {} }; groups[p.sig] = g; order[#order + 1] = p.sig end
-    g.list[#g.list + 1] = p
+    if now - p.t <= PENDING_TTL then live[#live + 1] = p end
   end
-  local keep = {}
-  for _, sig in ipairs(order) do
-    local list = groups[sig].list
-    local first = list[1]
-    local drop = first.countBefore - (counts[sig] or 0)
-    local k = money and math.min(#list, drop) or 0
-    while k > 0 and money > first.moneyBefore - first.mail.cod * k do k = k - 1 end
-    for _ = 1, k do self:_publishTaken(first.mail) end
-    if k == 0 and drop > 0 and money and not final then
-      -- keep waiting for the money (PLAYER_MONEY)
-      for _, p in ipairs(list) do keep[#keep + 1] = p end
-    elseif k == 0 and drop > 0 and money and now - first.at <= PENDING_TTL then
-      for _, p in ipairs(list) do keep[#keep + 1] = p end
+  self.pending = live
+  if #live == 0 then return end
+  local spend = live[1].moneyBefore - money
+  local counts, counted, keep = self:_liveCounts(), {}, {}
+  for _, p in ipairs(live) do
+    local avail = p.countBefore - (counts[p.sig] or 0) - (counted[p.sig] or 0)
+    if avail > 0 and spend >= p.cod then
+      spend = spend - p.cod
+      counted[p.sig] = (counted[p.sig] or 0) + 1
+      self:_publishTaken(p.mail)
+    elseif avail <= 0 and p.countBefore - (counts[p.sig] or 0) > 0 then
+      -- its vanished mail was already claimed by an earlier take (e.g. the double hook): drop it
+    else
+      keep[#keep + 1] = p
     end
   end
   self.pending = keep
@@ -198,9 +198,11 @@ function W:OnEvent(event, ...)
   elseif event == "MAIL_FAILED" then
     self.sendSnap, self.preSnap = nil, nil
   elseif event == "MAIL_INBOX_UPDATE" then
-    self:_settle(true)
+    self:_settle()
   elseif event == "PLAYER_MONEY" then
-    self:_settle(false)
+    self:_settle()
+  elseif event == "MAIL_CLOSED" then
+    self.pending = {}
   elseif event == "TRADE_ACCEPT_UPDATE" then
     local player, target = ctx.compat:Safe((...)), ctx.compat:Safe((select(2, ...)))
     if accepted(player) and accepted(target) then
