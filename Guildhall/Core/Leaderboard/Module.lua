@@ -37,12 +37,14 @@ local function invalidate()
     if lb.realLedger then lb.realLedger:Invalidate() end
   end
 end
--- The cached Contributions depend on observations and profiles only (the Deals and Bank
--- derivers read ctx.observations and ctx.profile). Ranks, tabs, profile links and exclusions are
--- applied in Ledger:Query, so roster and config changes only refresh the views, which listen
--- for those events themselves.
+-- The cached Contributions depend on observations and profiles (the Deals and Bank derivers read
+-- ctx.observations and ctx.profile), and, for the group kill deriver, on guild membership (the
+-- majority rule) and the server tz (server day and week). Ranks, tabs, profile links and
+-- exclusions are applied in Ledger:Query.
 ns.Events:On("ObservationsChanged", invalidate)
 ns.Events:On("ProfilesChanged", invalidate)
+ns.Events:On("RosterRefreshed", invalidate)
+ns.Events:On("LeaderboardConfigChanged", invalidate)
 
 -- Once the roster loads, records rejected as "roster unknown" are asked for again.
 ns.Events:On("RosterRefreshed", function()
@@ -105,8 +107,9 @@ local function build(n, s)
     perms = permissions, seenV = db.configSeen,
   })
   -- config: the ledger reads the bank review's exclusions from it on every Query
+  -- compat: derivers build the server clock (Scoring.Clock) from config and compat
   local ledger = n.Ledger.new({ observations = observations, profile = s.profile, roster = s.roster, now = s.now,
-    config = config })
+    config = config, compat = s.compat })
   local bank = n.Bank.new({
     compat = s.compat, observations = observations, profile = s.profile, roster = s.roster,
     now = s.now, moduleDb = db,

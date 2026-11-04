@@ -106,4 +106,51 @@ describe("Exchange.Board", function()
     assert.equal("Listing posted. It will reach guildmates when chat restrictions lift.", Board.SavedText(false, true))
     assert.equal("Listing saved. It will reach guildmates when chat restrictions lift.", Board.SavedText(true, true))
   end)
+  describe("ExchangeUI.Search", function()
+    local fakes = require("spec.helpers.fakes")
+    local saved, shown
+
+    before_each(function()
+      saved = _G.CreateFrame
+      _G.CreateFrame = fakes.widgets().CreateFrame
+    end)
+    after_each(function() _G.CreateFrame = saved end)
+
+    local function load(withWindow)
+      local ns = {}
+      loadAddonFile(ns, "Guildhall/Core/Util.lua")
+      shown = nil
+      ns.UI = {
+        Try = function(fn, ...) return fn(...) end,
+        Text = function() return fakes.widgets().new("FontString") end,
+        Button = function() return fakes.widgets().new("Button") end,
+        ApplyBackdrop = function() end,
+        ClosePickList = function() end,
+        PickList = function() end,
+        ItemIcon = function() end,
+      }
+      if withWindow then ns.UI.Window = { Show = function(_, key) shown = key end } end
+      loadAddonFile(ns, "Guildhall/Modules/Exchange/Category.lua")
+      loadAddonFile(ns, "Guildhall/Modules/Exchange/UI/Board.lua")
+      ns.Exchange.BoardDetails = { Build = function() end, Show = function() end }
+      return ns
+    end
+
+    it("opens the Exchange tab and searches for the text on the All tab", function()
+      local ns = load(true)
+      local view = ns.Exchange.Board.Build(fakes.widgets().new("Frame"))
+      view.cat, view.member, view.filter = "gear", "p1", "WTS"
+      assert.is_true(ns.ExchangeUI.Search("Arcanite Bar"))
+      assert.equal("Exchange", shown)
+      assert.equal("Arcanite Bar", view.search:GetText())
+      assert.equal("all", view.filter)
+      assert.equal("all", view.cat)
+      assert.is_nil(view.member)
+    end)
+
+    it("is safe before the board is built and without a window", function()
+      local ns = load(false)
+      assert.is_false(ns.ExchangeUI.Search("Arcanite Bar"))
+    end)
+  end)
 end)

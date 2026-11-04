@@ -81,6 +81,14 @@ function Roster:HasRanks()
   return next(self.cache.ranks) ~= nil
 end
 
+-- True or false once the roster is known (rank cache non-empty), nil while it is unknown.
+function Roster:IsMember(fullName)
+  if not self:HasRanks() then return nil end
+  local key = self:Norm(fullName)
+  if not key then return nil end
+  return self.cache.ranks[key] ~= nil
+end
+
 function Roster:OfficerThreshold()
   local n = self.cache.guildConfig and self.cache.guildConfig.officers
   return type(n) == "number" and n or DEFAULT_OFFICERS

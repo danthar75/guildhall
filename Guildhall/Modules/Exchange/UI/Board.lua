@@ -3,6 +3,7 @@ local ADDON, ns = ...
 -- Exchange board (layout B): sub-tabs and a search box over a pooled, scrolling listing
 -- list on the left; the selected listing's details and action buttons on the right.
 -- Board.Build(parent) -> view {refresh}; Board.Refresh() re-reads ns.exchange:List(filter).
+-- Global: ns.ExchangeUI.Search(text) (see below).
 -- Named global: "GuildhallUIExchangeListScroll" (FauxScrollFrameTemplate needs a name).
 -- Global table entries: StaticPopupDialogs.GUILDHALL_REMOVE_LISTING / GUILDHALL_OFFICER_REMOVE.
 ns.Exchange = ns.Exchange or {}
@@ -492,6 +493,21 @@ function Board.OnSaved(rec, wasEditing)
   local s = services()
   setStatus(Board.SavedText(wasEditing, s and s.compat and s.compat:IsRestricted("Chat") or false))
   Board.Refresh()
+end
+
+-- ns.ExchangeUI.Search(text): opens the Exchange tab on All, clears the category and member
+-- filters and searches for text (the Groups tab's "Needs: [item]" link). false until the board
+-- has been built.
+ns.ExchangeUI = ns.ExchangeUI or {}
+if not ns.ExchangeUI.Search then
+  function ns.ExchangeUI.Search(text)
+    if UI.Window and UI.Window.Show then UI.Window:Show("Exchange") end
+    if not view then return false end
+    view.cat, view.member, view.memberText = "all", nil, nil
+    view.search:SetText(type(text) == "string" and text or "")
+    selectFilter("all")
+    return true
+  end
 end
 
 function Board.Build(parent)

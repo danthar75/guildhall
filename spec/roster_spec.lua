@@ -152,6 +152,18 @@ describe("Roster", function()
     assert.is_true(r2:HasRanks())
   end)
 
+  it("IsMember is nil until the roster is known, then true or false", function()
+    local r = make({ { name = "Bob", rank = 3, online = true } })
+    assert.is_nil(r:IsMember("Bob"))
+    r:Refresh()
+    assert.is_true(r:IsMember("Bob"))
+    assert.is_true(r:IsMember("Bob-Realm"))
+    assert.is_false(r:IsMember("Stranger"))
+    assert.is_false(r:IsMember("Bob-Elsewhere"))
+    assert.is_nil(r:IsMember(nil))
+    assert.is_nil(r:IsMember(""))
+  end)
+
   it("RankNames reads the game's ranks and caches them", function()
     local live = { "Guild Master", "Officer", "Member" }
     local r, cache = make({}, { GuildControlGetNumRanks = function() return #live end,

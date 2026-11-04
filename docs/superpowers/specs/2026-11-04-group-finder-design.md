@@ -69,8 +69,12 @@ Guildhall adds a guild-only group finder. It makes runs easy to post, join, sche
 - Applied at query time when the ledger counts credit, so the raw kill observations are all kept (my call).
 - Raids are already limited by their weekly lockout, so they have no extra limit.
 
-### Guild majority (user)
-A kill counts only if **more than half** of the group are guild members: 3 of 5 for dungeons (user), and the same rule for raids, for example 21 of 40 (my call, the same rule extended).
+### Guild groups (user, Ruling U1b)
+Two guild settings decide when a verified kill counts. Only the guild master changes them, they sync in one core.config record ("groupsettings"), and each change is in the change history.
+- **"Raids on the guild calendar count with non-guild players"** (default ON). A raid kill that matches a guild calendar raid of that instance (kill time within 30 min before to 6 h after the event start) needs no guild share: the guild members in it get credit, and pugs earn nothing because they aren't Guildhall users. OFF: calendar raids follow the second setting.
+- **"Other runs count with non-guild players"** (dungeons, and raids not on the calendar; default OFF). OFF: every name on every report must be a guild member. ON: guild members must be **more than half** of every report's own list, for example 3 of 5 or 21 of 40.
+- Calendar matching uses only synced data, so every client agrees. Any member's client that reads a guild calendar raid publishes a `guildraid` observation (instance, start, title) until notices from 2 distinct linked profiles exist for that (instance, start). Credit reads those notices, never the local calendar, and counts a raid only once 2 linked profiles have published it (Ruling F7). They live until 400 days after the raid's window ends. Guildhall posts don't count as calendar raids.
+- Per-report checks mean one honest list vetoes a forged list padded with guild names (final review I1). A report counts only from a linked profile that owns the char it was sent from (final review I4). Names a client couldn't read are absent and don't block.
 
 ### Detection (my call; verify in game)
 - **The event.** `ENCOUNTER_END(encounterID, name, difficulty, groupSize, success)` with `success == 1`.
@@ -84,6 +88,8 @@ A kill counts only if **more than half** of the group are guild members: 3 of 5 
 - **Raid attendance without a signup (my call, from the builder check).** Guild members in the group at a verified kill get `groups.raidboss` credit whether or not they signed up. That is the user's "showing up" credit. Signing up first only adds the separate `groups.signedup` credit.
 - **Full clear (my call).** A full clear counts once per lockout week, so it can be spread over several nights. It needs a verified kill of every boss in that instance's table within one weekly reset period.
 - **Leader flags (my call).** The group snapshot also records who is the raid leader and who are assistants. Leaders and assistants are readable for your own group.
+- **Volume (final review I2).** Each client snapshots the group at the kill and publishes after a random 0-30 s wait. It skips publishing when the store already holds 3 or more reports of that kill, from other linked profiles listing this player, that already confirm (2 reports each) every name it would report, so skipping never costs anyone credit. Non-final dungeon boss kills expire after 2 days; nothing derives lasting credit from them.
+- **Attendance (final review I3).** A prepared confirmation, a spec-switch ask or a signup counts the raider as present when a verified kill of that instance credits them within 30 min before to 6 h after it (for signups: inside the signup's window). "One per night" is the server day of that kill, so a raid forming before midnight and killing after it is one night.
 
 ### Restrictions on Forever
 - Inside dungeons and raids, addon messages may be held back. Observations queue in Comm and send when restrictions lift, which already works.

@@ -52,6 +52,18 @@ function Scoring.MonthRange(ym, tz)
   return daysFromCivil(y, m, 1) * DAY - tz, daysFromCivil(ny, nm, 1) * DAY - tz
 end
 
+-- Server day of an epoch time on the clock shifted by tz: "YYYY-MM-DD".
+function Scoring.DayKey(at, tz)
+  local f = date or os.date
+  local d = f("!*t", at + (tz or 0))
+  return string.format("%04d-%02d-%02d", d.year, d.month, d.day)
+end
+
+-- Start of the weekly reset period containing `at` (the same rule as Period("week")).
+function Scoring.WeekStart(at, clock)
+  return (Scoring.Period("week", at, clock))
+end
+
 function Scoring.Period(key, now, clock)
   clock = clock or {}
   if key == "week" then

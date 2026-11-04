@@ -62,6 +62,10 @@ describe("Boot", function()
       loadAddonFile(ns, "Guildhall/Modules/Exchange/" .. f .. ".lua")
     end
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Module.lua")
+    for _, f in ipairs({ "Perms", "Instances", "Post", "Groups", "KillWatch", "Credit", "Checklist", "Flex",
+      "Calendar", "Reminders", "Module" }) do
+      loadAddonFile(ns, "Guildhall/Modules/Groups/" .. f .. ".lua")
+    end
     -- count the calls the ordering/hook rules are about, on the instances Module/Exchange build
     local cfgNew = ns.LbConfig.new
     ns.LbConfig.new = function(ctx)
@@ -126,24 +130,206 @@ describe("Boot", function()
     assert.is_true(has)
   end)
 
-  it("the tab order is Exchange, Leaderboard, Log, Settings", function()
+  it("the module tab order is Exchange, Leaderboard, Groups", function()
     -- Window appends Log and Settings after the module tabs, in registration order.
     local tabs = {}
     for _, name in ipairs(ns.Modules()) do
       local def = ns.GetModule(name)
       if type(def.tab) == "table" and type(def.tab.build) == "function" then tabs[#tabs + 1] = def.tab.title end
     end
-    assert.same({ "Exchange", "Leaderboard" }, tabs)
+    assert.same({ "Exchange", "Leaderboard", "Groups" }, tabs)
     assert.equal("Leaderboard", ns.GetModule("Leaderboard").settings.title)
+    assert.equal("Groups", ns.GetModule("Groups").settings.title)
   end)
 
-  it("the window's tabs read Exchange, Leaderboard, Log, Settings, About", function()
+  it("tab order is Exchange, Leaderboard, Groups, Log, Settings, About", function()
     local real = ns.UI
     ns.UI = nil
     loadAddonFile(ns, "Guildhall/Core/UI/Window.lua")
     local keys = ns.UI.Window:TabKeys()
     ns.UI = real
-    assert.same({ "Exchange", "Leaderboard", "Log", "Settings", "About" }, keys)
+    assert.same({ "Exchange", "Leaderboard", "Groups", "Log", "Settings", "About" }, keys)
+  end)
+
+  it("Groups builds its services at login, sharing the Leaderboard observations", function()
+    local g = ns.groups
+    assert.is_not_nil(g)
+    for _, k in ipairs({ "svc", "kills", "credit", "checklist", "flex", "calendar", "reminders" }) do
+      assert.is_not_nil(g[k], k)
+    end
+    assert.equal(ns.leaderboard.observations, g.svc.ctx.observations)
+    assert.is_true(g.svc.started)
+    local has = 0
+    for _, sync in ipairs(ns.services.syncs) do
+      if sync == g.svc.postSync or sync == g.svc.signupSync or sync == g.svc.readySync then has = has + 1 end
+    end
+    assert.equal(3, has)
+    assert.same({ reminders = true, sound = true, roles = { d = true } }, GuildhallDB.personal.groups)
+  end)
+
+  it("the kill watch gets the guarded timer, the random source, the profile and the player", function()
+    local kctx = ns.groups.kills.ctx
+    assert.is_function(kctx.random)
+    assert.is_table(kctx.profile)
+    assert.equal(ns.services.random, kctx.random)
+    assert.equal(ns.services.profile, kctx.profile)
+    assert.equal(ns.services.playerChar, kctx.playerChar)
+    assert.equal(ns.groups.after, kctx.after)
+    assert.is_table(kctx.db.killPending) -- pending reports persist in the Groups module db
+    -- the calendar announces guildraid notices on the guarded timer, with the random source
+    assert.equal(ns.groups.after, ns.groups.calendar.ctx.after)
+    assert.equal(ns.services.random, ns.groups.calendar.ctx.random)
+    assert.equal(ns.services.profile, ns.groups.credit.ctx.profile)
+  end)
+
+  it("registers the Groups events, both spec events included", function()
+    for _, e in ipairs({ "ENCOUNTER_START", "ENCOUNTER_END", "BOSS_KILL", "PLAYER_ENTERING_WORLD", "READY_CHECK",
+      "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_TALENT_UPDATE", "CALENDAR_UPDATE_EVENT_LIST",
+      "GROUP_ROSTER_UPDATE", "PLAYER_LOGOUT" }) do
+      assert.is_true(registered[e], e)
+    end
+  end)
+
+  it("routes encounter, ready check and spec events to the Groups services", function()
+    local g, got = ns.groups, {}
+    g.kills.OnEncounterStart = function(_, id) got[#got + 1] = "start" .. id end
+    g.kills.OnEncounterEnd = function(_, id, _, _, _, ok) got[#got + 1] = "end" .. id .. ":" .. ok end
+    g.kills.OnBossKill = function(_, id) got[#got + 1] = "boss" .. id end
+    g.checklist.OnReadyCheck = function() got[#got + 1] = "ready" end
+    g.flex.OnSpecChanged = function() got[#got + 1] = "spec" end
+    fire("ENCOUNTER_START", 663, "Lucifron", 9, 40)
+    fire("ENCOUNTER_END", 663, "Lucifron", 9, 40, 1)
+    fire("BOSS_KILL", 663, "Lucifron")
+    fire("READY_CHECK", "Leader", 30)
+    fire("ACTIVE_TALENT_GROUP_CHANGED", 2, 1)
+    fire("PLAYER_TALENT_UPDATE")
+    g.kills.Flush = function() got[#got + 1] = "flush" end
+    fire("PLAYER_LOGOUT")
+    assert.same({ "start663", "end663:1", "boss663", "ready", "spec", "spec", "flush" }, got)
+  end)
+
+  it("leaving an instance for the open world re-reads the calendar; open-world zoning doesn't", function()
+    local g, refreshed = ns.groups, 0
+    g.calendar.Refresh = function() refreshed = refreshed + 1 end
+    g.checklist.OnZone = function() end
+    local where = { "Elwynn Forest", "none", 0, "", 0, 0, false, 0 }
+    env.GetInstanceInfo = function() return unpack(where) end
+    fire("PLAYER_ENTERING_WORLD")
+    where = { "Kalimdor", "none", 0, "", 0, 0, false, 1 }
+    fire("PLAYER_ENTERING_WORLD")
+    assert.equal(0, refreshed) -- continent to continent: never "in an instance"
+    where = { "Molten Core", "raid", 9, "40 Player", 40, 0, false, 409 }
+    fire("PLAYER_ENTERING_WORLD")
+    assert.equal(409, g.instance)
+    assert.equal(0, refreshed)
+    where = { "Burning Steppes", "none", 0, "", 0, 0, false, 0 }
+    fire("PLAYER_ENTERING_WORLD")
+    assert.is_nil(g.instance)
+    assert.equal(1, refreshed)
+  end)
+
+  describe("the checklist pick", function()
+    local checked
+    local function setup()
+      checked = {}
+      ns.groups.checklist.RunCheck = function(_, instance) checked[#checked + 1] = instance; return true end
+    end
+    local function post(start)
+      local ok, rec = ns.groups.svc:Post({ instance = "mc", role = "t", need = { t = 0, h = 1, d = 3 }, start = start })
+      assert.is_true(ok, tostring(rec))
+    end
+
+    it("a ready check in a city with an active post picks the post's instance", function()
+      setup()
+      post(ns.services.now() + 1800)
+      fire("READY_CHECK", "Leader", 30)
+      assert.same({ "mc" }, checked)
+    end)
+
+    it("with no post a ready check in a city still finds no instance", function()
+      setup()
+      fire("READY_CHECK", "Leader", 30)
+      assert.same({}, checked)
+      local ok, why = ns.groups.checklist:OnReadyCheck(nil)
+      assert.is_false(ok)
+      assert.equal("no instance", why)
+    end)
+
+    it("a post 3 h away is ignored", function()
+      setup()
+      post(ns.services.now() + 3 * 3600)
+      fire("READY_CHECK", "Leader", 30)
+      assert.same({}, checked)
+    end)
+
+    it("a signed-up calendar raid within 2 h is picked; a declined one is not", function()
+      setup()
+      local now = ns.services.now()
+      ns.groups.calendar.events = { { title = "BWL", start = now - 600, instance = "bwl", myStatus = "declined" } }
+      fire("READY_CHECK", "Leader", 30)
+      assert.same({}, checked)
+      ns.groups.calendar.events[1].myStatus = "accepted"
+      fire("READY_CHECK", "Leader", 30)
+      assert.same({ "bwl" }, checked)
+    end)
+  end)
+
+  it("one spec switch firing both events answers an ask once", function()
+    local flex, published = ns.groups.flex, 0
+    local group = 1
+    flex.compat = setmetatable({ ActiveSpecGroup = function() return group end }, { __index = flex.compat })
+    flex.group = 1
+    flex.OpenAsks = function(self)
+      local out = {}
+      if not self.sent.a1 then out[1] = { id = "a1", d = { at = 0 } } end
+      return out
+    end
+    flex.obs = { Publish = function() published = published + 1; return "accepted" end }
+    group = 2
+    fire("ACTIVE_TALENT_GROUP_CHANGED", 2, 1)
+    fire("PLAYER_TALENT_UPDATE")
+    assert.equal(1, published)
+  end)
+
+  it("a new verified kill restarts the config sync, at most once a minute", function()
+    local starts, verified = 0, 0
+    ns.leaderboard.config.sync.Start = function() starts = starts + 1 end
+    ns.Groups.Credit.Verified = function()
+      local out = {}
+      for i = 1, verified do out[i] = { id = "k" .. i } end
+      return out
+    end
+    ns.Events:Fire("ObservationsChanged")
+    wait(3)
+    assert.equal(0, starts) -- nothing new verified
+    verified = 1
+    ns.Events:Fire("ObservationsChanged")
+    wait(3)
+    assert.equal(1, starts)
+    verified = 2
+    ns.Events:Fire("ObservationsChanged")
+    wait(3)
+    assert.equal(1, starts) -- rate-limited
+    wait(60)
+    assert.equal(2, starts)
+    wait(120)
+    assert.equal(2, starts)
+  end)
+
+  it("Groups about text sits between the Leaderboard and Log sections", function()
+    local about = ns.GetModule("Groups").about
+    assert.equal("Group finder", about.title)
+    assert.equal(35, about.order)
+    assert.same({ "Post or join guild runs, now or scheduled. Finished runs and raid nights count on the leaderboard." },
+      about.lines)
+  end)
+
+  it("a halt clears the Groups services", function()
+    assert.is_not_nil(ns.groups)
+    guild = "GuildB"
+    fire("PLAYER_GUILD_UPDATE")
+    wait(3)
+    assert.is_nil(ns.groups)
   end)
 
   it("a profile change invalidates the ledger", function()
@@ -246,7 +432,8 @@ describe("Boot", function()
     assert.equal(1, opened)
   end)
 
-  it("invalidates the ledger on observation and profile changes only (config and roster apply in Query)", function()
+  it("invalidates the ledger on observation, profile, config and roster changes", function()
+    -- the kill deriver reads guild membership (majority) and the config tz (server day and week)
     local n = 0
     ns.leaderboard.ledger.Invalidate = function() n = n + 1 end
     ns.Events:Fire("ObservationsChanged")
@@ -254,7 +441,7 @@ describe("Boot", function()
     assert.equal(2, n)
     ns.Events:Fire("LeaderboardConfigChanged")
     ns.Events:Fire("RosterRefreshed")
-    assert.equal(2, n)
+    assert.equal(4, n)
   end)
 
   it("the roster loading (no ranks -> ranks) restarts the config sync once", function()

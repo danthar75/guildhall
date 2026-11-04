@@ -2,7 +2,9 @@ local ADDON, ns = ...
 
 -- Observations: the replicated set of raw first-hand events (trades, COD, manual deals,
 -- witnesses, bank readings) the Leaderboard derives its scores from. Day-bucketed Sync keeps
--- login cheap for large sets. Records live 400 days. Only officers ever see the log detail.
+-- login cheap for large sets. Records live 400 days unless the publisher asks for a shorter
+-- expiry (Publish opts.exp); every record's exp must lie within [d.at, t + 400 days]. Only
+-- officers ever see the log detail.
 ns.Observations = ns.Observations or {}
 local Obs = ns.Observations
 
@@ -13,12 +15,37 @@ local MAX_STR, MAX_ITEMS = 64, 6
 
 Obs.KINDS = { trade = true, cod = true, manual = true, witness = true, bank = true }
 
-function Obs.AddKind(kind)
-  if type(kind) == "string" and kind ~= "" then Obs.KINDS[kind] = true end
+local VALIDATORS, FIELDS, KEEP = {}, {}, {}
+local MAX_NAMES = 40
+
+-- Registers a kind. validateFn(d) -> ok, err is an optional strict check that runs after the
+-- generic ones. opts.fields = { members = true, assists = true } declares the array fields the kind
+-- may carry; other kinds reject them. opts.retention (seconds) replaces the 400-day bound on that
+-- kind's exp (exp <= t + retention).
+function Obs.AddKind(kind, validateFn, opts)
+  if type(kind) == "string" and kind ~= "" then
+    Obs.KINDS[kind] = true
+    FIELDS[kind] = type(opts) == "table" and type(opts.fields) == "table" and opts.fields or nil
+    local keep = type(opts) == "table" and opts.retention or nil
+    KEEP[kind] = type(keep) == "number" and keep > 0 and keep or nil
+    VALIDATORS[kind] = type(validateFn) == "function" and validateFn or nil
+  end
+end
+
+for _, k in ipairs({ "prepcheck", "prepared", "flexask", "flexdone", "flexok", "signup" }) do
+  Obs.AddKind(k)
 end
 
 local function isInt(x)
   return type(x) == "number" and x == x and x ~= math.huge and x ~= -math.huge and x == math.floor(x)
+end
+
+local function finite(x) return type(x) == "number" and x == x and x ~= math.huge and x ~= -math.huge end
+
+-- A record's expiry is valid when it is no later than its kind's retention (400 days unless the kind
+-- declares one) after its publish time and no earlier than the event it records.
+local function validExp(exp, t, at, kind)
+  return finite(exp) and finite(t) and finite(at) and exp <= t + (KEEP[kind] or RETENTION) and exp >= at
 end
 
 function Obs.Validate(d)
@@ -34,6 +61,13 @@ function Obs.Validate(d)
       if not isInt(v) then return false, "bad number: " .. k end
     elseif tv == "boolean" then
       -- allowed flag
+    elseif tv == "table" and (k == "members" or k == "assists") and FIELDS[d.kind] and FIELDS[d.kind][k] then
+      local count = 0
+      for _ in pairs(v) do count = count + 1 end
+      if count ~= #v or count > MAX_NAMES then return false, "bad " .. k end
+      for _, name in ipairs(v) do
+        if type(name) ~= "string" or name == "" or #name > MAX_STR then return false, "bad " .. k end
+      end
     elseif tv == "table" and k == "items" then
       if #v > MAX_ITEMS then return false, "too many items" end
       local count = 0
@@ -63,6 +97,8 @@ function Obs.Validate(d)
       if d.count ~= nil or d.item ~= nil then return false, "bad bank money entry" end
     end
   end
+  local custom = VALIDATORS[d.kind]
+  if custom then return custom(d) end
   return true
 end
 
@@ -125,6 +161,7 @@ function Obs.New(ctx)
         local ok, err = Obs.Validate(rec.d)
         if not ok then return false, err end
         if rec.d.at > self.now() + DAY then return false, "at too far ahead" end
+        if not validExp(rec.exp, rec.t, rec.d.at, rec.d.kind) then return false, "bad exp" end
       end
       return true
     end,
@@ -152,12 +189,19 @@ function O:_nextId()
   return string.format("%s:o%d_%d", self.profile:Id(), at, session.n)
 end
 
-function O:Publish(d)
+-- opts.exp (optional): an earlier expiry for this record, within [d.at, now + 400 days]; the
+-- record is dropped everywhere once it passes (List hides it, Purge removes it, Sync skips it).
+function O:Publish(d, opts)
   if self.profile:IsExcluded(self.playerChar) then return "excluded" end
   local ok, err = Obs.Validate(d)
   if not ok then return "invalid", err end
   local t = self.now()
-  local rec = { id = self:_nextId(), v = 1, t = t, exp = t + RETENTION,
+  local exp = t + RETENTION
+  if type(opts) == "table" and opts.exp ~= nil then
+    if not validExp(opts.exp, t, d.at, d.kind) then return "invalid", "bad exp" end
+    exp = opts.exp
+  end
+  local rec = { id = self:_nextId(), v = 1, t = t, exp = exp,
     by = self.profile:Id(), char = self.playerChar, d = copy(d) }
   local status = self.sync:Publish(rec)
   return status, rec
