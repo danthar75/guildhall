@@ -1,0 +1,115 @@
+describe("Profile", function()
+  local fakes = require("spec.helpers.fakes")
+  local ns, now, set, store, online, personal
+
+  local function mk(extra)
+    local o = {
+      personal = personal, set = set, now = function() return now end,
+      random = math.random, playerChar = "Me-Realm", defaultRealm = "Realm",
+      roster = { IsOnline = function(_, n) return online[n] end },
+    }
+    for k, v in pairs(extra or {}) do o[k] = v end
+    return ns.Profile.new(o)
+  end
+
+  before_each(function()
+    ns = {}
+    loadAddonFile(ns, "Guildhall/Core/Util.lua")
+    loadAddonFile(ns, "Guildhall/Core/DB.lua")
+    loadAddonFile(ns, "Guildhall/Core/ReplicatedSet.lua")
+    loadAddonFile(ns, "Guildhall/Core/Profile.lua")
+    now = 1000
+    store, online = {}, {}
+    personal = ns.DB.Init().personal
+    set = ns.ReplicatedSet.new("profiles", store, { now = function() return now end })
+  end)
+
+  local function peer(id, t, chars)
+    local rec = { id = id, v = 1, t = t, by = id, exp = now + 5000, d = { chars = chars } }
+    assert.equal("accepted", (set:Apply(rec)))
+    return rec
+  end
+
+  it("Id is stable once generated", function()
+    local p = mk()
+    local id = p:Id()
+    assert.truthy(id:match("^%x%x%x%x%x%x%x%x%x%x%x%x$"))
+    assert.equal(id, p:Id())
+    assert.equal(id, mk():Id())
+  end)
+
+  it("no Record before consent", function()
+    local p = mk()
+    p:SeeCharacter("Me-Realm")
+    assert.is_nil(p:Record())
+    assert.is_true(p:NeedsConsent())
+  end)
+
+  it("excluded chars are not published", function()
+    local p = mk()
+    p:SeeCharacter("Me-Realm"); p:SeeCharacter("Alt-Realm"); p:SeeCharacter("Bank-Realm")
+    p:Consent({ "Bank-Realm" })
+    local r = p:Record()
+    assert.same({ "Alt-Realm", "Me-Realm" }, r.d.chars)
+    assert.equal(p:Id(), r.id); assert.equal(p:Id(), r.by)
+    assert.equal(1, r.v); assert.equal(now + 2592000, r.exp); assert.equal("Me-Realm", r.char)
+    assert.is_false(p:NeedsConsent())
+    assert.same({ "Bank-Realm" }, personal.profile.excluded)
+  end)
+
+  it("a new alt after consent makes NeedsConsent true again", function()
+    local p = mk()
+    p:SeeCharacter("Me-Realm"); p:Consent({})
+    assert.is_false(p:NeedsConsent())
+    p:SeeCharacter("New-Realm")
+    assert.is_true(p:NeedsConsent())
+    assert.same({ "New-Realm" }, p:PendingChars())
+    p:Consent({ "New-Realm" })
+    assert.is_false(p:NeedsConsent())
+    assert.same({ "Me-Realm" }, p:Record().d.chars)
+  end)
+
+  it("OnlineChar picks an online alt", function()
+    peer("aaaaaaaaaaaa", 10, { "A-Realm", "B-Realm" })
+    online["B-Realm"] = true; online["A-Realm"] = false
+    local p = mk()
+    assert.equal("B-Realm", p:OnlineChar("aaaaaaaaaaaa"))
+    online["B-Realm"] = nil
+    assert.is_nil(p:OnlineChar("aaaaaaaaaaaa"))
+  end)
+
+  it("OwnerOf resolves conflicting claims by latest t", function()
+    peer("aaaaaaaaaaaa", 10, { "X-Realm" })
+    peer("bbbbbbbbbbbb", 20, { "X-Realm" })
+    local p = mk()
+    assert.equal("bbbbbbbbbbbb", p:OwnerOf("X-Realm"))
+    assert.is_nil(p:OwnerOf("Nobody-Realm"))
+  end)
+
+  it("OwnerOf matches realm-less and realm names via FullName", function()
+    peer("aaaaaaaaaaaa", 10, { "X" })
+    local p = mk()
+    assert.equal("aaaaaaaaaaaa", p:OwnerOf("X-Realm"))
+    assert.equal("aaaaaaaaaaaa", p:OwnerOf("X"))
+  end)
+
+  it("OwnerOf does not raise on malformed peer records", function()
+    peer("aaaaaaaaaaaa", 10, "notatable")
+    store["bbbbbbbbbbbb"] = { id = "bbbbbbbbbbbb", v = 1, t = 5, exp = now + 99, d = "str" }
+    store["cccccccccccc"] = { id = "cccccccccccc", v = 1, t = 5, exp = now + 99 }
+    peer("dddddddddddd", 10, { 5, {}, false, "X-Realm" })
+    local p = mk()
+    assert.equal("dddddddddddd", p:OwnerOf("X-Realm"))
+    assert.same({}, p:CharsOf("aaaaaaaaaaaa"))
+    assert.same({ "X-Realm" }, p:CharsOf("dddddddddddd"))
+  end)
+
+  it("own chars count offline and IsMine works", function()
+    local p = mk()
+    p:SeeCharacter("Me-Realm"); p:Consent({})
+    assert.equal(p:Id(), p:OwnerOf("Me"))
+    assert.is_true(p:IsMine(p:Id()))
+    assert.is_false(p:IsMine("zzz"))
+    assert.same({ "Me-Realm" }, p:CharsOf(p:Id()))
+  end)
+end)
