@@ -113,14 +113,16 @@ end
 function Listing.CheckIncoming(rec, existing, ctx)
   if type(rec) ~= "table" then return false, "bad record" end
   if type(rec.char) ~= "string" or rec.char == "" then return false, "bad char" end
+  local offRemoval = isOfficerRemoval(rec)
+  if existing and rec.by ~= existing.by then return false, "not owner" end
+  -- The id carries its owner ("<profile>:<n>"): other modules read the owner from it.
+  if type(rec.id) ~= "string" or rec.id:match("^(.+):[^:]*$") ~= rec.by then return false, "bad id" end
   if rec.del ~= true then
     local ok, err = Listing.Validate(rec.d)
     if not ok then return false, err end
   end
   if type(rec.exp) ~= "number" or type(rec.t) ~= "number" then return false, "bad times" end
   if rec.exp > rec.t + MAX_EXP_AHEAD then return false, "exp too far" end
-  local offRemoval = isOfficerRemoval(rec)
-  if existing and rec.by ~= existing.by then return false, "not owner" end
   if offRemoval then
     if type(rec.d.offBy) ~= "string" or rec.d.offBy == "" then return false, "bad offBy" end
     local isOff = ctx and ctx.isOfficer and ctx.isOfficer(rec.char)

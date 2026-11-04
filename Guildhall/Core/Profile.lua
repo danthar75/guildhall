@@ -133,8 +133,19 @@ function Profile:Record()
     by = id,
     char = self.playerChar,
     exp = now + TTL,
-    d = { chars = self:_included() },
+    d = { chars = self:_included(), hidden = self.p.hidden == true or nil },
   }
+end
+
+-- Opt out of public boards. Account-wide; syncs on the profile record (d.hidden).
+function Profile:SetHidden(on)
+  self.p.hidden = on == true or nil
+end
+
+function Profile:IsHidden(profileId)
+  if self:IsMine(profileId) then return self.p.hidden == true end
+  local rec = profileId ~= nil and self.set:Get(profileId) or nil
+  return type(rec) == "table" and not rec.del and type(rec.d) == "table" and rec.d.hidden == true
 end
 
 -- Valid, normalized chars of a peer record (tolerates malformed payloads).

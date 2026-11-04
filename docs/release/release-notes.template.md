@@ -45,4 +45,4 @@ Delete `Interface\AddOns\Guildhall`. To remove its saved data as well, also dele
 Message **Dor** in game or on the guild Discord, or open an issue here. If you saw a Lua error, copy its text.
 
 ---
-Made by Jon Roberts (Dor in game), a senior software developer. Built with Claude (Anthropic's AI assistant) and reviewed by a human.
+Made by Dor, a senior software developer. Built with Claude (Anthropic's AI assistant) and reviewed by a human.

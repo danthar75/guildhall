@@ -88,7 +88,7 @@ end
 function Compat:PlayerFullName()
   local env = self.env
   local name = env.UnitName and env.UnitName("player") or "Unknown"
-  local realm = env.GetNormalizedRealmName and env.GetNormalizedRealmName() or nil
+  local realm = env.GetNormalizedRealmName and self:Safe(env.GetNormalizedRealmName()) or nil
   return ns.Util.FullName(name, nil, realm)
 end
 
@@ -108,7 +108,7 @@ function Compat:GuildKey()
   name = self:Safe(name)
   if name == nil or name == "" then return nil end
   realm = self:Safe(realm)
-  local home = env.GetNormalizedRealmName and env.GetNormalizedRealmName() or nil
+  local home = env.GetNormalizedRealmName and self:Safe(env.GetNormalizedRealmName()) or nil
   return ns.Util.FullName(name, realm, home)
 end
 
@@ -120,12 +120,28 @@ function Compat:GetNumGuildMembers()
 end
 
 -- Returns only what Roster needs, each already passed through Safe (nil when secret):
--- name, rankIndex, isOnline. Returns nothing when the API is missing.
+-- name, rankIndex, isOnline, rankName. Returns nothing when the API is missing.
 function Compat:GetGuildRosterInfo(i)
   local f = self.env.GetGuildRosterInfo
   if not f then return nil end
-  local name, _, rankIndex, _, _, _, _, _, isOnline = f(i)
-  return self:Safe(name), self:Safe(rankIndex), self:Safe(isOnline)
+  local name, rankName, rankIndex, _, _, _, _, _, isOnline = f(i)
+  return self:Safe(name), self:Safe(rankIndex), self:Safe(isOnline), self:Safe(rankName)
+end
+
+-- The guild's rank names in rank order (index 1 is rank 0, the guild master), or nil when the
+-- API is missing, there are no ranks, or any value is secret.
+function Compat:GuildRanks()
+  local env = self.env
+  if not (env.GuildControlGetNumRanks and env.GuildControlGetRankName) then return nil end
+  local n = self:Safe((env.GuildControlGetNumRanks()))
+  if type(n) ~= "number" or n < 1 then return nil end
+  local out = {}
+  for i = 1, math.min(n, 10) do
+    local name = self:Safe((env.GuildControlGetRankName(i)))
+    if type(name) ~= "string" or name == "" then return nil end
+    out[i] = name
+  end
+  return out
 end
 
 -- Asks the server to refresh the roster (results arrive via GUILD_ROSTER_UPDATE).
@@ -143,6 +159,229 @@ function Compat:GetGuildInfoText()
   local gi = self.env.C_GuildInfo
   if not (gi and gi.GetInfoText) or self:IsRestricted("Map") then return nil end
   return self:Safe((gi.GetInfoText()))
+end
+
+-- Server clock offset from UTC in seconds, rounded to 15 minutes; nil when unknown or secret.
+function Compat:ServerOffset()
+  local dt = self.env.C_DateAndTime
+  if not (dt and dt.GetServerTimeLocal) or not self.env.GetServerTime then return nil end
+  local localT = self:Safe((dt.GetServerTimeLocal()))
+  local utc = self:Safe((self.env.GetServerTime()))
+  if type(localT) ~= "number" or type(utc) ~= "number" then return nil end
+  return math.floor((localT - utc) / 900 + 0.5) * 900
+end
+
+-- Seconds until the weekly reset, or nil when the API is missing or the value is secret.
+function Compat:SecondsUntilWeeklyReset()
+  local dt = self.env.C_DateAndTime
+  if not (dt and dt.GetSecondsUntilWeeklyReset) then return nil end
+  local s = self:Safe((dt.GetSecondsUntilWeeklyReset()))
+  if type(s) ~= "number" then return nil end
+  return s
+end
+
+function Compat:_isSecret(v)
+  local env = self.env
+  if env.issecretvalue and env.issecretvalue(v) then return true end
+  return env.canaccessvalue ~= nil and not env.canaccessvalue(v)
+end
+
+-- Both sides of the open trade window: { give = {{id,n}}, get = {{id,n}}, giveCopper, getCopper },
+-- or nil when the APIs are missing or ANY value is secret (an incomplete snapshot is never kept).
+-- Slots 1-6 are the tradable ones (slot 7 is the will-not-be-traded slot).
+function Compat:TradeSnapshot()
+  local env = self.env
+  if not (env.GetPlayerTradeMoney and env.GetTargetTradeMoney) then return nil end
+  local function side(linkFn, infoFn)
+    if not (linkFn and infoFn) then return nil end
+    local out = {}
+    for i = 1, 6 do
+      local rawLink = linkFn(i)
+      if self:Safe(rawLink) == nil and self:_isSecret(rawLink) then return nil end
+      local link = self:Safe(rawLink)
+      -- An empty slot has no link (skipped); a link with no readable count aborts the snapshot.
+      if link ~= nil then
+        local _, _, n = infoFn(i)
+        n = self:Safe(n)
+        if n == nil then return nil end
+        local id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
+        if id and type(n) == "number" and n > 0 then out[#out + 1] = { id = id, n = n } end
+      end
+    end
+    return out
+  end
+  local give = side(env.GetTradePlayerItemLink, env.GetTradePlayerItemInfo)
+  local get = side(env.GetTradeTargetItemLink, env.GetTradeTargetItemInfo)
+  local giveCopper, getCopper = self:Safe(env.GetPlayerTradeMoney()), self:Safe(env.GetTargetTradeMoney())
+  if not give or not get or type(giveCopper) ~= "number" or type(getCopper) ~= "number" then return nil end
+  return { give = give, get = get, giveCopper = giveCopper, getCopper = getCopper }
+end
+
+-- One attachment slot: nil = unreadable (abort the whole snapshot), false = empty slot, else
+-- { id, n }. A slot is occupied when name, link or id is non-nil, any of name, link, id or count is
+-- secret, or count is a number > 0 (a readable count of 0 or nil alone is empty). An occupied slot
+-- without a usable id or count aborts. The item id prefers the slot's itemID (works while the link
+-- is uncached) and falls back to parsing the link.
+function Compat:_attachment(rawName, rawLink, rawId, rawN)
+  local n = self:Safe(rawN)
+  local occupied = rawName ~= nil or rawLink ~= nil or rawId ~= nil
+    or (rawN ~= nil and self:_isSecret(rawN)) or (type(n) == "number" and n > 0)
+  if not occupied then return false end
+  if self:Safe(rawLink) == nil and self:_isSecret(rawLink) then return nil end
+  local link, id = self:Safe(rawLink), self:Safe(rawId)
+  if type(id) ~= "number" then
+    id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
+  end
+  if not id or type(n) ~= "number" or n <= 0 then return nil end
+  return { id = id, n = n }
+end
+
+function Compat:Money()
+  local env = self.env
+  if not env.GetMoney then return nil end
+  local m = self:Safe((env.GetMoney()))
+  return type(m) == "number" and m or nil
+end
+
+-- Reads the filled-in Send Mail fields: { to, cod, items = {{id,n}} }, or nil when the CoD is 0,
+-- the APIs/fields are missing, or ANY value is secret / unreadable.
+function Compat:SendMailSnapshot()
+  local env = self.env
+  local box = env.SendMailNameEditBox
+  if not (box and box.GetText and env.GetSendMailCOD and env.GetSendMailItemLink and env.GetSendMailItem) then return nil end
+  local to = self:Safe(box:GetText())
+  local cod = self:Safe(env.GetSendMailCOD())
+  if type(to) ~= "string" or to == "" or type(cod) ~= "number" or cod <= 0 then return nil end
+  local items = {}
+  for i = 1, env.ATTACHMENTS_MAX_SEND or 12 do
+    local rawName, rawId, _, rawN = env.GetSendMailItem(i)
+    local a = self:_attachment(rawName, env.GetSendMailItemLink(i), rawId, rawN)
+    if a == nil then return nil end
+    if a then items[#items + 1] = a end
+  end
+  if #items == 0 then return nil end
+  return { to = to, cod = cod, items = items }
+end
+
+function Compat:InboxCount()
+  local env = self.env
+  if not env.GetInboxNumItems then return 0 end
+  local n = self:Safe((env.GetInboxNumItems()))
+  return type(n) == "number" and n or 0
+end
+
+-- A CoD mail in the inbox: { sender, cod, items = {{id,n}} }, or nil (no CoD, missing API, any secret).
+function Compat:InboxCod(index)
+  local env = self.env
+  if not (env.GetInboxHeaderInfo and env.GetInboxItemLink and env.GetInboxItem) then return nil end
+  local _, _, rawSender, _, _, rawCod = env.GetInboxHeaderInfo(index)
+  local sender, cod = self:Safe(rawSender), self:Safe(rawCod)
+  if type(sender) ~= "string" or sender == "" or type(cod) ~= "number" or cod <= 0 then return nil end
+  local items = {}
+  for i = 1, env.ATTACHMENTS_MAX_RECEIVE or 16 do
+    local rawName, rawId, _, rawN = env.GetInboxItem(index, i)
+    local a = self:_attachment(rawName, env.GetInboxItemLink(index, i), rawId, rawN)
+    if a == nil then return nil end
+    if a then items[#items + 1] = a end
+  end
+  if #items == 0 then return nil end
+  return { sender = sender, cod = cod, items = items }
+end
+
+-- The trade partner's full name, or nil (no trade, API missing or secret).
+function Compat:TradePartner()
+  local env = self.env
+  if not env.UnitName then return nil end
+  local name, realm = env.UnitName("NPC")
+  name, realm = self:Safe(name), self:Safe(realm)
+  if type(name) ~= "string" or name == "" then return nil end
+  local home = env.GetNormalizedRealmName and self:Safe(env.GetNormalizedRealmName()) or nil
+  return ns.Util.FullName(name, type(realm) == "string" and realm or nil, home)
+end
+
+-- Guild bank. The open flag is driven by events (HandleBankEvent); logs are read per tab.
+function Compat:SetBankOpen(open) self.bankOpen = open and true or false end
+function Compat:BankOpen() return self.bankOpen == true end
+
+-- Mainline: PLAYER_INTERACTION_MANAGER_FRAME_SHOW/_HIDE with Enum.PlayerInteractionType.GuildBanker.
+-- Classic: GUILDBANKFRAME_OPENED/_CLOSED. Returns true when the event was a bank open/close.
+function Compat:HandleBankEvent(event, interactionType)
+  local env = self.env
+  if event == "GUILDBANKFRAME_OPENED" then self:SetBankOpen(true); return true end
+  if event == "GUILDBANKFRAME_CLOSED" then self:SetBankOpen(false); return true end
+  if event == "PLAYER_INTERACTION_MANAGER_FRAME_SHOW" or event == "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" then
+    local kinds = env.Enum and env.Enum.PlayerInteractionType
+    local t = self:Safe(interactionType)
+    if kinds and kinds.GuildBanker ~= nil and t == kinds.GuildBanker then
+      self:SetBankOpen(event == "PLAYER_INTERACTION_MANAGER_FRAME_SHOW")
+      return true
+    end
+  end
+  return false
+end
+
+function Compat:BankTabCount()
+  local f = self.env.GetNumGuildBankTabs
+  if not f then return 0 end
+  local n = self:Safe((f()))
+  return type(n) == "number" and n or 0
+end
+
+-- The pseudo-tab that holds the money log (MAX_GUILDBANK_TABS + 1; 9 when the constant is absent).
+function Compat:BankMoneyTab()
+  local max = self:Safe(self.env.MAX_GUILDBANK_TABS)
+  return (type(max) == "number" and max or 8) + 1
+end
+
+function Compat:QueryBankLog(tab)
+  local f = self.env.QueryGuildBankLog
+  if f then f(tab) end
+end
+
+-- Seconds since an entry, from the game's years/months/days/hours-ago (month 30 d, year 365 d).
+local function agoSeconds(y, mo, d, h)
+  if type(y) ~= "number" or type(mo) ~= "number" or type(d) ~= "number" or type(h) ~= "number" then return nil end
+  return ((y * 365 + mo * 30 + d) * 24 + h) * 3600
+end
+
+-- Item log of one tab: array of { type, name, item, count, tab, ago }, or nil when the API is
+-- missing or the entry count is secret. An entry with any secret/unknown field is dropped alone.
+function Compat:BankLog(tab)
+  local env = self.env
+  if not (env.GetNumGuildBankTransactions and env.GetGuildBankTransaction) then return nil end
+  local n = self:Safe((env.GetNumGuildBankTransactions(tab)))
+  if type(n) ~= "number" then return nil end
+  local out = {}
+  for i = 1, n do
+    local rType, name, link, count, _, _, y, mo, d, h = env.GetGuildBankTransaction(tab, i)
+    rType, name, link, count = self:Safe(rType), self:Safe(name), self:Safe(link), self:Safe(count)
+    y, mo, d, h = self:Safe(y), self:Safe(mo), self:Safe(d), self:Safe(h)
+    local ago = agoSeconds(y, mo, d, h)
+    local id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
+    if type(rType) == "string" and type(name) == "string" and name ~= "" and id
+        and type(count) == "number" and ago then
+      out[#out + 1] = { type = rType, name = name, item = id, count = count, tab = tab, ago = ago }
+    end
+  end
+  return out
+end
+
+-- Money log: array of { type, name, copper, ago }, or nil (same rules as BankLog).
+function Compat:BankMoneyLog()
+  local env = self.env
+  if not (env.GetNumGuildBankMoneyTransactions and env.GetGuildBankMoneyTransaction) then return nil end
+  local n = self:Safe((env.GetNumGuildBankMoneyTransactions()))
+  if type(n) ~= "number" then return nil end
+  local out = {}
+  for i = 1, n do
+    local rType, name, amount, y, mo, d, h = env.GetGuildBankMoneyTransaction(i)
+    rType, name, amount = self:Safe(rType), self:Safe(name), self:Safe(amount)
+    local ago = agoSeconds(self:Safe(y), self:Safe(mo), self:Safe(d), self:Safe(h))
+    if type(rType) == "string" and type(name) == "string" and name ~= "" and type(amount) == "number" and ago then
+      out[#out + 1] = { type = rType, name = name, copper = amount, ago = ago }
+    end
+  end
+  return out
 end
 
 ns.compat = Compat.new(_G)

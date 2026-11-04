@@ -5,11 +5,12 @@
 ## IconTexture: Interface\AddOns\Guildhall\Media\Logo
 ## SavedVariables: GuildhallDB
 ## Version: 0.1.0
-## Author: Jon Roberts (Dor)
+## Author: Dor
 ## Notes: Guild exchange board (LF/WTS) shared with your guild. Built with Claude, reviewed by a human.
 
 Core/Init.lua
 Core/Util.lua
+Core/WhatsNew.lua
 Core/Serialize.lua
 Core/Compat.lua
 Core/DB.lua
@@ -20,8 +21,16 @@ Core/Sync.lua
 Core/Log.lua
 Core/Roster.lua
 Core/Profile.lua
+Core/Leaderboard/Activity.lua
+Core/Leaderboard/Observations.lua
+Core/Leaderboard/Ledger.lua
+Core/Leaderboard/Scoring.lua
+Core/Leaderboard/Bank.lua
+Core/Leaderboard/Config.lua
+Core/Permissions.lua
 Core/UI/Window.lua
 Core/UI/CopyBox.lua
+Core/UI/Welcome.lua
 Core/UI/Launcher.lua
 Core/UI/LogView.lua
 Core/UI/SettingsView.lua
@@ -31,8 +40,16 @@ Modules/Exchange/Listing.lua
 Modules/Exchange/Format.lua
 Modules/Exchange/MailDrafts.lua
 Modules/Exchange/Exchange.lua
+Modules/Exchange/Deals.lua
+Modules/Exchange/DealWatch.lua
 Modules/Exchange/UI/Form.lua
 Modules/Exchange/UI/Settings.lua
 Modules/Exchange/UI/Board.lua
 Modules/Exchange/UI/Details.lua
+Core/Leaderboard/UI/View.lua
+Core/Leaderboard/UI/SettingsView.lua
+Core/Leaderboard/UI/BankReview.lua
+Core/UI/PermissionsView.lua
+Core/Leaderboard/Demo.lua
+Core/Leaderboard/Module.lua
 Core/Boot.lua

@@ -1,6 +1,6 @@
 # Guildhall: Guild Leaderboard v1 (design)
 
-Status: draft for review, 2026-11-04. Author: Claude, from conversation with Jon Roberts ("Dor").
+Status: draft for review, 2026-11-04. Author: Claude, from conversation with Dor.
 
 Related:
 - Parent design: `2026-11-02-guildhall-exchange-design.md` (core, Exchange, sync, trust model). Everything there still holds unless this document says otherwise.
@@ -275,7 +275,7 @@ Notes:
 ## Open questions for the user (to settle before planning)
 
 1. ~~What the UI may show~~. Decided: totals for everyone, your own breakdown for you, and everyone's breakdown for officers. See UI, and Privacy and trust.
-2. ~~Testing~~. Decided: Jon has several WoW accounts and will run two clients in the new Emergence guild on Forever. Pairing (trades, CoD, witnesses) and the bank log can therefore be tested in game, as soon as the guild has a bank tab. Simulated tests still cover every rule, so the build doesn't wait on the game. The in-game checks are listed in `docs/testing/forever-launch.md`.
+2. ~~Testing~~. Decided: Dor has several WoW accounts and will run two clients in the new Emergence guild on Forever. Pairing (trades, CoD, witnesses) and the bank log can therefore be tested in game, as soon as the guild has a bank tab. Simulated tests still cover every rule, so the build doesn't wait on the game. The in-game checks are listed in `docs/testing/forever-launch.md`.
 
 ## Next module: contests (shapes this build)
 
@@ -299,3 +299,16 @@ The next module after the leaderboard is **contests** (user). Officers will run 
 - The exact weekly reset rule.
 - The per-item weight override list.
 - The layout details within the UI described above.
+
+## Addendum (2026-11-04): officer bank review (user)
+
+- **Who:** any guild rank the guild master grants the "Review bank contributions" permission (user). Until the guild master changes it, only the guild master has it (user).
+- **What they can do:** review every recorded guild bank deposit and withdrawal, and untick any entry that shouldn't count toward a member's contributions, with an optional reason.
+- **Effect:**
+  - An unticked entry leaves the member's personal score in every live period.
+  - It still counts toward the guild's bank totals (my call, approved).
+  - Saved month records stay frozen; a retake picks the change up.
+- **Accountability:** every untick or re-tick is recorded in the shared change history.
+- **What the member sees:** "Excluded by an officer", plus the reason if one was given. The officer's name is visible only to officers.
+- **Scope:** bank entries only.
+- **Permissions:** the core guild-rank Permissions system (from the group finder design) is built in this branch, so the guild master can set who reviews bank contributions. Only the guild master changes permissions.

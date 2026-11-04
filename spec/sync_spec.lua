@@ -310,4 +310,246 @@ describe("Sync", function()
     wait(120)
     assert.equal(2, reqs.n)
   end)
+
+  describe("day buckets", function()
+    local DAY = 86400
+    local function bucket(r) return tostring(math.floor(r.d.at / DAY)) end
+
+    local function bnode(name, o)
+      o = o or {}
+      local n = { name = name, applied = {}, store = {} }
+      n.comm = bus:join(name)
+      n.set = ns.ReplicatedSet.new("t", n.store, { now = clock.now })
+      n.sync = ns.Sync.new({
+        comm = n.comm, set = n.set, module = "test", after = timers.after,
+        random = o.random or function(lo) return lo end,
+        playerName = name, bucket = bucket,
+      })
+      nodes[name] = n
+      return n
+    end
+
+    -- a record observed on day `day` (records live far beyond the test clock)
+    local function obs(id, day, o)
+      local r = rec({ id = id, exp = 1e9, d = { at = day * DAY + 100 } })
+      for k, v in pairs(o or {}) do r[k] = v end
+      return r
+    end
+
+    -- steps the clock a second at a time so timers scheduled by earlier timers also run
+    local function settle(secs) for _ = 1, secs do wait(1) end end
+
+    -- chunks of `kind` that member n queues on Comm (each Send adds its chunks to the queue tail)
+    local function countChunks(n, kind)
+      local c = { n = 0, chunks = 0 }
+      local orig = n.comm.Send
+      n.comm.Send = function(self, m, k, p)
+        local before = self.tail
+        local ok = orig(self, m, k, p)
+        if k == kind then c.n = c.n + 1; c.chunks = c.chunks + (self.tail - before) end
+        return ok
+      end
+      return c
+    end
+
+    local function size(t) local n = 0; for _ in pairs(t) do n = n + 1 end; return n end
+
+    -- 300 records, 10 per day over days 1..30
+    local function fill(n)
+      for i = 1, 300 do n.set:Apply(obs(string.format("o%03d", i), (i - 1) % 30 + 1)) end
+    end
+
+    it("login sends one DAYS message and no REQ when in step", function()
+      local a, b = bnode("Alice-Realm"), bnode("Bob-Realm")
+      fill(a); fill(b)
+      local days = { countKind(a, "DAYS"), countKind(b, "DAYS") }
+      local reqs = { countKind(a, "REQ"), countKind(b, "REQ") }
+      assert.is_true(b.sync:Start())
+      settle(10)
+      assert.equal(1, days[1].n + days[2].n)
+      assert.equal(0, reqs[1].n + reqs[2].n)
+      local n = 0
+      for _ in pairs(days[2].payloads[1].h) do n = n + 1 end
+      assert.equal(30, n)
+    end)
+
+    it("only differing days exchange records", function()
+      local a, b = bnode("Alice-Realm"), bnode("Bob-Realm")
+      fill(a); fill(b)
+      a.set:Apply(obs("extra", 5))
+      local bReqs = countKind(b, "REQ")   -- B's REQs are what A receives
+      local aRecs = countKind(a, "REC")
+      b.sync:Start()
+      settle(10)
+      assert.is_not_nil(b.set:Get("extra"))
+      assert.is_true(bReqs.n > 0)
+      for _, p in ipairs(bReqs.payloads) do assert.same({ "5" }, p.days) end
+      local n = 0
+      for _, p in ipairs(aRecs.payloads) do
+        for _, r in ipairs(p.rs) do
+          n = n + 1
+          assert.equal("5", bucket(r))
+        end
+      end
+      assert.equal(1, n)
+    end)
+
+    it("the side that is behind catches up too", function()
+      local a, b = bnode("Alice-Realm"), bnode("Bob-Realm")
+      fill(a); fill(b)
+      b.set:Apply(obs("o007", 7, { v = 2, d = { at = 7 * DAY + 100, x = "new" } }))
+      a.sync:Start()
+      settle(10)
+      assert.equal(2, a.set:Get("o007").v)
+      assert.equal("new", a.set:Get("o007").d.x)
+    end)
+
+    it("a day only the receiver holds still reaches the DAYS sender", function()
+      local a, b = bnode("Alice-Realm"), bnode("Bob-Realm")
+      fill(a); fill(b)
+      a.set:Apply(obs("lonely", 40))
+      b.sync:Start()
+      settle(10)
+      assert.is_not_nil(b.set:Get("lonely"))
+    end)
+
+    it("an empty newcomer receives every day in one sync", function()
+      local a, c = bnode("Alice-Realm"), bnode("Carol-Realm")
+      fill(a)
+      local reqs = countKind(a, "REQ")
+      c.sync:Start()
+      settle(400)
+      assert.equal(300, size(c.store))
+      assert.equal(0, reqs.n)   -- days Carol lacks go straight to records, no digest
+    end)
+
+    it("three peers and an empty newcomer: no digest REQs, newcomer catches up", function()
+      local a = bnode("Alice-Realm", { random = function() return 1 end })
+      local b = bnode("Bob-Realm", { random = function() return 3 end })
+      local d = bnode("Dave-Realm", { random = function() return 5 end })
+      fill(a); fill(b); fill(d)
+      local c = bnode("Carol-Realm")
+      local reqs = { countChunks(a, "REQ"), countChunks(b, "REQ"), countChunks(d, "REQ"), countChunks(c, "REQ") }
+      c.sync:Start()
+      settle(600)
+      assert.equal(300, size(c.store))
+      local chunks = 0
+      for _, r in ipairs(reqs) do chunks = chunks + r.chunks end
+      assert.equal(0, chunks)
+    end)
+
+    it("a DAYS range only covers its own days", function()
+      local a = bnode("Alice-Realm")
+      local b = { comm = bus:join("Bob-Realm") }
+      a.set:Apply(obs("x", 1)); a.set:Apply(obs("y", 9))
+      local recs = countKind(a, "REC")
+      b.comm:Send("test", "DAYS", { h = {}, after = "5" })   -- covers days after "5" only
+      settle(10)
+      local ids = {}
+      for _, p in ipairs(recs.payloads) do for _, r in ipairs(p.rs) do ids[#ids + 1] = r.id end end
+      assert.same({ "y" }, ids)
+    end)
+
+    it("a peer drops its delayed digest when another peer sent the same one first", function()
+      local a = bnode("Alice-Realm", { random = function() return 1 end })
+      local b = bnode("Bob-Realm", { random = function() return 3 end })
+      local c = bnode("Carol-Realm")
+      fill(a); fill(b); fill(c)
+      a.set:Apply(obs("extra", 5)); b.set:Apply(obs("extra", 5))
+      local aReqs, bReqs = countKind(a, "REQ"), countKind(b, "REQ")
+      c.sync:Start()
+      settle(20)
+      assert.is_not_nil(c.set:Get("extra"))
+      assert.equal(1, aReqs.n)
+      assert.equal(0, bReqs.n)
+    end)
+
+    it("day hashes format integers with %d and other numbers with %.17g", function()
+      local a = bnode("Alice-Realm")
+      local U = ns.Util
+      assert.equal(U.Hash("a:1:1000;"), a.sync:_dayHash({ a = { 1, 1000 } }))
+      assert.equal(U.Hash("a:1:" .. string.format("%.17g", 1000.1) .. ";"), a.sync:_dayHash({ a = { 1, 1000.1 } }))
+      assert.equal(U.Hash("a:1:1000;b:2:1700000000;"), a.sync:_dayHash({ b = { 2, 1700000000 }, a = { 1, 1000 } }))
+    end)
+
+    it("Start returns false when a DAYS message cannot be sent", function()
+      local a = bnode("Alice-Realm")
+      a.set:Apply(obs("x", 1))
+      a.comm.Send = function() return false end
+      assert.is_false(a.sync:Start())
+    end)
+
+    it("a large day is paged by PAGE ids, each page naming only that day", function()
+      local a, b = bnode("Alice-Realm"), bnode("Bob-Realm")
+      for i = 1, 120 do a.set:Apply(obs(string.format("r%03d", i), 3)) end
+      a.set:Apply(obs("s1", 4))
+      for i = 1, 120 do b.set:Apply(obs(string.format("r%03d", i), 3, { v = 0 })) end
+      b.set:Apply(obs("s1", 4, { v = 0 }))
+      local reqs = countKind(a, "REQ")
+      b.sync:Start()
+      wait(1)   -- Alice's delayed digest goes out
+      local day3, total = 0, 0
+      for _, p in ipairs(reqs.payloads) do
+        local n = 0
+        for _ in pairs(p.have) do n = n + 1 end
+        assert.is_true(n <= 50)
+        total = total + n
+        if p.days[1] == "3" then day3 = day3 + 1; assert.same({ "3" }, p.days) end
+      end
+      assert.equal(3, day3)
+      assert.equal(121, total)
+    end)
+
+    it("counter-REQs are rate-limited per day", function()
+      local a = bnode("Alice-Realm")
+      local b = { comm = bus:join("Bob-Realm") }   -- a bare peer that never answers
+      local reqs = countKind(a, "REQ")
+      local have = { x = { 2, 1000 } }
+      b.comm:Send("test", "REQ", { have = have, days = { "2" } })
+      b.comm:Send("test", "REQ", { have = have, days = { "2" } })
+      assert.equal(1, reqs.n)
+      wait(61)
+      b.comm:Send("test", "REQ", { have = have, days = { "2" } })
+      assert.equal(2, reqs.n)
+    end)
+
+    it("5,000 records over 400 days go out as two DAYS messages of 200 days", function()
+      local a = bnode("Alice-Realm")
+      local b = { comm = bus:join("Bob-Realm") }
+      for i = 1, 5000 do a.set:Apply(obs(string.format("obs:%05d", i), 20000 + i % 400)) end
+      local got = {}
+      b.comm:On("test", "DAYS", function(p) got[#got + 1] = p end)
+      local reqs = countKind(a, "REQ")
+      local chunks = countChunks(a, "DAYS")
+      assert.is_true(a.sync:Start())
+      assert.equal(2, #got)
+      assert.equal(0, reqs.n)
+      assert.equal(200, size(got[1].h)); assert.equal(200, size(got[2].h))
+      assert.is_nil(got[1].after); assert.equal(got[1].to, got[2].after); assert.is_nil(got[2].to)
+      assert.is_true(chunks.chunks <= 40)
+    end)
+
+    it("malformed DAYS and REQ days payloads are ignored safely", function()
+      local a, b = bnode("Alice-Realm"), bnode("Bob-Realm")
+      a.set:Apply(obs("x", 1))
+      assert.has_no.errors(function()
+        b.comm:Send("test", "DAYS", "junk")
+        b.comm:Send("test", "DAYS", { h = "junk" })
+        b.comm:Send("test", "DAYS", { h = { [1] = 5, x = "y" } })
+        b.comm:Send("test", "DAYS", { h = {}, after = 7, to = {} })
+        b.comm:Send("test", "REQ", { have = {}, days = { 5, {} } })
+        settle(10)
+      end)
+    end)
+
+    it("a set without bucket never answers DAYS", function()
+      local a = node("Alice-Realm")
+      a.set:Apply(rec())
+      local b = node("Bob-Realm")
+      local reqs = countKind(a, "REQ")
+      b.comm:Send("test", "DAYS", { h = {} })
+      settle(10)
+      assert.equal(0, reqs.n)
+    end)
+  end)
 end)

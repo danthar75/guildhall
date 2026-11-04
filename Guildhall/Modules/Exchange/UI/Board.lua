@@ -16,6 +16,7 @@ local TOP = 30         -- below the sub-tab row
 local LIST_TOP = 56    -- below the search box
 local BOTTOM = 20      -- status line
 local ROW_H, ROWS = 34, 10
+local BANNER_H = 24    -- the prompt line (confirm a deal / Sold?) pushes the list down by this much
 
 local FILTERS = {
   { key = "all", title = "All", width = 60 },
@@ -253,14 +254,15 @@ end
 
 local function updateRows()
   local list, now = view.list, services() and services().now() or 0
+  local count = view.rowCount or ROWS
   if view.faux then
-    FauxScrollFrame_Update(view.scroll, #list, ROWS, ROW_H)
+    FauxScrollFrame_Update(view.scroll, #list, count, ROW_H)
   else
-    view.offset = math.max(0, math.min(view.offset or 0, #list - ROWS))
+    view.offset = math.max(0, math.min(view.offset or 0, #list - count))
   end
   local off = offset()
   for i, row in ipairs(view.rows) do
-    local rec = list[off + i]
+    local rec = i <= count and list[off + i] or nil
     row.rec = rec
     if rec then
       local d = rec.d
@@ -341,8 +343,129 @@ local function selectFilter(key)
   Board.Refresh()
 end
 
+-- Prompt line ---------------------------------------------------------------------------
+
+local function goldText(copper)
+  local g, rest = math.floor(copper / 10000), copper % 10000
+  local out = g > 0 and (g .. "g") or ""
+  if rest >= 100 then out = out .. (out ~= "" and " " or "") .. math.floor(rest / 100) .. "s" end
+  if rest % 100 > 0 or out == "" then out = out .. (out ~= "" and " " or "") .. (rest % 100) .. "c" end
+  return out
+end
+Board.GoldText = goldText
+
+local function nameOfProfile(id)
+  local s = services()
+  if s and ns.LbConfig and ns.LbConfig._displayName then return ns.LbConfig._displayName(s.profile, id) end
+  return ns.Util.DisplayName(tostring(id))
+end
+
+Board.H.nameOfProfile = nameOfProfile
+
+-- A name for an item given as a link, a typed name, or a bare item id. Never a raw id: an id
+-- the client does not know yet gives nil.
+local function itemName(item)
+  if type(item) == "string" and not item:match("^%d+$") then return escape(Util.ItemName(item)) end
+  local id = tonumber(item)
+  local getInfo = id and ((C_Item and C_Item.GetItemInfo) or GetItemInfo)
+  if getInfo then
+    local ok, name = pcall(getInfo, id)
+    if ok and type(name) == "table" then name = name.itemName end
+    if ok and type(name) == "string" and name ~= "" then return escape(name) end
+  end
+  return nil
+end
+Board.ItemName = itemName
+
+-- The line at the top of the board, or nil: a deal someone recorded that waits for my
+-- confirmation (first), else the "Sold?" question for a paired sale of my WTS listing.
+-- { kind = "confirm"|"sold", text, obsId?, listingId?, more? }. The sold prompt is held in the
+-- view until answered, because the exchange offers each deal only once.
+function Board.Prompt()
+  local ex, s = ns.exchange, services()
+  if not ex or not s then return nil end
+  local me = s.profile:Id()
+  local pending = ex:PendingConfirmations()
+  local p = pending[1]
+  if p then
+    local d = p.obs.d
+    local verb = d.buyer == me and "bought" or "sold"
+    local item = type(p.listing.d) == "table" and p.listing.d.item or d.item
+    local name = itemName(item) or itemName(d.item)
+    return { kind = "confirm", obsId = p.obs.id, more = #pending - 1,
+      text = escape(nameOfProfile(p.obs.by)) .. " says you " .. verb .. " "
+        .. (name and (d.count .. " " .. name) or ("an item (x" .. d.count .. ")")) .. " for " .. goldText(d.copper) .. ". Confirm?" }
+  end
+  local held = view and view.sold
+  if held then
+    local live = ex:Get(held.listing.id)
+    if not live or live.del == true then view.sold = nil; held = nil end
+  end
+  if not held then
+    held = ex:NextSoldPrompt()
+    if view then view.sold = held end
+  end
+  if held then
+    return { kind = "sold", listingId = held.listing.id,
+      text = "Sold?" .. (itemName(held.listing.d.item) and (" " .. itemName(held.listing.d.item)) or "") }
+  end
+  return nil
+end
+
+local function layoutForPrompt(shown)
+  local top = LIST_TOP + (shown and BANNER_H or 0)
+  view.rowCount = shown and ROWS - 1 or ROWS
+  view.listPanel:ClearAllPoints()
+  view.listPanel:SetPoint("TOPLEFT", 0, -top)
+  view.listPanel:SetSize(LIST_W, view.rowCount * ROW_H + 4)
+  view.detail:ClearAllPoints()
+  view.detail:SetPoint("TOPLEFT", DETAIL_X, -top)
+  view.detail:SetPoint("BOTTOMRIGHT", 0, BOTTOM)
+end
+
+local function updatePrompt()
+  local prompt = Board.Prompt()
+  view.prompt = prompt
+  if prompt then
+    local text = prompt.text
+    if prompt.more and prompt.more > 0 then text = text .. " (+" .. prompt.more .. " more)" end
+    view.banner.text:SetText(text)
+    local a, b = "Confirm", "Not me"
+    if prompt.kind == "sold" then a, b = "Remove listing", "Keep it up" end
+    view.banner.yes:SetText(a)
+    view.banner.no:SetText(b)
+    view.banner:Show()
+  else
+    view.banner:Hide()
+  end
+  layoutForPrompt(prompt ~= nil)
+end
+
+local function answerPrompt(yes)
+  local prompt, ex = view and view.prompt, ns.exchange
+  if not prompt or not ex then return end
+  if prompt.kind == "confirm" then
+    if yes then
+      local ok, err = ex:ConfirmDeal(prompt.obsId)
+      if ok then setStatus("Deal confirmed. It now counts for both of you.") else reportError(err) end
+    else
+      ex:DeclineDeal(prompt.obsId)
+      setStatus("Dismissed. It won't be shown again.")
+    end
+  else
+    view.sold = nil
+    if yes then
+      local ok, err = ex:Remove(prompt.listingId)
+      if ok then setStatus("Listing removed.") else reportError(err) end
+    end
+  end
+  Board.Refresh()
+end
+Board.AnswerPrompt = answerPrompt
+
 function Board.Refresh()
   if not view then return end
+  updatePrompt()
   view.list = load()
   local found
   for _, rec in ipairs(view.list) do if rec.id == view.selectedId then found = rec end end
@@ -471,6 +594,21 @@ function Board.Build(parent)
   view.status = UI.Text(parent, "GameFontNormalSmall")
   view.status:SetPoint("BOTTOMLEFT", 2, 2)
   view.status:SetWidth(730)
+
+  -- Prompt line below the filter row (hidden until there is something to answer).
+  local banner = CreateFrame("Frame", nil, parent)
+  banner:SetPoint("TOPLEFT", 0, -LIST_TOP)
+  banner:SetSize(736, BANNER_H - 2)
+  banner.text = UI.Text(banner, "GameFontHighlight")
+  banner.text:SetPoint("LEFT", 4, 0)
+  banner.text:SetWidth(500)
+  if banner.text.SetWordWrap then banner.text:SetWordWrap(false) end
+  banner.no = UI.Button(banner, "Not me", 100, function() answerPrompt(false) end)
+  banner.no:SetPoint("RIGHT", 0, 0)
+  banner.yes = UI.Button(banner, "Confirm", 110, function() answerPrompt(true) end)
+  banner.yes:SetPoint("RIGHT", banner.no, "LEFT", -4, 0)
+  banner:Hide()
+  view.banner = banner
 
   -- Data changes (sync, posts, removals) refresh the board while it is visible.
   if ns.Events and not Board.listening then

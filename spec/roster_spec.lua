@@ -32,6 +32,27 @@ describe("Roster", function()
     assert.equal("fast", r.mode)
   end)
 
+  it("ParseTag tolerates spaces after commas", function()
+    local ns = {}
+    loadAddonFile(ns, "Guildhall/Core/Roster.lua")
+    local r = ns.Roster.ParseTag("[Guildhall donations=3, 4 bankexclude=0 ,1 officers=2]")
+    assert.equal("3,4", r.donations)
+    assert.equal("0,1", r.bankexclude)
+    assert.equal(2, r.officers)
+  end)
+
+  it("ParseTag keeps settings separated by a comma", function()
+    local ns = {}
+    loadAddonFile(ns, "Guildhall/Core/Roster.lua")
+    local r = ns.Roster.ParseTag("[Guildhall donations=3,4, officers=2]")
+    assert.equal("3,4", r.donations)
+    assert.equal(2, r.officers)
+    local r2 = ns.Roster.ParseTag("[Guildhall officers=2, mode=fast]")
+    assert.equal(2, r2.officers)
+    assert.equal("fast", r2.mode)
+    assert.equal("3,4", ns.Roster.ParseTag("[Guildhall donations=3, 4]").donations)
+  end)
+
   it("ParseTag ignores text without tag", function()
     local ns = {}
     loadAddonFile(ns, "Guildhall/Core/Roster.lua")
@@ -39,6 +60,21 @@ describe("Roster", function()
     assert.same({}, ns.Roster.ParseTag("[guildhall officers=3]"))
     assert.same({}, ns.Roster.ParseTag(nil))
     assert.same({}, ns.Roster.ParseTag(42))
+  end)
+
+  it("ParseTag merges two tags; ConfigList parses lists", function()
+    local ns = {}
+    loadAddonFile(ns, "Guildhall/Core/Roster.lua")
+    local text = "[Guildhall officers=3] notes [Guildhall donations=3,4 bankexclude=0]"
+    local t = ns.Roster.ParseTag(text)
+    assert.equal(3, t.officers)
+    assert.equal("3,4", t.donations)
+    local r = make({}, { C_GuildInfo = { GetInfoText = function() return text end, GuildRoster = function() end } })
+    r:Refresh()
+    assert.same({ 3, 4 }, r:ConfigList("donations"))
+    assert.same({ 0 }, r:ConfigList("bankexclude"))
+    assert.same({ 3 }, r:ConfigList("officers"))
+    assert.same({}, r:ConfigList("nope"))
   end)
 
   it("IsOfficer uses threshold rank < N", function()
@@ -114,5 +150,22 @@ describe("Roster", function()
     assert.is_false(r2:HasRanks())
     r2:Refresh()
     assert.is_true(r2:HasRanks())
+  end)
+
+  it("RankNames reads the game's ranks and caches them", function()
+    local live = { "Guild Master", "Officer", "Member" }
+    local r, cache = make({}, { GuildControlGetNumRanks = function() return #live end,
+      GuildControlGetRankName = function(i) return live[i] end })
+    assert.same({ "Guild Master", "Officer", "Member" }, r:RankNames())
+    live = {} -- the game stops answering (secret or not loaded): the cache answers
+    assert.same({ "Guild Master", "Officer", "Member" }, r:RankNames())
+    assert.equal("Officer", cache.rankNames[1])
+  end)
+
+  it("RankNames falls back to rank names seen in the roster, with Rank N for a gap", function()
+    local r = make({ { name = "A", rank = 0 }, { name = "B", rank = 2 } })
+    assert.same({}, r:RankNames())
+    r:Refresh()
+    assert.same({ "Rank", "Rank 1", "Rank" }, r:RankNames())
   end)
 end)

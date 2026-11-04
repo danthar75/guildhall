@@ -153,4 +153,78 @@ describe("Compat", function()
     assert.equal(7, c:Now())
     assert.equal(0, env.sent)
   end)
+
+  it("ServerOffset rounds to 15 minutes and is nil when missing or secret", function()
+    assert.is_nil(Compat.new({}):ServerOffset())
+    local function env(localT, extra)
+      local e = { GetServerTime = function() return 1000 end,
+        C_DateAndTime = { GetServerTimeLocal = function() return localT end } }
+      for k, v in pairs(extra or {}) do e[k] = v end
+      return e
+    end
+    assert.equal(-28800, Compat.new(env(1000 - 28800 + 200)):ServerOffset())
+    assert.equal(3600, Compat.new(env(1000 + 3600)):ServerOffset())
+    assert.is_nil(Compat.new(env(5, { issecretvalue = function(v) return v == 5 end })):ServerOffset())
+  end)
+
+  it("GuildRanks reads rank names in order, nil when missing or any name is secret", function()
+    assert.is_nil(Compat.new({}):GuildRanks())
+    local names = { "Guild Master", "Officer", "Member" }
+    local e = { GuildControlGetNumRanks = function() return 3 end,
+      GuildControlGetRankName = function(i) return names[i] end }
+    assert.same({ "Guild Master", "Officer", "Member" }, Compat.new(e):GuildRanks())
+    e.issecretvalue = function(v) return v == "Officer" end
+    assert.is_nil(Compat.new(e):GuildRanks())
+    e.issecretvalue = function(v) return v == 3 end
+    assert.is_nil(Compat.new(e):GuildRanks())
+  end)
+
+  it("SecondsUntilWeeklyReset reads the API, nil when missing or secret", function()
+    assert.is_nil(Compat.new({}):SecondsUntilWeeklyReset())
+    local e = { C_DateAndTime = { GetSecondsUntilWeeklyReset = function() return 12345 end } }
+    assert.equal(12345, Compat.new(e):SecondsUntilWeeklyReset())
+    e.issecretvalue = function() return true end
+    assert.is_nil(Compat.new(e):SecondsUntilWeeklyReset())
+  end)
+  describe("trade", function()
+    local function tradeEnv(extra)
+      local e = {
+        GetTradePlayerItemLink = function(i) if i == 1 then return "|Hitem:2589::|h[Linen Cloth]|h" end end,
+        GetTradePlayerItemInfo = function(i) if i == 1 then return "Linen Cloth", 1, 20 end end,
+        GetTradeTargetItemLink = function(i) if i == 2 then return "|Hitem:2592::|h[Wool Cloth]|h" end end,
+        GetTradeTargetItemInfo = function(i) if i == 2 then return "Wool Cloth", 1, 5 end end,
+        GetPlayerTradeMoney = function() return 0 end,
+        GetTargetTradeMoney = function() return 12345 end,
+        UnitName = function(u) if u == "NPC" then return "Bob", "Argent Dawn" end end,
+      }
+      for k, v in pairs(extra or {}) do e[k] = v end
+      return e
+    end
+
+    it("TradeSnapshot reads both sides, items and money", function()
+      local snap = Compat.new(tradeEnv()):TradeSnapshot()
+      assert.same({ { id = 2589, n = 20 } }, snap.give)
+      assert.same({ { id = 2592, n = 5 } }, snap.get)
+      assert.equal(0, snap.giveCopper)
+      assert.equal(12345, snap.getCopper)
+    end)
+
+    it("TradeSnapshot is nil when the APIs are missing or any value is secret", function()
+      assert.is_nil(Compat.new({}):TradeSnapshot())
+      assert.is_nil(Compat.new(tradeEnv({ issecretvalue = function(v) return v == 12345 end })):TradeSnapshot())
+      assert.is_nil(Compat.new(tradeEnv({ issecretvalue = function(v) return v == 20 end })):TradeSnapshot())
+    end)
+
+    it("TradeSnapshot is nil when an item link is secret, but an empty slot is fine", function()
+      local LINK = "|Hitem:2589::|h[Linen Cloth]|h"
+      assert.is_nil(Compat.new(tradeEnv({ issecretvalue = function(v) return v == LINK end })):TradeSnapshot())
+      assert.is_not_nil(Compat.new(tradeEnv({ issecretvalue = function() return false end })):TradeSnapshot())
+    end)
+
+    it("TradePartner is the NPC unit as a full name, nil when absent or secret", function()
+      assert.equal("Bob-ArgentDawn", Compat.new(tradeEnv()):TradePartner())
+      assert.is_nil(Compat.new({}):TradePartner())
+      assert.is_nil(Compat.new(tradeEnv({ issecretvalue = function(v) return v == "Bob" end })):TradePartner())
+    end)
+  end)
 end)

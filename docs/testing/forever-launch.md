@@ -2,7 +2,7 @@
 
 What to test when WoW Forever goes live. Split by whether you can test it on one account or need a second Guildhall client in the guild.
 
-**Plan (user):** the guild is created at launch. Jon runs a second WoW account in the same guild as the "other tester", so everything here can be done without outside help. The goal is to finish within 12 hours of launch, but it isn't a rush at the moment of launch.
+**Plan (user):** the guild is created at launch. Dor runs a second WoW account in the same guild as the "other tester", so everything here can be done without outside help. The goal is to finish within 12 hours of launch, but it isn't a rush at the moment of launch.
 - Run both clients at once, each with a character in the guild and Guildhall installed.
 - The guild master (rank 0) counts as an officer. To test non-officer views, put the second account's character at a low rank.
 Full step-by-step details for each item are in `in-game-checklist.md`; this file is the short list and the order to do it in.
@@ -13,7 +13,7 @@ New files (like the logo) need a full game restart, not just `/reload`.
 ## Order on launch night
 
 1. Solo: **Loading**, then your half of `/gh names` (save the output).
-2. On the second account: the other half of `/gh names`. **This is the release blocker.** If it passes, the first release can go out (Jon confirms first).
+2. On the second account: the other half of `/gh names`. **This is the release blocker.** If it passes, the first release can go out (Dor confirms first).
 3. Everything else below, in any order.
 
 ## Solo (no other testers needed)
@@ -25,6 +25,11 @@ New files (like the logo) need a full game restart, not just `/reload`.
 - [ ] With a guild tabard: the header shows the tabard and "<Guild>  Guildhall". With no tabard yet: the placeholder emblem.
 - [ ] Not in a guild yet: one friendly chat line, and the header shows the Guildhall logo instead of a tabard.
 - [ ] Popups (form, pick lists, consent, copy box) are solid, not see-through.
+
+### Welcome screen and About tab
+- [ ] First open of the window on the account shows the welcome screen on top; closing it and reopening the window does not. Esc closes it.
+- [ ] `/gh welcome`, the Settings button and the About tab button reopen it. "Show this next time" brings it back on the next open.
+- [ ] The About tab shows the header, feature list, the gnome line ("no more than 10 or 20") and the credit line, and all text renders (no boxes).
 
 ### Consent and your own alts
 - [ ] Consent dialog on first login in the guild. OK links the character.
@@ -81,14 +86,37 @@ New files (like the logo) need a full game restart, not just `/reload`.
 ### Officers
 - [ ] An officer (`[Guildhall officers=N]` in Guild Info) sees "Remove (officer)" on the other person's listing, and it works. A non-officer never sees it.
 
-## Later: Leaderboard (once it's built)
+## Leaderboard
 
-Needs Forever. Most of it needs the second account.
-- [ ] Solo: the tab opens, the periods switch, your own row shows your breakdown, and opting out hides you.
-- [ ] Solo, once the guild has a bank tab (it may need gold to buy one): your guild bank deposits appear as observations, and moves between tabs don't count.
-- [ ] With the second account: a trade-window deal matched to a listing pairs and counts for both of you.
-- [ ] With the second account: a CoD mail deal pairs and counts.
-- [ ] With the second account: "Record a deal" plus their confirmation counts.
-- [ ] With the second account: a listing still up after 24 hours gets witnessed and counts.
-- [ ] With the second account at a non-officer rank: they see totals only, can open only their own breakdown, and their Log tab shows counts only.
-- [ ] With the second account also reading the bank log: bank entries pair. Excluded ranks and tabs don't count.
+Needs Forever. Account A and account B are your two accounts, both in the guild with Guildhall. Give B a low rank (not an officer) unless a step says otherwise. Run `/console scriptErrors 1` on both. After each step, open the Leaderboard tab and use `/gh log` to see what happened.
+
+### Solo
+
+- [ ] **Tab, periods and opting out.** Open the Leaderboard tab. Click Week, Month, All time and Past months. Expected: each switches with no Lua error, and your own row shows your breakdown. In Settings, turn off "Show me on the leaderboard": your row disappears from the list, and the guild total still counts you.
+- [ ] **Guild bank deposits (needs a guild bank tab, which may need gold).** Deposit an item into a tab, then open the bank so the log loads. Expected: the Log tab shows an "observations" line of counts, and moving an item between tabs adds nothing.
+- [ ] **Secret values.** Open a trade window, the mailbox and the guild bank inside an instance (or with `/console addonChatRestrictionsForced 1` and `/console addonMapRestrictionsForced 1`). Expected: no Lua errors and no half-recorded entries. A skipped read is simply not recorded.
+- [ ] **Glyph check.** Open the Leaderboard tab, its settings and the Past months list. Expected: every label, button and number renders as real text, with no empty boxes or question marks.
+- [ ] **Demo mode.** Type `/gh lbdemo`. Expected: the tab shows an orange "Demo data, not real. /gh lbdemo off" banner, 12 made-up players, and data under Week, Month, All time and Past months. Type `/gh lbdemo off`, or `/reload`: real data returns, and nothing was sent (the other account sees nothing).
+- [ ] **Change history box.** As the guild master (or a rank granted "Edit leaderboard weights"), change a weight in Leaderboard settings and save. Expected: the "Recent changes" box shows the line with a server-time date, and scrolling the wheel over that box scrolls only the box, not the settings page behind it.
+- [ ] **Rank names from the game (`GuildControlGetRankName` on Forever).** Open Settings and scroll to Permissions. Expected: the columns are your guild's rank names in rank order, Guild Master first, with no "Rank N" placeholders. If you see "Rank N", run `/dump GuildControlGetNumRanks(), GuildControlGetRankName(1)` and note what it prints (nil or a secret value means the fallback to roster rank names is in use).
+- [ ] **Guild master only by default.** Before anyone has saved permissions: as the guild master, every Permissions checkbox outside the Guild Master column is enabled and unticked, and the Guild Master column is ticked and greyed out. As an officer on the same account's alt (or any non-guild-master), the grid is read-only, there are no Save or Reset buttons, the weight boxes in Leaderboard settings are read-only, and the past month view has no Retake button.
+- [ ] **Bank review list.** As the guild master, open Settings > Leaderboard and press "Bank review". Expected: every recorded bank deposit and withdrawal, newest first, with server-time dates; the player, tab and month filters and "Show excluded only" narrow it; the mouse wheel scrolls it 14 rows at a time; all text renders (no empty boxes). On a rank without "Review bank contributions" the button isn't there.
+- [ ] **Guild Info tags.** In Guild Info, write `[Guildhall donations=3,4]` (and `[Guildhall bankexclude=0,1]`). Expected after `/reload`: tabs 3 and 4 count, and ranks 0 and 1 never count. A space after a comma (`donations=3, 4`) is also read correctly, but write tags without spaces to be safe. No tag means all tabs count.
+
+### Needs a second client (your second account)
+
+- [ ] **`TRADE_ACCEPT_UPDATE` fires with (1,1) when both players accept on Forever.** On A run `/etrace` filtered to TRADE_ACCEPT_UPDATE, open a trade with B, put something in, and have both press Accept. Expected: the last event shows `1, 1`. If it shows something else, the trade pairing needs a different completion check.
+- [ ] **Trade deal pairs.** Post a listing on A, then trade the item to B for the listed gold. Expected: both clients log an "observations" line, and the deal appears on both Leaderboards (sales for A, purchases for B).
+- [ ] **CoD mail pairs.** On A, post a CoD listing. Send a CoD mail with one attachment to B, then take it on B. Expected: both sides publish a CoD observation (the Log tab shows an "observations" line on each), and the deal pairs on the Leaderboard on both clients.
+- [ ] **Guild bank needs a second reader.** On A, deposit an item. Expected: nothing counts yet. On B, open the guild bank so B reads the log. Expected: the deposit now counts for A, and moves between tabs and ranks from `bankexclude` don't count.
+- [ ] **Opt-out hides you on other clients.** On A, turn off "Show me on the leaderboard". Expected: on B, A disappears from the list within a minute (their activity still counts toward the guild total). Turn it back on and A returns.
+- [ ] **Record a deal needs confirmation.** On A, use Record a deal for a trade with B. Expected: it shows "waiting for the other player to confirm" until B confirms, then counts for both.
+- [ ] **A listing is witnessed.** Leave a listing up for 24 hours. Expected: the other account counts as a witness, and A's listings posted goes up by 1.
+- [ ] **A non-officer sees counts only.** With B at a non-officer rank: B sees totals for others, can open only their own breakdown, and in B's Log tab observation entries read "received N (trade 2, bank 10)" with no names or amounts. An officer's Log tab shows the full entries.
+- [ ] **Granting Officer the weights.** On the guild master account (A), tick Officer under "Edit leaderboard weights" and press Save. Give B the Officer rank. Expected: A's Change history shows "Changed Edit leaderboard weights: Guild Master -> Guild Master, Officer". On B, within a minute, the weight boxes become editable; change a weight and publish. Expected: A shows the new weight and B's line in Change history. Then on A untick Officer and Save: B's weights become read-only again, and B's earlier weight change stays in effect.
+- [ ] **Bank review: untick a deposit.** On A (guild master), open Bank review, untick a deposit made by B, type "moving guild funds" and press OK. Expected: B's score drops by that deposit on both clients, while the guild total (gold kept, bank boards' guild figures) stays the same. A's Change history shows "Excluded a bank entry (B, ... deposit): moving guild funds". Tick it again: B's score comes back and the history shows "Counted a bank entry again".
+- [ ] **Bank review: the reason reaches the member.** After unticking B's deposit on A, open B's own breakdown on B. Expected: under "Not counted" the deposit reads "... · Excluded by an officer: moving guild funds", with no officer name on B (a non-officer). An officer viewing it also sees who excluded it.
+- [ ] **A non-officer's Log hides bank reviews.** After A unticks B's deposit, open the Log tab on B (non-officer). Expected: the exclusion and its history entry each read "<time> | bank review | received", with no officer name, profile id or reason; typing A's name in the filter does not find them. On A (officer) the full entries show.
+- [ ] **Month save waits for sync to settle.** On A (guild master or officer), stay offline for a few days of a finished month, then log in at least 3 days after the month ends while B is online. Expected: the month is not saved at 90 s while observations are still arriving; it is saved once the Log has been quiet for a minute (within 15 min of login), and Past months then matches what B shows. If sync never goes quiet within 15 min, nothing is saved that session.
+- [ ] **Fresh install catches up on permission-dependent records.** With a rank granted "Review bank contributions" and an exclusion made by that rank, install Guildhall fresh on B (delete its SavedVariables) and log in. Expected: within about two minutes B shows the exclusion (the member's score drops on B too) with no /reload, and B's Log shows at most one "author lacks permission" line for it.
+- [ ] **Long message check (later).** In a test guild (or later, once the real guild has 5 or more saved months), install Guildhall fresh on one account and log in. Expected: it receives every saved month, with none missing from Past months.

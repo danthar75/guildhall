@@ -40,6 +40,12 @@ function Comm:On(module, kind, handler)
   m[kind] = handler
 end
 
+-- True when Send would accept this message (all chunks of one envelope within MAX_CHUNKS).
+function Comm:Fits(module, kind, payload)
+  local body = ns.Serialize.Encode({ pv = 1, m = module, k = kind, p = payload })
+  return #body <= (self.maxBytes - HEADER_RESERVE) * MAX_CHUNKS
+end
+
 function Comm:Pending() return self.tail - self.head + 1 end
 
 -- Stops this Comm for good (guild changed mid-session): queued lines are dropped and
@@ -126,7 +132,11 @@ end
 function Comm:_expire()
   local t = self.now()
   for key, set in pairs(self.assembly) do
-    if t - set.first > EXPIRY then self.assembly[key] = nil end
+    -- Inactivity timeout: a long message trickles in at the send rate, so only silence expires it.
+    if t - set.last > EXPIRY then
+      self.assembly[key] = nil
+      self.onIgnored(set.sender, "incomplete")
+    end
   end
 end
 
@@ -166,9 +176,10 @@ function Comm:Receive(prefix, msg, channel, sender)
       return
     end
     if not set then
-      set = { n = n, parts = {}, count = 0, first = self.now() }
+      set = { n = n, parts = {}, count = 0, last = self.now(), sender = full }
       self.assembly[key] = set
     end
+    set.last = self.now()
     if not set.parts[i] then set.count = set.count + 1 end
     set.parts[i] = slice
     if set.count < n then return end

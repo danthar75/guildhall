@@ -4,7 +4,7 @@
 
 A guild-helper addon for **World of Warcraft: Forever**. Its first feature is **Exchange**: an in-game LF / WTS board shared by everyone in your guild who runs Guildhall. Members can see who's buying and selling without alt-tabbing to Discord.
 
-Built by **Jon Roberts** ("Dor" in game) for the guild Emergence. It works in any guild.
+Built by **Dor** for the guild Emergence. It works in any guild.
 
 ## Install
 
@@ -33,6 +33,7 @@ Open it with `/gh` (or `/guildhall`) or the minimap button. `/gh help` lists the
 - **Shows who's online.** The online dot counts all of the poster's linked characters.
 - **One click to respond.** **Whisper** opens chat with a message ready to send. **Mail** fills in a letter at the mailbox.
 - **Copy for Discord.** Turns any listing into a post in the guild's pinned `#exchange` format, so members without the addon still see it.
+- **Leaderboard.** A guild ranking for the month, the week and the last 400 days. Only deals made through Exchange listings and checked by both players' clients count, plus guild bank donations. Everyone sees totals, you see your own breakdown, and officers see everyone's. You can turn off "Show me on the leaderboard" in Settings. Guild Info tags tune it, and write them without spaces (a space after a comma is tolerated), for example `[Guildhall donations=3,4]` (only those bank tabs count) and `[Guildhall bankexclude=0,1]` (those ranks' deposits never count). `/gh lbdemo` shows fake data on your own screen so you can look around.
 - **Officer clean-up and an activity log.** Officers can remove any listing. Who counts as an officer is set by a tag in the Guild Information text, e.g. `[Guildhall officers=2]`. Every change is recorded in a local log, along with who passed it along.
 
 ## What it does *not* do
@@ -54,7 +55,7 @@ Short version: a WoW addon is plain-text Lua that the game runs inside a sandbox
 
 ## How it was made
 
-Guildhall was designed, reviewed and tested by **Jon Roberts** ("Dor"), a senior software developer. Much of the code was written with **Claude** (Anthropic's AI assistant) as a coding assistant, working from Jon's design. It went through automated tests (`tools/check.sh`) and code review at every step. Built with Claude, reviewed by a human.
+Guildhall was designed, reviewed and tested by **Dor**, a senior software developer. Much of the code was written with **Claude** (Anthropic's AI assistant) as a coding assistant, working from Dor's design. It went through automated tests (`tools/check.sh`) and code review at every step. Built with Claude, reviewed by a human.
 
 ## Development
 
