@@ -143,7 +143,7 @@ A kill counts only if **more than half** of the group are guild members: 3 of 5 
   - edit leaderboard weights
   - retake a month
   - later, create contests
-- **Defaults.** Every permission defaults to the officer ranks (`[Guildhall officers=N]`) until someone changes it.
+- **Defaults.** Every permission starts as the guild master only, until the guild master changes it (user).
 - **Only the guild master (rank 0) can change permissions** (user).
 - **Checking "raid leader and assistants" (my call, from the builder check).** Other clients accept a confirmation or "Ask to switch" from a non-officer only when that player is shown as leader or assistant in the leader flags of a **paired** kill snapshot of the same raid that night. That needs reports from two different players. Otherwise the confirmation is ignored.
 - **Storage.** Permissions are stored as a guild-master-authored config record in `core.config`. Other clients accept it only from rank 0.

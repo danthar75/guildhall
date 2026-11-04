@@ -84,7 +84,7 @@
   - `weights`: edit leaderboard weights
   - `retake`: retake a month
 - **Grants:** each key grants to a set of guild rank indexes plus an optional `raidlead` flag ("the current raid leader and assistants").
-- **Defaults:** each key defaults to the officer ranks (`[Guildhall officers=N]`).
+- **Defaults:** until the guild master saves a change, each key is granted to the guild master only (user).
 - **Who can change them:** only the guild master (rank 0). A permissions record is accepted only from a char at rank 0 when it arrives.
 - **Raid leader rule:** a `raidlead` grant applies only when that char is leader or assistant in a **verified** kill snapshot of the same instance on the same server day.
 
@@ -146,10 +146,10 @@ The core Permissions system was built in the leaderboard branch (its Task 16: `G
   - `prepared`: "Confirm prepared"
   - `flex`: "Ask for spec switches"
 
-  The keys default to the officer ranks. The Permissions grid shows the "Raid leader & assistants" column for these keys only.
+  Until the guild master changes them, the keys are granted to the guild master only. The Permissions grid shows the "Raid leader & assistants" column for these keys only.
 
 - [ ] **Step 1: Failing tests.**
-  - "the three groups keys appear after the leaderboard keys and default to officer ranks"
+  - "the three groups keys appear after the leaderboard keys and default to the guild master only"
   - "a raidlead grant needs a matching raidLeaders set"
   - "history records carry exp = at + 63072000"
 - [ ] **Steps 2–4:** run the tests and see them fail, implement, then run them and see them pass.
