@@ -299,3 +299,16 @@ The next module after the leaderboard is **contests** (user). Officers will run 
 - The exact weekly reset rule.
 - The per-item weight override list.
 - The layout details within the UI described above.
+
+## Addendum (2026-11-04): officer bank review (user)
+
+- **Who:** officers and above.
+- **What they can do:** review every recorded guild bank deposit and withdrawal, and untick any entry that shouldn't count toward a member's contributions, with an optional reason.
+- **Effect:**
+  - An unticked entry leaves the member's personal score in every live period.
+  - It still counts toward the guild's bank totals (my call, approved).
+  - Saved month records stay frozen; a retake picks the change up.
+- **Accountability:** every untick or re-tick is recorded in the shared change history.
+- **What the member sees:** "Excluded by an officer", plus the reason if one was given. The officer's name is visible only to officers.
+- **Scope:** bank entries only.
+- **Permissions:** this moves to the group finder's permission `bankreview` once Permissions exist.

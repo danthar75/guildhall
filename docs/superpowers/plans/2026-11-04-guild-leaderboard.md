@@ -604,3 +604,62 @@ In `spec/sync_spec.lua`, a new `describe("day buckets")`, using the existing two
 - Compare handles 0.10.0 > 0.9.9.
 - The About tab lists every entry.
 - release.sh fails without a WhatsNew entry. This is a shell test in the spec, or covered by `tools/check-release.sh`.
+
+### Task 16: Officer bank review (added 2026-11-04, user request)
+
+**Why:** the user wants officers and above to be able to review guild bank log entries and untick any that shouldn't count toward a member's tracked contributions.
+
+**Approved behaviour:**
+- **An excluded entry** drops out of the member's personal score in every live period, the same way a weight change rescores.
+- It **still counts toward the guild's bank totals**, because the gold or items really are in the bank (my call, approved).
+- **Saved month records don't change.** A retake picks the exclusion up.
+- **Bank entries only.** Exchange deals already need both players' clients.
+
+**Files:**
+- Create: `Guildhall/Core/Leaderboard/UI/BankReview.lua` (both TOCs, after `SettingsView.lua`)
+- Modify:
+  - `Guildhall/Core/Leaderboard/Config.lua`: exclusion records and their history
+  - `Guildhall/Core/Leaderboard/Ledger.lua`: apply exclusions
+  - `Guildhall/Core/Leaderboard/UI/SettingsView.lua`: an officer-only "Bank review" button that opens the list
+  - `Guildhall/Core/Leaderboard/UI/View.lua`: show the reason under "Not counted"
+- Test: `spec/lbconfig_spec.lua`, `spec/ledger_spec.lua`, `spec/bankreview_spec.lua`
+
+**Interfaces:**
+- **Consumes:**
+  - Bank contribution refs: `"bank:" .. <oldest observation id of the cluster>` (Bank.lua deriver).
+  - The Task 14 history writer.
+  - `Roster:IsOfficer`.
+- **Exclusion records.** Each is a `core.config` record with id `"exclude:" .. ref`, holding `{ ref, excluded = bool, reason = string ≤ 80 | nil, by = char, at }`.
+  - Accepted only from an officer at arrival. An unknown roster defers the record to a later sync.
+  - A newer version wins, so re-ticking is a new version with `excluded = false`.
+  - Every accepted publish writes a history record with `what = "bank"`, `key = ref`, and before and after.
+  - Records never expire. They are tiny, and the observations they point to live 400 days.
+- **Config methods:**
+  - `cfg:SetExcluded(ref, excluded, reason) -> ok, err`. Officers only. Publishes the record and its history entry in the same call.
+  - `cfg:Exclusions() -> { [ref] = { excluded = true, reason, by, at } }`. Lists only the refs currently excluded.
+- **Ledger.** `L:Query` reads `ctx.config:Exclusions()` when `ctx.config` is present. A contribution whose `ref` is excluded is handled like this:
+  - it gets `counted = false` and `why = "excluded by an officer"`, plus `reason`;
+  - it adds nothing to `byProfile`;
+  - its signed value **still adds to `result.guild`** for its type;
+  - it appears in `rows` when `includeUncounted` is set.
+  - A config change calls `ledger:Invalidate()`.
+- **The review list.** `ns.Leaderboard.BankReview.Open()` is for officers only; others get "Only officers can review bank contributions."
+  - It lists every bank contribution row from `Query{ includeUncounted = true, types = { ["bank.gold"] = true, ["bank.items"] = true } }`, newest first.
+  - Each row shows: date (server time), character display name, "deposited" or "withdrew", gold, or item link and count, tab, and status. Status is "counted", "not verified yet", or the existing why.
+  - Each row has a checkbox, ticked when not excluded.
+  - Unticking opens a small prompt "Why doesn't this count? (optional)" with OK and Cancel, then calls `cfg:SetExcluded(ref, true, reason)`. Ticking calls `cfg:SetExcluded(ref, false)` with no prompt.
+  - Filters: a player pick list, tab, and month (`Scoring.MonthKey`), plus "Show excluded only".
+  - It scrolls with the mouse wheel and shows 14 rows. Empty state: "No guild bank activity recorded yet. Entries appear after someone with Guildhall opens the guild bank."
+- **The member's view.** In a player's own breakdown, an excluded row reads "Excluded by an officer", followed by ": <reason>" when there is a reason. The officer's name is shown only to officers.
+- **Later.** When the group finder's Permissions land, `SetExcluded` and the incoming check move to the permission `bankreview`, labelled "Review bank contributions", which defaults to the officer ranks. The group finder plan's Task 1 adds this key.
+
+- [ ] **Step 1: Failing tests.**
+  - "an officer's exclusion removes the entry from the member's total but not the guild total"
+  - "re-ticking restores it"
+  - "a non-officer's exclusion record is rejected"
+  - "each change writes one history record what=bank"
+  - "the member's breakdown shows 'Excluded by an officer: moving guild funds'"
+  - "the review list is refused to a non-officer"
+  - "filters by player and month"
+  - "an excluded entry inside a saved month leaves the month record unchanged"
+- [ ] **Step 2–4: Fail, implement, pass.** **Step 5: Commit** "Leaderboard: officer bank review".
