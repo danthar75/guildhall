@@ -57,6 +57,16 @@ describe("Profile", function()
     assert.same({ "Bank-Realm" }, personal.profile.excluded)
   end)
 
+  it("no Record while logged in on an excluded character (O1: would reveal the link)", function()
+    personal = ns.DB.Init().personal
+    local main = mk()
+    main:SeeCharacter("Me-Realm"); main:SeeCharacter("Hidden-Realm")
+    main:Consent({ "Hidden-Realm" })
+    local onHidden = mk({ playerChar = "Hidden-Realm" })
+    assert.is_nil(onHidden:Record())
+    assert.is_not_nil(main:Record())
+  end)
+
   it("a new alt after consent makes NeedsConsent true again", function()
     local p = mk()
     p:SeeCharacter("Me-Realm"); p:Consent({})

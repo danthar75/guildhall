@@ -1,7 +1,7 @@
 -- Boot wiring: loads the real core + Exchange files under fake WoW globals and drives events.
 describe("Boot", function()
   local fakes = require("spec.helpers.fakes")
-  local ns, clock, timers, env, script, printed, sent, guild, restricted
+  local ns, clock, timers, env, script, printed, sent, guild, restricted, inGuild
   local saved = {}
   local GLOBALS = { "CreateFrame", "C_Timer", "GuildhallDB", "print", "GetNormalizedRealmName" }
 
@@ -12,7 +12,7 @@ describe("Boot", function()
     for _, k in ipairs(GLOBALS) do saved[k] = _G[k] end
     clock = fakes.clock(1000)
     timers = fakes.timers(clock)
-    printed, sent, guild, restricted = {}, {}, "GuildA", 0
+    printed, sent, guild, restricted, inGuild = {}, {}, "GuildA", 0, nil
     _G.CreateFrame = function()
       return {
         RegisterEvent = function() end,
@@ -30,6 +30,7 @@ describe("Boot", function()
       GetNormalizedRealmName = function() return "Realm" end,
       GetServerTime = clock.now,
       GetGuildInfo = function() return guild, "Member", 3, nil end,
+      IsInGuild = function() if inGuild == nil then return guild ~= nil end return inGuild end,
       C_ChatInfo = {
         RegisterAddonMessagePrefix = function() end,
         SendAddonMessage = function(_, line) sent[#sent + 1] = line; return 0 end,
@@ -110,6 +111,14 @@ describe("Boot", function()
   it("does not halt on a nil guild while restricted (the name may just be secret)", function()
     guild, restricted = nil, 2
     fire("GUILD_ROSTER_UPDATE")
+    wait(3)
+    assert.is_not_nil(ns.exchange)
+    assert.equal(0, #printed)
+  end)
+
+  it("does not halt while IsInGuild() still says true (N2: slow guild-info load)", function()
+    guild, inGuild = nil, true
+    fire("PLAYER_GUILD_UPDATE")
     wait(3)
     assert.is_not_nil(ns.exchange)
     assert.equal(0, #printed)

@@ -36,6 +36,11 @@ describe("ReplicatedSet", function()
     assert.equal(1, set:Get("a").v)
   end)
 
+  it("rejects ids longer than 64 bytes (N1: keeps digest pages bounded)", function()
+    assert.equal("invalid", (set:Apply(rec({ id = string.rep("x", 65) }))))
+    assert.equal("accepted", (set:Apply(rec({ id = string.rep("x", 64) }))))
+  end)
+
   it("higher version wins", function()
     set:Apply(rec())
     local st, old = set:Apply(rec({ v = 2, d = { x = 2 } }))

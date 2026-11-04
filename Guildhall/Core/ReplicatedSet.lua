@@ -56,8 +56,11 @@ function Set:List(includeDeleted)
   return out
 end
 
+-- Bounds digest pages (Sync pages by id count) so one oversized id can't stall a range.
+local MAX_ID_BYTES = 64
+
 function Set:Apply(rec)
-  if type(rec) ~= "table" or type(rec.id) ~= "string" or rec.id == ""
+  if type(rec) ~= "table" or type(rec.id) ~= "string" or rec.id == "" or #rec.id > MAX_ID_BYTES
     or not finite(rec.v) or not finite(rec.t) or not finite(rec.exp)
     or (rec.char ~= nil and type(rec.char) ~= "string")
     or (rec.del ~= nil and type(rec.del) ~= "boolean") then

@@ -121,6 +121,9 @@ end
 
 function Profile:Record()
   if not self.p.consented then return nil end
+  -- Publishing from a character the player chose not to link would reveal the link
+  -- (the record and every guildmate's log carry the sending character).
+  if self:IsExcluded(self.playerChar) then return nil end
   local id = self:Id()
   local now = self.now()
   return {

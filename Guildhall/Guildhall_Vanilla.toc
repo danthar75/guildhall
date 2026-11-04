@@ -3,6 +3,8 @@
 ## Title: Guildhall
 ## SavedVariables: GuildhallDB
 ## Version: 0.1.0
+## Author: Jon Roberts (Dor)
+## Notes: Guild exchange board (LF/WTS) shared with your guild. Built with Claude, reviewed by a human.
 
 Core/Init.lua
 Core/Util.lua

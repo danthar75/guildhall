@@ -185,6 +185,10 @@ function Boot.GuildState(c, bootedKey)
   if key == bootedKey then return "same" end
   if key ~= nil then return "changed", key end
   if c:IsRestricted("Chat") or c:IsRestricted("Map") then return "unknown" end
+  -- Guild info can take a while to load after a zone-in; only treat it as "left" once the
+  -- client also says we're not in a guild.
+  local inGuild = c.env and c.env.IsInGuild
+  if inGuild and c:Safe(inGuild()) ~= false then return "unknown" end
   return "left"
 end
 
