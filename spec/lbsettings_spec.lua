@@ -327,8 +327,23 @@ describe("Leaderboard.SettingsView", function()
         D({ what = "checklist", key = "mc", before = { name = "Molten Core" }, after = { lines = { { kind = "item", item = 999, count = 2 } } } }))
       assert.same({ "Renamed checklist Old -> New" }, D({ what = "checklist", key = "mc", before = { name = "Old" }, after = { name = "New" } }))
       assert.same({ "Deleted checklist Molten Core" }, D({ what = "checklist", key = "mc", before = { name = "Molten Core" }, after = { deleted = true } }))
-      assert.same({ "Made checklist checklist:mc:fire the default" },
-        D({ what = "checklist", key = "checklist:mc:fire", before = { default = false }, after = { default = true } }))
+      assert.same({ "Made checklist Fire potions the default" },
+        D({ what = "checklist", key = "checklist:mc:fire", before = { name = "Fire potions", default = false },
+          after = { name = "Fire potions", default = true } }))
+      -- the shapes Checklist.lua writes always carry the name, so no line shows the id
+      local key = "checklist:mc:fire"
+      for _, e in ipairs({
+        { before = { name = "Fire" }, after = { name = "Fire", lines = { { kind = "item", item = 1, count = 5 } } } },
+        { before = { name = "Fire", lines = {} }, after = { name = "Fire", lines = { { kind = "enchants" } } } },
+        { before = { name = "Fire" }, after = { name = "Fire pots" } },
+        { before = { name = "Fire", deleted = false }, after = { name = "Fire", deleted = true } },
+        { before = { name = "Fire", default = false }, after = { name = "Fire", default = true } },
+      }) do
+        e.what, e.key = "checklist", key
+        local out = D(e)
+        assert.is_true(#out >= 1)
+        for _, line in ipairs(out) do assert.is_nil(line:find("checklist:", 1, true), line) end
+      end
       for _, l in ipairs(out) do assert.is_nil(l:find("[\128-\255]")) end
       _G.GetItemInfo = saved
     end)

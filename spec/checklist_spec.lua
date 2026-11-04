@@ -143,7 +143,7 @@ describe("Groups Checklist", function()
     for _, e in ipairs(h) do if e.key == id and e.after and e.after.name then saved = e end end
     assert.is_not_nil(saved)
     assert.equal("Off-R", saved.by)
-    assert.same({}, saved.before)
+    assert.same({ name = "Fire potions" }, saved.before)
     assert.same({ name = "Fire potions", lines = LIST.lines }, saved.after)
     -- the first saved checklist of an instance is its default
     assert.equal(id, off.cl:Default("mc").id)
@@ -219,6 +219,9 @@ describe("Groups Checklist", function()
 
     clock.advance(5)
     assert.is_true((off.cl:Confirm("Raider-R", "mc", true)))
+    -- no verified kill tonight: nothing yet
+    assert.equal(0, prepared(derive(raider), "Raider-R"))
+    verifiedKill(clock.now() - 600, "Gm-R", {})
     local out = derive(raider)
     assert.equal(1, prepared(out, "Raider-R"))
     assert.equal(1, #out)
@@ -252,6 +255,7 @@ describe("Groups Checklist", function()
   it("the newest confirmation wins (untick after tick removes credit)", function()
     grant({ prepared = { ranks = { 1 }, raidlead = false } })
     local off = client("Off-R")
+    verifiedKill(clock.now() - 600, "Gm-R", {})
     assert.is_true((off.cl:Confirm("Raider-R", "mc", true)))
     assert.equal(1, prepared(derive(off), "Raider-R"))
     clock.advance(10)
@@ -414,6 +418,11 @@ describe("Groups Checklist", function()
       assert.equal(id, e.key)
       assert.same({ name = "Fire potions" }, e.before)
       assert.same({ name = "Fire pots" }, e.after)
+      -- a lines-only edit still carries the name on both sides
+      assert.is_true((off.cl:Save({ id = id, instance = "mc", name = "Fire pots", lines = { { kind = "enchants" } } })))
+      e = hist(off)[1]
+      assert.same({ name = "Fire pots", lines = LIST.lines }, e.before)
+      assert.same({ name = "Fire pots", lines = { { kind = "enchants" } } }, e.after)
     end)
 
     it("Delete publishes deleted = true, logs it, and moves the default", function()
@@ -432,7 +441,8 @@ describe("Groups Checklist", function()
         if e.key == a and e.after.deleted == true then found = e end
       end
       assert.is_not_nil(found)
-      assert.same({ deleted = false }, found.before)
+      assert.same({ name = "Fire potions", deleted = false }, found.before)
+      assert.same({ name = "Fire potions", deleted = true }, found.after)
       assert.is_false((off.cl:Delete(a)))
       assert.is_false((client("Mem-R").cl:Delete(b)))
     end)
@@ -447,8 +457,8 @@ describe("Groups Checklist", function()
       assert.equal(b, off.cl:Default("mc").id)
       local e = hist(off)[1]
       assert.equal(b, e.key)
-      assert.same({ default = false }, e.before)
-      assert.same({ default = true }, e.after)
+      assert.same({ name = "Backup", default = false }, e.before)
+      assert.same({ name = "Backup", default = true }, e.after)
       assert.is_not_nil(a)
     end)
 
@@ -468,6 +478,102 @@ describe("Groups Checklist", function()
       verifiedKill(clock.now() - 600, "Gm-R", { "Asst-R" })
       assert.is_true((asst.cl:Save(LIST)))
       assert.is_true((asst.cl:Save({ instance = "bwl", name = "x", lines = {} })) == false)
+    end)
+  end)
+
+  describe("fix round 1", function()
+    it("every rendered history line names the checklist, never its id", function()
+      ns.Leaderboard = ns.Leaderboard or {}
+      loadAddonFile(ns, "Guildhall/Core/Leaderboard/UI/SettingsView.lua")
+      local D = ns.Leaderboard.SettingsView.Describe
+      grant({ checklists = { ranks = { 1 }, raidlead = false } })
+      local off = client("Off-R")
+      local _, a = off.cl:Save(LIST)
+      local _, b = off.cl:Save({ instance = "mc", name = "Backup", lines = {} })
+      clock.advance(5)
+      off.cl:Save({ id = a, instance = "mc", name = "Fire potions", lines = { { kind = "enchants" } } })
+      off.cl:Save({ id = a, instance = "mc", name = "Fire pots", lines = { { kind = "enchants" } } })
+      off.cl:SetDefault("mc", b)
+      off.cl:Delete(b)
+      off.cl:Delete(a)
+      local entries, lines = hist(off), 0
+      assert.is_true(#entries >= 7)
+      for _, e in ipairs(entries) do
+        assert.is_string(e.before.name, e.key)
+        assert.is_string(e.after.name, e.key)
+        for _, line in ipairs(D(e)) do
+          lines = lines + 1
+          assert.is_nil(line:find("checklist:", 1, true), line)
+        end
+      end
+      assert.is_true(lines >= 5)
+    end)
+
+    it("a confirmation backdated to a night the raider wasn't at the kill earns nothing (P2)", function()
+      grant({ prepared = { ranks = { 1 }, raidlead = true } })
+      local asst = client("Asst-R")
+      local dayX = clock.now()
+      verifiedKill(dayX - 600, "Gm-R", { "Asst-R" })
+      clock.advance(3 * DAY)
+      asst.obs:Publish({ kind = "prepared", raider = "Raider-R", instance = "mc", ok = true, at = clock.now() })
+      assert.equal(0, prepared(derive(asst), "Raider-R"))
+      asst.obs:Publish({ kind = "prepared", raider = "Nobody-R", instance = "mc", ok = true, at = dayX })
+      assert.equal(0, prepared(derive(asst), "Nobody-R"))
+      -- an honest confirmation of a raider at that night's kill still counts
+      asst.obs:Publish({ kind = "prepared", raider = "Raider-R", instance = "mc", ok = true, at = dayX })
+      assert.equal(1, prepared(derive(asst), "Raider-R"))
+    end)
+
+    it("a raider named by only one report of the kill is not credited", function()
+      grant({ prepared = { ranks = { 1 }, raidlead = false } })
+      local off = client("Off-R")
+      verifiedKill(clock.now() - 600, "Gm-R", {})
+      kills[#kills].d.members = { "A-R", "B-R", "Gm-R", "Solo-R" }
+      kills[#kills - 1].d.members = { "A-R", "B-R", "Gm-R" }
+      assert.is_true((off.cl:Confirm("Solo-R", "mc", true)))
+      assert.equal(0, prepared(derive(off), "Solo-R"))
+      -- a kill in another instance that night doesn't count either
+      assert.is_true((off.cl:Confirm("A-R", "bwl", true)))
+      assert.equal(0, prepared(derive(off), "A-R"))
+    end)
+
+    it("no prepcheck is published when no automatic line could be read", function()
+      grant({ checklists = { ranks = { 1 }, raidlead = false } })
+      local off = client("Off-R")
+      assert.is_true((off.cl:Save({ instance = "mc", name = "Buffs", lines = { { kind = "manual", text = "Ony buff" } } })))
+      local raider = client("Raider-R")
+      local ok, err = raider.cl:OnReadyCheck({ instance = "mc" })
+      assert.is_false(ok)
+      assert.equal("nothing to check", err)
+      assert.equal(0, #raider.obs:List("prepcheck"))
+      assert.is_nil(raider.cl:SelfCheck(off.cl:Default("mc")).ok)
+
+      -- item and enchants unreadable (secret): nothing published, and the day is not used up
+      local _, id = off.cl:Save({ instance = "mc", name = "Full", lines = { { kind = "item", item = POTION, count = 5 },
+        { kind = "enchants" }, { kind = "manual", text = "x" } } })
+      assert.is_true((off.cl:SetDefault("mc", id)))
+      items[POTION], unenchanted = nil, nil
+      assert.is_false((raider.cl:OnReadyCheck({ instance = "mc" })))
+      assert.equal(0, #raider.obs:List("prepcheck"))
+      -- one readable line that passes, one unknown: ok = true, miss = 0
+      items[POTION] = 5
+      assert.is_true((raider.cl:OnReadyCheck({ instance = "mc" })))
+      local d = raider.obs:List("prepcheck")[1].d
+      assert.is_true(d.ok)
+      assert.equal(0, d.miss)
+    end)
+
+    it("a published prepcheck with ok = false has miss >= 1", function()
+      grant({ checklists = { ranks = { 1 }, raidlead = false } })
+      local off = client("Off-R")
+      assert.is_true((off.cl:Save({ instance = "mc", name = "Full", lines = {
+        { kind = "item", item = POTION, count = 5 }, { kind = "enchants" } } })))
+      local raider = client("Raider-R")
+      items[POTION], unenchanted = 1, nil
+      assert.is_true((raider.cl:OnReadyCheck({ instance = "mc" })))
+      local d = raider.obs:List("prepcheck")[1].d
+      assert.is_false(d.ok)
+      assert.equal(1, d.miss)
     end)
   end)
 

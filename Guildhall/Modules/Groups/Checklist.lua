@@ -18,18 +18,26 @@ local ADDON, ns = ...
 --   of that instance on the record's server day (a raidlead grant covers only nights the author led
 --   or assisted a verified kill there). Save, Delete and SetDefault check the same rule for today,
 --   and each writes a history entry what = "checklist", key = the checklist id, before/after with
---   only the changed keys (name, lines, deleted, default).
+--   the changed keys (lines, deleted, default) plus the name on both sides, so the history reads
+--   with the checklist's name.
+--   Timestamps are client-trusted: a raidlead-only author can stamp a record (rec.t) on a night they
+--   led and have it accepted later. The prepared deriver's attendance rule limits what that can do
+--   to credit.
 --
 -- Observations:
 --   prepcheck { instance, list = checklist id, ok, miss = failed lines, at }: the raider's own
 --       check, published on READY_CHECK and the first time the client enters a raid with an active
 --       checklist, at most once per instance per server day (db.lastCheck[instance] = dayKey,
---       persisted in ctx.db). Informational only: it earns nothing.
+--       persisted in ctx.db). Nothing is published when no automatic line (item, enchants) could
+--       be read. ok = false means at least one line failed (miss >= 1). Informational only: it
+--       earns nothing.
 --   prepared  { raider, instance, ok, at }: a leadership confirmation (Confirm needs "prepared").
 -- Deriver "prepared": per (raider, instance, server day of at), the newest confirmation whose author
 -- is permitted when deriving wins (the author's rank from this client's roster; not on the roster
 -- means not permitted; a raidlead grant needs Credit.RaidLeaders for that instance and day). One
--- groups.prepared contribution when it says ok = true.
+-- groups.prepared contribution when it says ok = true and the raider is a credited member (named by
+-- at least 2 reports, Credit's rule) of a verified kill of that instance on that server day, so a
+-- confirmation backdated to a night the raider wasn't there earns nothing.
 --
 -- Globals: ns.Groups.Checklist.
 ns.Groups = ns.Groups or {}
@@ -185,7 +193,7 @@ function Checklist.DerivePrepared(list, ctx)
   if type(now) == "function" then now = now() end
   local tz = tzOf(config, ctx.compat, now)
   local credit = ns.Groups.Credit.new(ctx)
-  local leadersOf, best, keys = {}, {}, {}
+  local leadersOf, attendees, best, keys = {}, {}, {}, {}
   for _, rec in ipairs(list or {}) do
     local d = type(rec) == "table" and rec.d
     if type(d) == "table" and d.kind == "prepared" and type(d.raider) == "string" and type(d.ok) == "boolean"
@@ -197,7 +205,12 @@ function Checklist.DerivePrepared(list, ctx)
         set = credit:RaidLeaders(d.instance, day)
         leadersOf[lk] = set
       end
-      if perms:Can(rec.char, "prepared", { raidLeaders = set }) then
+      local present = attendees[lk]
+      if not present then
+        present = credit:Attendees(d.instance, day)
+        attendees[lk] = present
+      end
+      if present[d.raider] and perms:Can(rec.char, "prepared", { raidLeaders = set }) then
         local key = d.raider .. "|" .. lk
         local cur = best[key]
         if not cur then keys[#keys + 1] = key end
@@ -324,12 +337,12 @@ function L:_newId(instance, name)
   return id(slug)
 end
 
-function L:_publishDefault(instance, id)
+function L:_publishDefault(instance, id, name)
   local t = self.now()
   local ok, err = self.config:PublishChecked("checklistdefault:" .. instance,
     { instance = instance, id = id, by = self.playerChar, at = t }, t + RETENTION, t)
   if not ok then return false, err end
-  self.config:_safeLogHistory("checklist", id, { default = false }, { default = true })
+  self.config:_safeLogHistory("checklist", id, { name = name, default = false }, { name = name, default = true })
   return true
 end
 
@@ -352,24 +365,26 @@ function L:Save(d)
   end
   local raw = self.config.set:Get(id)
   local old = self:Get(id)
-  local before, after = {}, {}
+  -- The name rides on both sides so the history always reads with it.
+  local before, after = {}, { name = name }
   if old then
-    if old.name ~= name then before.name, after.name = old.name, name end
+    if old.name == name and deepEqual(old.lines, lines) then return true, id end
+    before.name = old.name
     if not deepEqual(old.lines, lines) then before.lines, after.lines = old.lines, lines end
-    if next(after) == nil then return true, id end
   else
+    before.name = name
     if raw and type(raw.d) == "table" and raw.d.deleted == true then
       before.deleted, after.deleted = true, false
       before.name, before.lines = raw.d.name, copy(raw.d.lines)
     end
-    after.name, after.lines = name, lines
+    after.lines = lines
   end
   local t = self.now()
   local ok, err = self.config:PublishChecked(id,
     { instance = instance, name = name, lines = copy(lines), by = self.playerChar, at = t }, t + RETENTION, t)
   if not ok then return false, err end
   self.config:_safeLogHistory("checklist", id, before, after)
-  if not self:Default(instance) then self:_publishDefault(instance, id) end
+  if not self:Default(instance) then self:_publishDefault(instance, id, name) end
   return true, id
 end
 
@@ -386,10 +401,11 @@ function L:Delete(id)
   local ok, err = self.config:PublishChecked(id, { instance = instance, name = cur.name, lines = cur.lines,
     deleted = true, by = self.playerChar, at = t }, t + RETENTION, t)
   if not ok then return false, err end
-  self.config:_safeLogHistory("checklist", id, { deleted = false }, { deleted = true })
+  self.config:_safeLogHistory("checklist", id, { name = cur.name, deleted = false },
+    { name = cur.name, deleted = true })
   if wasDefault or not self:Default(instance) then
     local first = self:List(instance)[1]
-    if first then self:_publishDefault(instance, first.id) end
+    if first then self:_publishDefault(instance, first.id, first.name) end
   end
   return true
 end
@@ -401,15 +417,15 @@ function L:SetDefault(instance, id)
   local c = self:Get(id)
   if not c or c.instance ~= instance then return false, "no such checklist" end
   if self:_defaultId(instance) == id then return true end
-  return self:_publishDefault(instance, id)
+  return self:_publishDefault(instance, id, c.name)
 end
 
--- The player's own check: { ok, miss, lines = { { ok, have, need } or { ok, missing } or { ok = nil } } }.
+-- The player's own check: { ok, miss, known, lines = { { ok, have, need } or { ok, missing } or {} } }.
 -- An item line is unknown (ok = nil) when the count can't be read; enchants likewise; manual lines
--- are always unknown. ok is true only when every item and enchant line passed; miss counts the
--- lines that failed.
+-- are always unknown. known counts the automatic lines that could be read; miss counts the lines
+-- that failed. ok = (miss == 0) when known > 0, and nil when nothing could be read.
 function L:SelfCheck(checklist)
-  local out, miss, all = {}, 0, true
+  local out, miss, known = {}, 0, 0
   local compat = self.compat
   for i, l in ipairs(type(checklist) == "table" and type(checklist.lines) == "table" and checklist.lines or {}) do
     local r
@@ -431,10 +447,12 @@ function L:SelfCheck(checklist)
       r = {}
     end
     if r.ok == false then miss = miss + 1 end
-    if l.kind ~= "manual" and r.ok ~= true then all = false end
+    if r.ok ~= nil then known = known + 1 end
     out[i] = r
   end
-  return { ok = all, miss = miss, lines = out }
+  local ok
+  if known > 0 then ok = miss == 0 end
+  return { ok = ok, miss = miss, known = known, lines = out }
 end
 
 local function pickInstance(pick)
@@ -467,6 +485,7 @@ function L:RunCheck(instance, pick)
   local day = self:_today()
   if self.lastCheck[instance] == day then return false, "already checked" end
   local r = self:SelfCheck(c)
+  if r.known == 0 then return false, "nothing to check" end
   local status = self.obs:Publish({ kind = "prepcheck", instance = instance, list = c.id, ok = r.ok,
     miss = r.miss, at = math.floor(self.now()) })
   if status ~= "accepted" then return false, status end

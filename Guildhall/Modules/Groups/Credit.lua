@@ -279,29 +279,48 @@ function Credit.new(ctx)
   return setmetatable({ ctx = ctx }, C)
 end
 
--- Set of chars that were leader or assistant in a verified kill of `instance` on server day dayKey
--- (named so by at least 2 of its reporters). The index is cached per observations.changes and tz;
--- a store without a numeric `changes` is re-read on every call. Returns a new table each call.
-function C:RaidLeaders(instance, dayKey)
+-- Index of verified kills by "<instance>|<server day>": leaders (leader or assistant) and members
+-- (confirmed names), each named by at least 2 of the kill's reporters. Cached per
+-- observations.changes and tz; a store without a numeric `changes` is re-read on every call.
+function C:_dayIndex()
   local ctx = self.ctx
   local obs = ctx.observations
   local tz = clockOf(ctx).tz
   local changes = obs and obs.changes
   local cache = self.cache
   if not (cache and type(changes) == "number" and cache.changes == changes and cache.tz == tz) then
-    local byDay = {}
+    local byDay, members = {}, {}
     for _, k in ipairs(Credit.Verified(obs and obs:List("kill") or {})) do
       local key = k.instance .. "|" .. ns.Scoring.DayKey(k.at, tz)
       local set = byDay[key] or {}
       byDay[key] = set
       for _, ch in ipairs(k.leaders) do set[ch] = true end
+      local mset = members[key] or {}
+      members[key] = mset
+      for _, ch in ipairs(k.confirmed) do mset[ch] = true end
     end
-    cache = { changes = changes, tz = tz, byDay = byDay }
+    cache = { changes = changes, tz = tz, byDay = byDay, members = members }
     self.cache = cache
   end
+  return cache
+end
+
+local function copySet(src)
   local out = {}
-  for ch in pairs(cache.byDay[tostring(instance) .. "|" .. tostring(dayKey)] or {}) do out[ch] = true end
+  for ch in pairs(src or {}) do out[ch] = true end
   return out
+end
+
+-- Set of chars that were leader or assistant in a verified kill of `instance` on server day dayKey
+-- (named so by at least 2 of its reporters). Returns a new table each call.
+function C:RaidLeaders(instance, dayKey)
+  return copySet(self:_dayIndex().byDay[tostring(instance) .. "|" .. tostring(dayKey)])
+end
+
+-- Set of chars credited as members (named by at least 2 reporters) of a verified kill of
+-- `instance` on server day dayKey. Returns a new table each call.
+function C:Attendees(instance, dayKey)
+  return copySet(self:_dayIndex().members[tostring(instance) .. "|" .. tostring(dayKey)])
 end
 
 -- Module-level RaidLeaders(instance, dayKey) answers from the ctx last attached (wiring calls
