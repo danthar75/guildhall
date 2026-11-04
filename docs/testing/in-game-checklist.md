@@ -22,7 +22,7 @@ Keep `/console scriptErrors 1` on (or BugSack installed) for every session.
 - [ ] [Era] `/gh help` prints the command list.
 - [ ] [Era] The window title reads "Guildhall" in the accent color. The border uses the theme color.
 - [ ] [Era] Tabs appear in order: Exchange, Log, Settings. Clicking each one switches content.
-- [ ] [Era] Before Task 14 lands, the Exchange tab shows "This tab could not be loaded yet" instead of breaking the window.
+- [ ] [Era] The Exchange tab shows the board (sub-tabs, search box, list on the left, details on the right), not "This tab could not be loaded yet".
 - [ ] [Era] Drag the window by its background. `/reload`. It reopens at the same spot.
 - [ ] [Era] ESC closes the window. The X button closes it.
 - [ ] [Era] The window cannot be dragged off screen.
@@ -58,6 +58,45 @@ Keep `/console scriptErrors 1` on (or BugSack installed) for every session.
 - [ ] [Era] Export opens the copy box titled "Guildhall log" with the text highlighted and the hint "Press Ctrl+C to copy".
 - [ ] [Era] Ctrl+C copies it. Pasting elsewhere gives the same lines. ESC closes the copy box.
 
+## Exchange board
+
+- [ ] [Era] Sub-tabs All, Buying (LF), Selling and Mine filter the list. The active one stays highlighted.
+- [ ] [Era] Each row shows an LF (blue) or WTS (orange) tag, the item link in its quality color, a dot (green online, grey offline, "?" unknown) and "Name · 6d left" (or `5h`, `<1h`).
+- [ ] [Era] Hovering a row whose item is a link shows the item tooltip. Hovering a typed-name row shows no tooltip and no error.
+- [ ] [Era] Clicking a row highlights it and fills the details pane. The selection survives a refresh (e.g. a guildmate posting).
+- [ ] [Era] With more than 10 listings the list scrolls with the mouse wheel and the scrollbar. Rows are reused (no slowdown after many refreshes).
+- [ ] [Era] The search box narrows the list by item name or poster, case-insensitive. Clearing it restores the list.
+- [ ] [Era] Details pane: type and item, poster with dot and "(online/offline/unknown)", "Also: <other linked characters>", "I will / will not provide materials", "I am open / not open to COD", the note, Posted and Expires dates (YYYY-MM-DD HH:MM).
+- [ ] [Era] A 200-character note wraps inside the details pane and does not run under the buttons.
+- [ ] [Era] A note containing `|` shows the character literally (no broken color codes).
+- [ ] [Era] Your own listing shows Copy for Discord, Edit, Renew, Remove, and no Whisper/Mail button.
+- [ ] [Era] Remove asks "Remove your listing for <item>?" first. No keeps the listing.
+- [ ] [Era] As an officer, another member's listing shows Remove (officer), which asks for confirmation first. As a non-officer, the button never appears.
+- [ ] [Era] Errors from board actions (e.g. Renew on a trial account) show as a red line under the board.
+- [ ] [Era] The board updates by itself when a guildmate posts, edits or removes while it is open.
+- [ ] [Era] An imported (Discord) listing shows "Posted on Discord by <poster>", no Whisper/Mail when there's no character, and a single "Remove from my board" button (never Edit).
+
+## Listing form
+
+- [ ] [Era] "+ New listing" opens the form titled "New listing" with a Post button. On the Selling sub-tab, Selling (WTS) is preselected.
+- [ ] [Era] The LF/WTS radio buttons are mutually exclusive.
+- [ ] [Era] Typing a name in the Name box (no item link) posts a listing with that plain name.
+- [ ] [Era] Typing in the Name box after loading a link clears the slot back to "No item chosen".
+- [ ] [Era] Quantity accepts digits only (max 4). 0 shows "Quantity must be a whole number from 1 to 9999."
+- [ ] [Era] The note stops at 200 characters and the counter shows n/200.
+- [ ] [Era] Posting with no item shows "Choose an item (shift-click or drag one in) or type its name." inside the form.
+- [ ] [Era] With an undecided character (new alt), Post shows "Choose which characters to link first." and opens the consent dialog.
+- [ ] [Era] Edit opens "Edit listing" pre-filled (type, item, quantity, toggles, note) with a Save button. Clearing quantity or note removes them.
+- [ ] [Era] ESC and Cancel close the form. Shift-clicking items while the form is closed does nothing to it.
+- [ ] [Era] Shift-clicking an item while the chat box is open puts it in both the form and the chat box (expected; the hook can't stop chat).
+
+## Exchange settings
+
+- [ ] [Era] Settings shows an "Exchange" section with six template boxes (whisper LF/WTS, mail subject, mail body LF/WTS, Copy for Discord) and a Reset button each.
+- [ ] [Era] Newlines show as `\n`. Edit the Discord template (e.g. add `\nping {char}`), press Enter. Copy for Discord uses it with a real line break.
+- [ ] [Era] Reset restores the default text and the default is used again.
+- [ ] [Era] ESC in a template box restores the saved text.
+
 ## Exchange (after Task 14)
 
 - [ ] [Era] Post a listing. It shows on the board.
@@ -84,6 +123,9 @@ Keep `/console scriptErrors 1` on (or BugSack installed) for every session.
 - [ ] [Era] Clear (X) empties the slot.
 - [ ] [Era] Another member's listing shows the right icon on their client.
 - [ ] [Forever] Shift-click a recipe in the profession list. The slot loads the crafted item, or falls back to a typed name with no error.
+- [ ] [Forever] Shift-click from bags uses the `ChatFrameUtil.InsertLink` hook (link is its first argument); `/dump ChatFrameUtil.InsertLink` exists. No taint warnings ("blocked action") after using the form and then entering combat.
+- [ ] [Forever] The slot icon comes from `C_Item.GetItemIconByID`. Drag-and-drop from bags works (`GetCursorInfo` returns "item", id, link).
+- [ ] [Forever] The Remove and Remove (officer) confirmation popups appear and work.
 
 ## Forever restrictions
 

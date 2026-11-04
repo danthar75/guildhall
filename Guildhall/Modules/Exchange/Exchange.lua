@@ -13,6 +13,11 @@ local function copy(t)
   return ns.Util.DeepCopy(t)
 end
 
+-- Tells the UI the listing sets changed (the event bus is absent in unit specs).
+local function changed()
+  if ns.Events then ns.Events:Fire("ExchangeChanged") end
+end
+
 function ns.Exchange.Create(ctx)
   local Listing, Format, MailDrafts = ns.Exchange.Listing, ns.Exchange.Format, ns.Exchange.MailDrafts
   local self = setmetatable({}, Ex)
@@ -24,8 +29,8 @@ function ns.Exchange.Create(ctx)
   db.imported = db.imported or {}
   db.drafts = db.drafts or {}
   self.db = db
-  self.listings = ns.ReplicatedSet.new(SET_NAME, db.listings, { now = ctx.now })
-  self.imported = ns.ReplicatedSet.new("exchange.imported", db.imported, { now = ctx.now })
+  self.listings = ns.ReplicatedSet.new(SET_NAME, db.listings, { now = ctx.now, onChange = changed })
+  self.imported = ns.ReplicatedSet.new("exchange.imported", db.imported, { now = ctx.now, onChange = changed })
   self.drafts = MailDrafts.new(db.drafts)
 
   local function logApplied(rec, status, old, sender, reason)
@@ -156,6 +161,7 @@ end
 
 function Ex:RemoveImported(id)
   self.db.imported[id] = nil
+  changed()
 end
 
 function Ex:List(filter)
@@ -247,5 +253,6 @@ if ns.RegisterModule then
       n.exchange:Start()
     end,
     tab = { title = "Exchange", build = function(parent) return ns.Exchange.Board.Build(parent) end },
+    settings = { title = "Exchange", build = function(parent) return ns.Exchange.Board.BuildSettings(parent) end },
   })
 end

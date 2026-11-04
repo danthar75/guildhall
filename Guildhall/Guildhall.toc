@@ -28,5 +28,7 @@ Modules/Exchange/Format.lua
 Modules/Exchange/MailDrafts.lua
 Modules/Exchange/Exchange.lua
 Modules/Exchange/UI/Form.lua
+Modules/Exchange/UI/Settings.lua
 Modules/Exchange/UI/Board.lua
+Modules/Exchange/UI/Details.lua
 Core/Boot.lua
