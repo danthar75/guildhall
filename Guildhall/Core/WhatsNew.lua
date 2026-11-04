@@ -8,7 +8,11 @@ local WhatsNew = {}
 ns.WhatsNew = WhatsNew
 
 WhatsNew.ENTRIES = {
-  { version = "0.1.0", lines = {} },
+  { version = "0.1.0", lines = {
+    "New Groups tab: post or join guild runs, now or scheduled.",
+    "Finished dungeons, raid bosses, prepared raiders and spec switches now count on the leaderboard.",
+    "Guild masters can choose which ranks can do what, and every change is recorded.",
+  } },
 }
 
 local function parts(v)

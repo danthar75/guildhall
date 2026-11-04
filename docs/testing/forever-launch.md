@@ -137,3 +137,15 @@ Needs Forever. Account A and account B are your two accounts, both in the guild 
 - [ ] **Settings sub-tabs and Groups settings.** Open Settings. Expected: sub-tabs General, Exchange, Leaderboard, Groups, Permissions and Change history, nothing clipped. Under Groups, untick "Remind me 15 min before runs I signed up for", /reload, and check it stays unticked; sign up for a run starting in 20 min: no reminder. Tick it again with "Play a sound with reminders" off: the reminder prints with no sound. Tick Tank and Healer under "My usual roles": "I'm ready now" and Sign up offer "My usual roles (T/H)", and the new post form starts on Tank. Unticking the last role is refused with "Keep at least one role."
 - [ ] **Change history sub-tab.** As the guild master, open Settings > Change history. Expected: each row reads "<date time>  <name> [<rank name>]  <change>" in server time, newest first, and the mouse wheel scrolls the list. On a member with no permission it reads "Only officers and the guild master can see the change history."
 - [ ] **Checklist editor saves.** As an officer, open Edit checklist on an MC post, add an item line, "All gear enchanted" and a text line, and save. Expected: the checklist button and columns show the new lines; a 13th line is refused with "A checklist holds at most 12 lines."
+- [ ] **`ENCOUNTER_END` for a 5-player boss.** Run `/etrace` (or `/gh debug`) filtered to ENCOUNTER_END and kill a dungeon boss. Expected: it fires with the encounter id as the first value.
+- [ ] **Final boss id matches `Instances`.** Kill the last boss of a dungeon. Expected: its id is the one listed for that dungeon in `Modules/Groups/Instances.lua`, and the run counts as finished.
+- [ ] **Dual spec.** Check whether dual spec exists on Forever (`/dump GetNumTalentGroups and GetNumTalentGroups()`). Expected: if it does, switching spec fires an event (note which, e.g. ACTIVE_TALENT_GROUP_CHANGED); if not, spec switching is simply not offered.
+- [ ] **Calendar outside an instance.** Stand in the open world. Expected: guild events and your own invite status are read and show on the Groups tab.
+- [ ] **`UnenchantedSlots`.** Equip a piece with no enchant, then an enchanted one. Expected: the Prepared check reports the unenchanted slots correctly, with no Lua error.
+
+### Needs a second client (your second account)
+
+- [ ] **Boss kill pairs.** Both clients kill a boss together (with a third and fourth player for the 3-of-5 majority on a dungeon). Expected: the kill pairs, the 3-of-5 majority applies, and credit shows on the leaderboard.
+- [ ] **Post and signup sync, reminder fires.** Post a run on A, sign up on B. Expected: both appear on the other client within a few seconds, and the 15-minute reminder fires on B.
+- [ ] **Prepared confirm and Ask to switch.** On A (raid leader), confirm B as Prepared and use Ask to switch. Expected: both work end to end, B sees the request and the result reaches A.
+- [ ] **Permission change is recorded.** The guild master (A) changes a Groups permission. Expected: the officer client (B) sees the history line under Settings > Change history.

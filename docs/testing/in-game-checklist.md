@@ -174,3 +174,14 @@ Era has no Forever bank or trade events, so these checks use `/gh lbdemo` fake d
 - [ ] [Era] Join a different guild without reloading. One chat line asks you to `/reload` to switch Guildhall to the new guild. Nothing from the old guild's board is sent to the new guild. After `/reload` the board shows the new guild's listings only.
 - [ ] [Forever] Inside an instance, a guild name that reads as empty (secret) does not trigger the guild-change message.
 - [ ] [Era] With a large board (hundreds of listings, e.g. seeded on a test guild), a client that logs in catches up fully; the log shows no "too large" entries.
+
+## Groups
+
+- [ ] [Era] The Groups tab opens with no Lua errors. "+ New post" offers dungeons and raids, Now or Scheduled (server time), and the roles you still need.
+- [ ] [Era] Post a run, then sign up from a second client. The post and signup reach the other client, and "I'm ready now" lists you as ready.
+- [ ] [Era] Sign up for a run starting in 20 minutes. A reminder prints 15 minutes before it; the sound plays only when "Play a sound with reminders" is on.
+- [ ] [Era] Open the calendar on another month, then `/reload`. Guild events for the next 14 days are still read, and each maps to its raid.
+- [ ] [Era] Kill a dungeon boss and finish the dungeon. The finished run and raid kills show on the Leaderboard once enough guildmates saw them.
+- [ ] [Era] Raid roster: Prepared checkbox and Ask to switch work. Dual spec may not exist on Era; if it doesn't, spec switching is not offered and nothing errors.
+- [ ] [Era] Settings > Groups and Permissions: the guild master sets which ranks can do what, and Change history shows each change in server time.
+- [ ] [Era] Edit checklist on a raid post saves, and a 13th line is refused.

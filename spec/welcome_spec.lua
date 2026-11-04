@@ -21,10 +21,10 @@ describe("WhatsNew", function()
     assert.equal(-1, C("0.1.0", "0.2.0"))
   end)
 
-  it("has an entry for the first release with no lines", function()
+  it("has an entry for the first release with the group finder lines", function()
     local first = ns.WhatsNew.ENTRIES[#ns.WhatsNew.ENTRIES]
     assert.equal("0.1.0", first.version)
-    assert.same({}, first.lines)
+    assert.equal(3, #first.lines)
   end)
 
   it("keeps entries newest first", function()
