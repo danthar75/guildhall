@@ -2,8 +2,9 @@ local ADDON, ns = ...
 
 -- Settings tab, "Change history" sub-tab: the shared change history kept in core.config (LbConfig
 -- history records), newest first. Each row: the time, the author with their rank name in brackets,
--- and a plain-language line (ASCII only). Officers, the guild master (rank 0) and anyone holding a
--- permission see it; other members see NO_ACCESS. The mouse wheel scrolls the list.
+-- and a plain-language line (ASCII, plus a middle dot before a bank reason). Officers, the guild
+-- master (rank 0) and anyone holding a permission see it; other members see NO_ACCESS. The mouse
+-- wheel scrolls the list.
 -- HistoryView.Describe(e) -> plain-language lines for one history entry.
 -- HistoryView.CanSee() -> bool.
 -- HistoryView.Lines(max) -> the rendered rows of the newest `max` entries, or nil when not visible.
@@ -114,8 +115,10 @@ local function describePerms(e, out)
   end
 end
 
--- "Bob, 50g deposit" for a bank contribution ref, from the ledger the client has now; nil once
--- the observation behind it is gone. The ref -> contribution map is rebuilt only when the
+local DOT = " \194\183 " -- " · " (U+00B7, within the allowed glyphs)
+
+-- "<date> Bob 50g deposit" for a bank contribution ref, from the ledger the client has now; nil
+-- once the observation behind it is gone. The ref -> contribution map is rebuilt only when the
 -- ledger's cached list changes.
 local refCache = { list = nil, map = nil }
 local function bankEntryText(ref)
@@ -146,7 +149,13 @@ local function bankEntryText(ref)
     end
     amount = amount .. " x" .. math.abs(c.value)
   end
-  return Util.Escape(Util.DisplayName(tostring(c.char))) .. ", " .. amount
+  local stamp = ""
+  if type(c.at) == "number" then
+    local config = l.config
+    local tz = config and config.Tz and config:Tz() or 0
+    stamp = (date or os.date)("!%Y-%m-%d", c.at + tz) .. " "
+  end
+  return stamp .. Util.Escape(Util.DisplayName(tostring(c.char))) .. " " .. amount
     .. (c.value < 0 and " withdrawal" or " deposit")
 end
 
@@ -156,61 +165,67 @@ local function itemText(id)
   return "item " .. tostring(id)
 end
 
--- Item counts of a checklist side by item id, plus the other lines as "enchants" / "manual: text".
+-- Item counts of a checklist side by item id, plus the other lines' display texts, as a set
+-- and in the checklist's order.
 local function checklistLines(side)
-  local items, others = {}, {}
+  local items, others, order = {}, {}, {}
   for _, l in ipairs(type(side) == "table" and type(side.lines) == "table" and side.lines or {}) do
+    local t
     if l.kind == "item" then items[l.item] = l.count
-    elseif l.kind == "enchants" then others["enchants"] = true
-    elseif l.kind == "manual" then others["note: " .. tostring(l.text)] = true end
+    elseif l.kind == "enchants" then t = "All gear enchanted"
+    elseif l.kind == "manual" then t = "\"" .. Util.Escape(tostring(l.text)) .. "\"" end
+    if t and not others[t] then others[t] = true; order[#order + 1] = t end
   end
-  return items, others
+  return items, others, order
 end
 
+-- "Checklist <name>: <item> 3 -> 5", "Checklist <name>: added <item> x2", "... removed <item>",
+-- "... added All gear enchanted", "... renamed to <new>", "... deleted", "... restored",
+-- "... made the default".
 local function describeChecklist(e, out)
   local b = type(e.before) == "table" and e.before or {}
   local a = type(e.after) == "table" and e.after or {}
-  local name = Util.Escape(tostring(a.name or b.name or e.key or "?"))
+  local raw = b.name or a.name or e.key or "?"
+  local head = "Checklist " .. Util.Escape(tostring(raw)) .. ": "
+  if a.name ~= nil and b.name ~= nil and a.name ~= b.name then
+    out[#out + 1] = head .. "renamed to " .. Util.Escape(tostring(a.name))
+  end
   if a.deleted == true and b.deleted ~= true then
-    out[#out + 1] = "Deleted checklist " .. name
+    out[#out + 1] = head .. "deleted"
   elseif b.deleted == true and a.deleted == false then
-    out[#out + 1] = "Restored checklist " .. name
+    out[#out + 1] = head .. "restored"
   end
   if a.default == true and b.default ~= true then
-    out[#out + 1] = "Made checklist " .. name .. " the default"
-  end
-  if a.name ~= nil and b.name ~= nil and a.name ~= b.name then
-    out[#out + 1] = "Renamed checklist " .. Util.Escape(b.name) .. " -> " .. Util.Escape(a.name)
+    out[#out + 1] = head .. "made the default"
   end
   if a.lines ~= nil or b.lines ~= nil then
-    local bi, bo = checklistLines(b)
-    local ai, ao = checklistLines(a)
+    local bi, bo, border = checklistLines(b)
+    local ai, ao, aorder = checklistLines(a)
     local ids, seen = {}, {}
     for _, map in ipairs({ bi, ai }) do
       for id in pairs(map) do if not seen[id] then seen[id] = true; ids[#ids + 1] = id end end
     end
     table.sort(ids)
     for _, id in ipairs(ids) do
-      if bi[id] ~= ai[id] then
-        out[#out + 1] = "Changed checklist " .. name .. ": " .. itemText(id) .. " "
-          .. (bi[id] and tostring(bi[id]) or "none") .. " -> " .. (ai[id] and tostring(ai[id]) or "none")
+      local was, now = bi[id], ai[id]
+      if was == nil and now ~= nil then
+        out[#out + 1] = head .. "added " .. itemText(id) .. " x" .. tostring(now)
+      elseif was ~= nil and now == nil then
+        out[#out + 1] = head .. "removed " .. itemText(id)
+      elseif was ~= now then
+        out[#out + 1] = head .. itemText(id) .. " " .. tostring(was) .. " -> " .. tostring(now)
       end
     end
-    local texts, tseen = {}, {}
-    for _, map in ipairs({ bo, ao }) do
-      for t in pairs(map) do if not tseen[t] then tseen[t] = true; texts[#texts + 1] = t end end
+    for _, t in ipairs(aorder) do
+      if not bo[t] then out[#out + 1] = head .. "added " .. t end
     end
-    table.sort(texts)
-    for _, t in ipairs(texts) do
-      if bo[t] ~= ao[t] then
-        out[#out + 1] = "Changed checklist " .. name .. ": " .. Util.Escape(t) .. " " .. (bo[t] and "present" or "none")
-          .. " -> " .. (ao[t] and "present" or "none")
-      end
+    for _, t in ipairs(border) do
+      if not ao[t] then out[#out + 1] = head .. "removed " .. t end
     end
   end
 end
 
--- Plain-language lines for one history entry (ASCII only). Nothing for a kind this version
+-- Plain-language lines for one history entry (ASCII plus the middle dot). Nothing for a kind this version
 -- doesn't know.
 function HistoryView.Describe(e)
   local out = {}
@@ -240,16 +255,16 @@ function HistoryView.Describe(e)
     describeChecklist(e, out)
   elseif e.what == "bank" then
     local a = type(e.after) == "table" and e.after or {}
-    local where = " (" .. (bankEntryText(e.key) or Util.Escape(tostring(e.key))) .. ")"
-    local reason = type(a.reason) == "string" and (": " .. Util.Escape(a.reason)) or ""
+    local head = "Bank entry " .. (bankEntryText(e.key) or Util.Escape(tostring(e.key))) .. ": "
+    local reason = type(a.reason) == "string" and a.reason ~= "" and (DOT .. Util.Escape(a.reason)) or ""
     if a.excluded == true then
-      out[#out + 1] = "Excluded a bank entry" .. where .. reason
+      out[#out + 1] = head .. "excluded" .. reason
     elseif a.excluded == false then
-      out[#out + 1] = "Counted a bank entry again" .. where
+      out[#out + 1] = head .. "counted again" .. reason
     elseif reason ~= "" then
-      out[#out + 1] = "Changed the reason for an excluded bank entry" .. where .. reason
+      out[#out + 1] = head .. "reason changed" .. reason
     else
-      out[#out + 1] = "Removed the reason for an excluded bank entry" .. where
+      out[#out + 1] = head .. "reason removed"
     end
   end
   return out

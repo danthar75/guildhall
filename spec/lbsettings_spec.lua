@@ -248,12 +248,12 @@ describe("Leaderboard.SettingsView", function()
       _G.GetItemInfo = function(id) if id == 13457 then return "Fire Protection Potion" end end
       local out = D({ what = "checklist", key = "mc", before = { name = "Molten Core", lines = { { kind = "item", item = 13457, count = 3 } } },
         after = { lines = { { kind = "item", item = 13457, count = 5 } } } })
-      assert.same({ "Changed checklist Molten Core: Fire Protection Potion 3 -> 5" }, out)
-      assert.same({ "Changed checklist Molten Core: item 999 none -> 2" },
+      assert.same({ "Checklist Molten Core: Fire Protection Potion 3 -> 5" }, out)
+      assert.same({ "Checklist Molten Core: added item 999 x2" },
         D({ what = "checklist", key = "mc", before = { name = "Molten Core" }, after = { lines = { { kind = "item", item = 999, count = 2 } } } }))
-      assert.same({ "Renamed checklist Old -> New" }, D({ what = "checklist", key = "mc", before = { name = "Old" }, after = { name = "New" } }))
-      assert.same({ "Deleted checklist Molten Core" }, D({ what = "checklist", key = "mc", before = { name = "Molten Core" }, after = { deleted = true } }))
-      assert.same({ "Made checklist Fire potions the default" },
+      assert.same({ "Checklist Old: renamed to New" }, D({ what = "checklist", key = "mc", before = { name = "Old" }, after = { name = "New" } }))
+      assert.same({ "Checklist Molten Core: deleted" }, D({ what = "checklist", key = "mc", before = { name = "Molten Core" }, after = { deleted = true } }))
+      assert.same({ "Checklist Fire potions: made the default" },
         D({ what = "checklist", key = "checklist:mc:fire", before = { name = "Fire potions", default = false },
           after = { name = "Fire potions", default = true } }))
       -- the shapes Checklist.lua writes always carry the name, so no line shows the id
@@ -277,25 +277,25 @@ describe("Leaderboard.SettingsView", function()
     it("describes bank changes in plain words, naming the entry when the ledger still has it", function()
       local D = ns.UI.HistoryView.Describe
       local contribs = {
-        { type = "bank.gold", char = "Bob-Realm", value = 500000, ref = "bank:o1" },
+        { type = "bank.gold", char = "Bob-Realm", value = 500000, ref = "bank:o1", at = 1700000000 },
         { type = "bank.items", char = "Cat-Realm", value = -3, item = "Linen", ref = "bank:o2" },
       }
       ns.leaderboard.ledger = { Contributions = function() return contribs end }
-      assert.same({ "Excluded a bank entry (Bob, 50g deposit): moving guild funds" },
+      assert.same({ "Bank entry 2023-11-14 Bob 50g deposit: excluded \194\183 moving guild funds" },
         D({ what = "bank", key = "bank:o1", before = { excluded = false }, after = { excluded = true, reason = "moving guild funds" } }))
-      assert.same({ "Counted a bank entry again (Cat, [Linen] x3 withdrawal)" },
+      assert.same({ "Bank entry Cat [Linen] x3 withdrawal: counted again" },
         D({ what = "bank", key = "bank:o2", before = { excluded = true }, after = { excluded = false } }))
-      assert.same({ "Excluded a bank entry (bank:o9)" },
+      assert.same({ "Bank entry bank:o9: excluded" },
         D({ what = "bank", key = "bank:o9", before = { excluded = false }, after = { excluded = true } }))
-      assert.same({ "Changed the reason for an excluded bank entry (Bob, 50g deposit): b" },
+      assert.same({ "Bank entry 2023-11-14 Bob 50g deposit: reason changed \194\183 b" },
         D({ what = "bank", key = "bank:o1", before = { reason = "a" }, after = { reason = "b" } }))
-      assert.same({ "Removed the reason for an excluded bank entry (Bob, 50g deposit)" },
+      assert.same({ "Bank entry 2023-11-14 Bob 50g deposit: reason removed" },
         D({ what = "bank", key = "bank:o1", before = { reason = "a" }, after = {} }))
       -- a reason is shown escaped
-      assert.same({ "Excluded a bank entry (bank:o9): a||b" },
+      assert.same({ "Bank entry bank:o9: excluded \194\183 a||b" },
         D({ what = "bank", key = "bank:o9", before = {}, after = { excluded = true, reason = "a|b" } }))
       ns.leaderboard.ledger = nil
-      assert.same({ "Counted a bank entry again (bank:o1)" },
+      assert.same({ "Bank entry bank:o1: counted again" },
         D({ what = "bank", key = "bank:o1", before = { excluded = true }, after = { excluded = false } }))
     end)
   end)

@@ -174,10 +174,10 @@ describe("Change history view", function()
   it("history lines render in plain language for each what", function()
     officer["Me-Realm"] = true
     _G.GetItemInfo = function(id) if id == 13457 then return "Fire Protection Potion" end end
-    ns.leaderboard.ledger = { Contributions = function()
-      return { { type = "bank.gold", char = "Bob-Realm", value = 500000, ref = "bank:o1" } }
-    end }
     local T = 1700000000
+    ns.leaderboard.ledger = { Contributions = function()
+      return { { type = "bank.gold", char = "Bob-Realm", value = 500000, ref = "bank:o1", at = T - 86400 } }
+    end }
     history = {
       { what = "month", key = "2026-10", by = "Boss-Realm", at = T + 3600,
         before = { savedBy = "A-Realm", savedAt = 1 }, after = { savedBy = "Boss-Realm", savedAt = 2 } },
@@ -191,6 +191,8 @@ describe("Change history view", function()
         after = { name = "Molten Core", lines = { { kind = "item", item = 13457, count = 5 } } } },
       { what = "bank", key = "bank:o1", by = "Dor-Realm", at = T + 10,
         before = { excluded = false }, after = { excluded = true, reason = "moving guild funds" } },
+      { what = "bank", key = "bank:o1", by = "Dor-Realm", at = T + 5,
+        before = { excluded = true }, after = { excluded = false } },
       { what = "weights", by = "Gone-Realm", at = T,
         before = { ["exchange.sales"] = 3 }, after = {} },
     }
@@ -201,12 +203,36 @@ describe("Change history view", function()
       "2023-11-14 22:13  Boss [Guild Master]  Permission Edit raid checklists: added Officer",
       "2023-11-14 22:13  Boss [Guild Master]  Permission Edit raid checklists: added Raid leader & assistants",
       "2023-11-14 22:13  Boss [Guild Master]  Permission Edit leaderboard weights: removed Veteran",
-      "2023-11-14 22:13  Dor [Officer]  Changed checklist Molten Core: Fire Protection Potion 3 -> 5",
-      "2023-11-14 22:13  Dor [Officer]  Excluded a bank entry (Bob, 50g deposit): moving guild funds",
+      "2023-11-14 22:13  Dor [Officer]  Checklist Molten Core: Fire Protection Potion 3 -> 5",
+      "2023-11-14 22:13  Dor [Officer]  Bank entry 2023-11-13 Bob 50g deposit: excluded \194\183 moving guild funds",
+      "2023-11-14 22:13  Dor [Officer]  Bank entry 2023-11-13 Bob 50g deposit: counted again",
       "2023-11-14 22:13  Gone  Leaderboard weight Sales: 3 -> removed (no permission now)",
     }, lines())
-    for _, l in ipairs(lines()) do assert.is_nil(l:find("[\128-\255]"), l) end
+    for _, l in ipairs(lines()) do assert.is_nil(l:gsub("\194\183", ""):find("[\128-\255]"), l) end
     assert.is_false(view.note.shown)
+    -- the other checklist changes, in the same style
+    local D = ns.UI.HistoryView.Describe
+    local function cl(before, after)
+      before.name = before.name or "Fire"; after.name = after.name or before.name
+      return D({ what = "checklist", key = "checklist:mc:fire", before = before, after = after })
+    end
+    assert.same({ "Checklist Fire: added Fire Protection Potion x2" },
+      cl({ lines = {} }, { lines = { { kind = "item", item = 13457, count = 2 } } }))
+    assert.same({ "Checklist Fire: removed item 999" },
+      cl({ lines = { { kind = "item", item = 999, count = 1 } } }, { lines = {} }))
+    assert.same({ "Checklist Fire: added All gear enchanted", "Checklist Fire: added \"Bring a soulstone\"" },
+      cl({ lines = {} }, { lines = { { kind = "enchants" }, { kind = "manual", text = "Bring a soulstone" } } }))
+    assert.same({ "Checklist Fire: renamed to Fire pots" }, cl({}, { name = "Fire pots" }))
+    assert.same({ "Checklist Fire: deleted" }, cl({ deleted = false }, { deleted = true }))
+    assert.same({ "Checklist Fire: restored" }, cl({ deleted = true }, { deleted = false }))
+    assert.same({ "Checklist Fire: made the default" }, cl({ default = false }, { default = true }))
+    -- a bank entry the ledger no longer has, and reason edits
+    assert.same({ "Bank entry bank:o9: excluded" },
+      D({ what = "bank", key = "bank:o9", before = { excluded = false }, after = { excluded = true } }))
+    assert.same({ "Bank entry 2023-11-13 Bob 50g deposit: reason changed \194\183 b" },
+      D({ what = "bank", key = "bank:o1", before = { reason = "a" }, after = { reason = "b" } }))
+    assert.same({ "Bank entry 2023-11-13 Bob 50g deposit: reason removed" },
+      D({ what = "bank", key = "bank:o1", before = { reason = "a" }, after = {} }))
     assert.same({}, errors)
   end)
 
