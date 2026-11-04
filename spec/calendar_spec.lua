@@ -209,6 +209,45 @@ describe("Groups Calendar", function()
       assert.is_nil(bare:GuildEvents(from(), from() + 14 * DAY))
     end)
 
+    it("reads events in the open world, where return 8 is the continent's map id (0 or 1)", function()
+      events = { ev(5, "MC night", 3) }
+      local elwynn = compatFor({ GetInstanceInfo = function() return "Elwynn Forest", "none", 0, "", 0, 0, false, 0 end })
+      local list = elwynn:GuildEvents(from(), from() + 14 * DAY)
+      assert.equal(1, #list)
+      assert.equal("MC night", list[1].title)
+      local kalimdor = compatFor({ GetInstanceInfo = function() return "Kalimdor", "none", 0, "", 0, 0, false, 1 end })
+      assert.equal(1, #kalimdor:GuildEvents(from(), from() + 14 * DAY))
+      -- a dungeon blocks it like a raid; a secret instance type reads nothing
+      local rfc = compatFor({ GetInstanceInfo = function() return "Ragefire Chasm", "party", 1, "", 5, 0, false, 389 end })
+      assert.is_nil(rfc:GuildEvents(from(), from() + 14 * DAY))
+      local secret = compatFor({ GetInstanceInfo = function() return "x", "none", 0, "", 0, 0, false, 0 end,
+        issecretvalue = function(v) return v == "none" end })
+      assert.is_nil(secret:GuildEvents(from(), from() + 14 * DAY))
+    end)
+
+    it("month offsets are relative to the month the calendar is showing", function()
+      -- the calendar UI is on December 2026: November's days are at offset -1
+      events = { ev(25, "MC night", 3, nil, -1), ev(1, "Dec raid", 3, nil, 0) }
+      events[2].info.startTime = { year = 2026, month = 12, monthDay = 1, hour = 20, minute = 0 }
+      local c = compatFor()
+      env.C_Calendar.GetMonthInfo = function(off)
+        assert.equal(0, off)
+        return { month = 12, year = 2026, numDays = 31, firstWeekday = 3 }
+      end
+      local list = c:GuildEvents(utc(2026, 11, 20, 12), utc(2026, 11, 20, 12) + 14 * DAY)
+      assert.equal(2, #list)
+      assert.equal("MC night", list[1].title)
+      assert.equal("Dec raid", list[2].title)
+      -- a secret or malformed month info falls back to the month of fromT
+      events = { ev(5, "MC night", 3) }
+      env.C_Calendar.GetMonthInfo = function() return { month = 12, year = 2026 } end
+      env.issecretvalue = function(v) return v == 12 end
+      assert.equal(1, #c:GuildEvents(from(), from() + 14 * DAY))
+      env.issecretvalue = nil
+      env.C_Calendar.GetMonthInfo = function() return nil end
+      assert.equal(1, #c:GuildEvents(from(), from() + 14 * DAY))
+    end)
+
     it("matches titles on whole words only", function()
       local c = compatFor()
       assert.equal("mc", c:_instanceFromTitle("MC Tuesday"))

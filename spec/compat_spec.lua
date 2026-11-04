@@ -9,6 +9,15 @@ describe("Compat", function()
     Compat = ns.Compat
   end)
 
+  -- A Compat whose namespace also has the Instances table (InstanceKey matches against it).
+  local function withInstances(env)
+    local ns = {}
+    loadAddonFile(ns, "Guildhall/Core/Util.lua")
+    loadAddonFile(ns, "Guildhall/Core/Compat.lua")
+    loadAddonFile(ns, "Guildhall/Modules/Groups/Instances.lua")
+    return ns.Compat.new(env)
+  end
+
   local function sendEnv(result, extra)
     local env = { sent = 0 }
     env.C_ChatInfo = { SendAddonMessage = function() env.sent = env.sent + 1; return result end }
@@ -333,10 +342,34 @@ describe("Compat", function()
     it("InstanceKey is GetInstanceInfo return 8, nil when missing or secret", function()
       local id = 409
       local e = { GetInstanceInfo = function() return "Molten Core", "raid", 9, "40 Player", 40, 0, false, id end }
-      assert.equal(409, Compat.new(e):InstanceKey())
+      assert.equal(409, withInstances(e):InstanceKey())
       e.issecretvalue = secretIf({ [409] = true })
-      assert.is_nil(Compat.new(e):InstanceKey())
-      assert.is_nil(Compat.new({}):InstanceKey())
+      assert.is_nil(withInstances(e):InstanceKey())
+      assert.is_nil(withInstances({}):InstanceKey())
+      -- a dungeon ("party") works the same way
+      assert.equal(389, withInstances({ GetInstanceInfo = function()
+        return "Ragefire Chasm", "party", 1, "Normal", 5, 0, false, 389 end }):InstanceKey())
+    end)
+
+    it("InstanceKey is nil in the open world: return 8 is the continent's map id there", function()
+      local elwynn = { GetInstanceInfo = function() return "Elwynn Forest", "none", 0, "", 0, 0, false, 0 end }
+      assert.is_nil(withInstances(elwynn):InstanceKey())
+      local kalimdor = { GetInstanceInfo = function() return "Kalimdor", "none", 0, "", 0, 0, false, 1 end }
+      assert.is_nil(withInstances(kalimdor):InstanceKey())
+    end)
+
+    it("InstanceKey is nil when the type is secret, not party/raid, or the map is not a listed instance", function()
+      local function env(typ, id, secret)
+        return { GetInstanceInfo = function() return "x", typ, 1, "", 40, 0, false, id end,
+          issecretvalue = secret and secretIf({ [secret] = true }) or nil }
+      end
+      assert.is_nil(withInstances(env("raid", 409, "raid")):InstanceKey())   -- secret type
+      assert.is_nil(withInstances(env("pvp", 489)):InstanceKey())            -- a battleground
+      assert.is_nil(withInstances(env("none", 409)):InstanceKey())           -- open world, even a listed id
+      assert.is_nil(withInstances(env("raid", 999999)):InstanceKey())        -- not in Instances
+      assert.is_nil(withInstances(env(nil, 409)):InstanceKey())              -- type missing
+      -- without the Instances table nothing can be matched
+      assert.is_nil(Compat.new(env("raid", 409)):InstanceKey())
     end)
 
     it("PlayerLevel reads UnitLevel, nil when missing, secret or out of range", function()

@@ -439,12 +439,46 @@ function Compat:GroupSnapshot()
   return { members = members, leader = leader, assists = assists, size = n }
 end
 
--- The current instance's id (GetInstanceInfo return 8, the Map ID), or nil when missing or secret.
+-- The current instance's id (GetInstanceInfo return 8, the Map ID), or nil when not inside a listed
+-- dungeon or raid. Return 8 is a map id everywhere, including the open world (0 Eastern Kingdoms,
+-- 1 Kalimdor), so it only counts when return 2 (instanceType) is a non-secret "party" or "raid" and
+-- the id is an Instances entry's instanceId. Missing or secret values give nil.
 function Compat:InstanceKey()
   local env = self.env
   if not env.GetInstanceInfo then return nil end
-  local id = self:Safe((select(8, env.GetInstanceInfo())))
-  return type(id) == "number" and id or nil
+  local _, rawType, _, _, _, _, _, rawId = env.GetInstanceInfo()
+  local itype, id = self:Safe(rawType), self:Safe(rawId)
+  if (itype ~= "party" and itype ~= "raid") or type(id) ~= "number" then return nil end
+  local I = ns.Instances
+  if not (I and I.LIST) then return nil end
+  for _, e in ipairs(I.LIST) do
+    if e.instanceId == id then return id end
+  end
+  return nil
+end
+
+-- True when GetInstanceInfo says the player is in any instance (a type other than "none"), or the
+-- type can't be read safely (secret). false in the open world or when the API is missing.
+function Compat:_inInstance()
+  local env = self.env
+  if not env.GetInstanceInfo then return false end
+  local rawType = select(2, env.GetInstanceInfo())
+  if rawType == nil then return false end
+  if self:_isSecret(rawType) then return true end
+  return rawType ~= "none"
+end
+
+-- The calendar's viewed month as { year, month }, from C_Calendar.GetMonthInfo(0); nil when missing,
+-- malformed or secret.
+function Compat:_viewedMonth()
+  local cal = self.env.C_Calendar
+  if not (cal and cal.GetMonthInfo) then return nil end
+  local info = cal.GetMonthInfo(0)
+  if type(info) ~= "table" or self:_isSecret(info) then return nil end
+  local y, m = info.year, info.month
+  if y == nil or m == nil or self:_isSecret(y) or self:_isSecret(m) then return nil end
+  if type(y) ~= "number" or type(m) ~= "number" or m < 1 or m > 12 then return nil end
+  return { year = y, month = m }
 end
 
 -- Guild calendar events from the day of fromT through the day of toT (epoch seconds, at most 15 days):
@@ -495,7 +529,7 @@ function Compat:GuildEvents(fromT, toT)
   if not (cal and cal.GetNumDayEvents and cal.GetDayEvent) or type(fromT) ~= "number" or type(toT) ~= "number" then
     return nil
   end
-  if self:InstanceKey() ~= nil or self:IsRestricted("Chat") then return nil end
+  if self:_inInstance() or self:IsRestricted("Chat") then return nil end
   local dateFn = env.date or os.date
   if not self.calOpened and cal.OpenCalendar then
     self.calOpened = true
@@ -506,7 +540,9 @@ function Compat:GuildEvents(fromT, toT)
   -- day boundary and may differ. An unknown offset means the times can't be trusted: read nothing.
   local offset = self:ServerOffset()
   if offset == nil then return nil end
-  local cur = dateFn("!*t", fromT + offset)
+  -- GetNumDayEvents/GetDayEvent month offsets are relative to the month the calendar is showing
+  -- (C_Calendar.GetMonthInfo(0)); unknown, it is taken to be the month of fromT.
+  local cur = self:_viewedMonth() or dateFn("!*t", fromT + offset)
   local statusMap = CAL_STATUS
   local enum = env.Enum and env.Enum.CalendarStatus
   if type(enum) == "table" then

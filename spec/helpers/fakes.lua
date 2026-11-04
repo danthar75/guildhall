@@ -34,6 +34,8 @@ function M.compat(overrides)
   local ns = {}
   loadAddonFile(ns, "Guildhall/Core/Util.lua")
   loadAddonFile(ns, "Guildhall/Core/Compat.lua")
+  -- the addon shares one namespace: Compat:InstanceKey matches map ids against ns.Instances
+  loadAddonFile(ns, "Guildhall/Modules/Groups/Instances.lua")
   local env = { sent = 0, GetServerTime = function() return 1000 end }
   for k, v in pairs(overrides or {}) do env[k] = v end
   return ns.Compat.new(env), env

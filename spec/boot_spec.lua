@@ -191,6 +191,26 @@ describe("Boot", function()
     assert.same({ "start663", "end663:1", "boss663", "ready", "spec", "spec" }, got)
   end)
 
+  it("leaving an instance for the open world re-reads the calendar; open-world zoning doesn't", function()
+    local g, refreshed = ns.groups, 0
+    g.calendar.Refresh = function() refreshed = refreshed + 1 end
+    g.checklist.OnZone = function() end
+    local where = { "Elwynn Forest", "none", 0, "", 0, 0, false, 0 }
+    env.GetInstanceInfo = function() return unpack(where) end
+    fire("PLAYER_ENTERING_WORLD")
+    where = { "Kalimdor", "none", 0, "", 0, 0, false, 1 }
+    fire("PLAYER_ENTERING_WORLD")
+    assert.equal(0, refreshed) -- continent to continent: never "in an instance"
+    where = { "Molten Core", "raid", 9, "40 Player", 40, 0, false, 409 }
+    fire("PLAYER_ENTERING_WORLD")
+    assert.equal(409, g.instance)
+    assert.equal(0, refreshed)
+    where = { "Burning Steppes", "none", 0, "", 0, 0, false, 0 }
+    fire("PLAYER_ENTERING_WORLD")
+    assert.is_nil(g.instance)
+    assert.equal(1, refreshed)
+  end)
+
   describe("the checklist pick", function()
     local checked
     local function setup()
