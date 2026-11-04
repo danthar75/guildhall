@@ -103,4 +103,37 @@ function Compat:GuildKey()
   return ns.Util.FullName(name, realm, home)
 end
 
+function Compat:GetNumGuildMembers()
+  local f = self.env.GetNumGuildMembers
+  if not f then return 0 end
+  local n = self:Safe((f()))
+  return type(n) == "number" and n or 0
+end
+
+-- Returns only what Roster needs, each already passed through Safe (nil when secret):
+-- name, rankIndex, isOnline. Returns nothing when the API is missing.
+function Compat:GetGuildRosterInfo(i)
+  local f = self.env.GetGuildRosterInfo
+  if not f then return nil end
+  local name, _, rankIndex, _, _, _, _, _, isOnline = f(i)
+  return self:Safe(name), self:Safe(rankIndex), self:Safe(isOnline)
+end
+
+-- Asks the server to refresh the roster (results arrive via GUILD_ROSTER_UPDATE).
+function Compat:RequestRoster()
+  local env = self.env
+  if env.C_GuildInfo and env.C_GuildInfo.GuildRoster then
+    env.C_GuildInfo.GuildRoster()
+  elseif env.GuildRoster then
+    env.GuildRoster()
+  end
+end
+
+-- Guild Information text. Restricted API: nil while Map restriction is active or API missing.
+function Compat:GetGuildInfoText()
+  local gi = self.env.C_GuildInfo
+  if not (gi and gi.GetInfoText) or self:IsRestricted("Map") then return nil end
+  return self:Safe((gi.GetInfoText()))
+end
+
 ns.compat = Compat.new(_G)
