@@ -32,14 +32,18 @@ function Listing.Validate(d)
   if d.offRemove ~= nil and type(d.offRemove) ~= "boolean" then return false, "bad offRemove" end
   if d.src ~= nil and d.src ~= "discord" then return false, "bad src" end
   if d.poster ~= nil and (type(d.poster) ~= "string" or #d.poster > 64) then return false, "bad poster" end
+  if d.created ~= nil and not isInt(d.created) then return false, "bad created" end
   return true
 end
 
+-- d.created keeps the original post time; t moves on every edit and renew.
 function Listing.New(d, profileId, char, now, idCounter)
+  local payload = copy(d)
+  payload.created = now
   return {
     id = profileId .. ":" .. idCounter,
     v = 1, t = now, by = profileId, char = char,
-    exp = now + WEEK, del = false, d = copy(d),
+    exp = now + WEEK, del = false, d = payload,
   }
 end
 

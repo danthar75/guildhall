@@ -38,7 +38,12 @@ local function detailBody(rec, now)
     lines[#lines + 1] = "|cffc8b98aNote:|r " .. escape(d.note)
   end
   lines[#lines + 1] = ""
-  lines[#lines + 1] = "|cff8a7d62Posted " .. when(rec.t) .. "|r"
+  -- Listings from before d.created existed fall back to t.
+  local posted = type(d.created) == "number" and d.created or rec.t
+  lines[#lines + 1] = "|cff8a7d62Posted " .. when(posted) .. "|r"
+  if type(rec.t) == "number" and type(posted) == "number" and rec.t - posted >= 60 then
+    lines[#lines + 1] = "|cff8a7d62Updated " .. when(rec.t) .. "|r"
+  end
   lines[#lines + 1] = "|cff8a7d62Expires " .. when(rec.exp) .. " (" .. Board.TimeLeft(rec.exp, now) .. " left)|r"
   return table.concat(lines, "\n")
 end
