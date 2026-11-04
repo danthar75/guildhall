@@ -110,6 +110,26 @@ describe("Groups", function()
     assert.is_true(b.g.signups:Get(post.id .. "|" .. b.profile:Id()).d.withdrawn)
   end)
 
+  it("signup and withdraw publish the player's own signup observation with the credit window", function()
+    local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+    local sent = {}
+    b.ctx.observations = { Publish = function(_, d) sent[#sent + 1] = d; return "accepted" end }
+    local now_ = mustPost(a)
+    local sched = mustPost(a, { start = 200000 })
+    assert.is_true((b.g:SignUp(now_.id, { d = true })))
+    assert.same({ kind = "signup", post = now_.id, instance = "lbrs", from = 100000, to = 107200,
+      status = "signedup", at = 100000 }, sent[1])
+    assert.is_true((b.g:SignUp(sched.id, { d = true })))
+    assert.equal(200000 - 1800, sent[2].from)
+    assert.equal(200000 + 21600, sent[2].to)
+    assert.is_true((b.g:Withdraw(now_.id)))
+    assert.equal("withdrawn", sent[3].status)
+    assert.equal(now_.id, sent[3].post)
+    assert.equal(3, #sent)
+    assert.is_false((a.g:SignUp("nope", { d = true })))
+    assert.equal(3, #sent)
+  end)
+
   it("signups expire with their post", function()
     local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
     local post = mustPost(a)

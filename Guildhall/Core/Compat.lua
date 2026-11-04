@@ -447,6 +447,122 @@ function Compat:InstanceKey()
   return type(id) == "number" and id or nil
 end
 
+-- Guild calendar events from the day of fromT through the day of toT (epoch seconds, at most 15 days):
+-- { { title, start (epoch), instance = keyOrNil, myStatus = "accepted"|"signedup"|"tentative"|"declined"|nil } },
+-- ordered by (start, title). Guild events only. nil inside an instance, while chat is restricted, when the
+-- calendar API is missing or when ANY value read is secret (a partial list is never returned).
+-- Calendar times are server wall-clock; they are shifted by ServerOffset to epoch. The calendar is
+-- asked to load (OpenCalendar, a read request) once per session.
+local CAL_STATUS = { [3] = "accepted", [6] = "signedup", [8] = "tentative", [2] = "declined", [4] = "declined" }
+
+local function civilDays(y, m, d)
+  y = m <= 2 and y - 1 or y
+  local era = math.floor(y / 400)
+  local yoe = y - era * 400
+  local doy = math.floor((153 * (m + (m > 2 and -3 or 9)) + 2) / 5) + d - 1
+  local doe = yoe * 365 + math.floor(yoe / 4) - math.floor(yoe / 100) + doy
+  return era * 146097 + doe - 719468
+end
+
+local function wordAt(lower, needle)
+  local from = 1
+  while true do
+    local a, b = lower:find(needle, from, true)
+    if not a then return false end
+    local before, after = lower:sub(a - 1, a - 1), lower:sub(b + 1, b + 1)
+    if not before:match("%w") and not after:match("%w") then return true end
+    from = a + 1
+  end
+end
+
+-- The Instances key a calendar title names (longest whole-word match of a name or short), or nil.
+function Compat:_instanceFromTitle(title)
+  local I = ns.Instances
+  if not (I and I.LIST) or type(title) ~= "string" then return nil end
+  local lower, best, bestLen = title:lower(), nil, 0
+  for _, e in ipairs(I.LIST) do
+    for _, w in ipairs({ e.name, e.short }) do
+      local n = w:lower()
+      if #n > bestLen and wordAt(lower, n) then best, bestLen = e.key, #n end
+    end
+  end
+  return best
+end
+
+function Compat:GuildEvents(fromT, toT)
+  local env = self.env
+  local cal = env.C_Calendar
+  if not (cal and cal.GetNumDayEvents and cal.GetDayEvent) or type(fromT) ~= "number" or type(toT) ~= "number" then
+    return nil
+  end
+  if self:InstanceKey() ~= nil or self:IsRestricted("Chat") then return nil end
+  local dateFn = env.date or os.date
+  if not self.calOpened and cal.OpenCalendar then
+    self.calOpened = true
+    cal.OpenCalendar()
+  end
+  local offset = self:ServerOffset() or 0
+  local cur = dateFn("!*t", fromT + offset)
+  local statusMap = CAL_STATUS
+  local enum = env.Enum and env.Enum.CalendarStatus
+  if type(enum) == "table" then
+    statusMap = {}
+    for name, key in pairs({ Confirmed = "accepted", Signedup = "signedup", Tentative = "tentative",
+        Declined = "declined", Out = "declined" }) do
+      if type(enum[name]) == "number" then statusMap[enum[name]] = key end
+    end
+  end
+  local out, seen = {}, {}
+  local days = math.min(15, math.floor((toT - fromT) / 86400) + 1)
+  for i = 0, days - 1 do
+    local d = dateFn("!*t", fromT + offset + i * 86400)
+    local monthOffset = (d.year - cur.year) * 12 + d.month - cur.month
+    local n = cal.GetNumDayEvents(monthOffset, d.day)
+    if self:_isSecret(n) then return nil end
+    for idx = 1, type(n) == "number" and n or 0 do
+      local info = cal.GetDayEvent(monthOffset, d.day, idx)
+      if info ~= nil then
+        if type(info) ~= "table" or self:_isSecret(info) then return nil end
+        local title, ctype, st, status, iid = info.title, info.calendarType, info.startTime, info.inviteStatus,
+          info.instanceID
+        for _, v in ipairs({ title or false, ctype or false, status or false, iid or false }) do
+          if v ~= false and self:_isSecret(v) then return nil end
+        end
+        if st ~= nil and (type(st) ~= "table" or self:_isSecret(st)) then return nil end
+        local t
+        if type(st) == "table" then
+          for _, k in ipairs({ "year", "month", "monthDay", "hour", "minute" }) do
+            if st[k] ~= nil and self:_isSecret(st[k]) then return nil end
+          end
+          if type(st.year) == "number" and type(st.month) == "number" and type(st.monthDay) == "number" then
+            t = civilDays(st.year, st.month, st.monthDay) * 86400 + (tonumber(st.hour) or 0) * 3600
+              + (tonumber(st.minute) or 0) * 60 - offset
+          end
+        end
+        if ctype == "GUILD_EVENT" and type(title) == "string" and t then
+          local key = title .. "|" .. t
+          if not seen[key] then
+            seen[key] = true
+            local inst
+            if type(iid) == "number" and ns.Instances and ns.Instances.LIST then
+              for _, e in ipairs(ns.Instances.LIST) do
+                if e.kind == "raid" and e.instanceId == iid then inst = e.key; break end
+              end
+            end
+            out[#out + 1] = { title = title, start = t, instance = inst or self:_instanceFromTitle(title),
+              myStatus = statusMap[status] }
+          end
+        end
+      end
+    end
+  end
+  table.sort(out, function(a, b)
+    if a.start ~= b.start then return a.start < b.start end
+    return a.title < b.title
+  end)
+  return out
+end
+
 -- The active talent group (1 or 2), or nil when there is no dual spec (API missing, one group) or
 -- the value is secret.
 function Compat:ActiveSpecGroup()

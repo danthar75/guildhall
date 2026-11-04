@@ -59,4 +59,5 @@ Modules/Groups/KillWatch.lua
 Modules/Groups/Credit.lua
 Modules/Groups/Checklist.lua
 Modules/Groups/Flex.lua
+Modules/Groups/Calendar.lua
 Core/Boot.lua

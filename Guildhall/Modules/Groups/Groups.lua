@@ -212,6 +212,23 @@ end
 
 -- Signups
 
+-- The credit window of a post: Now posts created..exp, scheduled posts start-1800..start+21600.
+local function creditWindow(post)
+  local d = post.d
+  if d.start ~= nil then return d.start - 1800, d.start + 21600 end
+  return d.created or post.t, post.exp
+end
+
+-- Publishes the player's own `signup` observation (the Groups records are purged with the post, so
+-- credit is derived from observations). Never fails the signup. Needs ctx.observations.
+function G:_observe(post, postId, status)
+  local obs = self.ctx.observations
+  if not (obs and obs.Publish) then return end
+  local from, to = creditWindow(post)
+  obs:Publish({ kind = "signup", post = postId, instance = post.d.instance, from = math.floor(from),
+    to = math.floor(to), status = status, at = math.floor(self.now()) })
+end
+
 function G:SignUp(postId, roles)
   local err = self:_gate()
   if err then return false, err end
@@ -222,7 +239,9 @@ function G:SignUp(postId, roles)
   local me = self.profile:Id()
   local old = self.signups:Get(ns.Groups.Post.SignupId(postId, me))
   local rec = ns.Groups.Post.NewSignup(postId, roles, me, self.playerChar, self.now(), post.exp, old)
-  return publish(self.signupSync, rec, self.checkSignup)
+  local pok, prec = publish(self.signupSync, rec, self.checkSignup)
+  if pok then self:_observe(post, postId, "signedup") end
+  return pok, prec
 end
 
 function G:Withdraw(postId)
@@ -234,7 +253,10 @@ function G:Withdraw(postId)
   local new = copy(old)
   new.v, new.t, new.char = old.v + 1, self.now(), self.playerChar
   new.d.withdrawn = true
-  return publish(self.signupSync, new, self.checkSignup)
+  local pok, prec = publish(self.signupSync, new, self.checkSignup)
+  local post = self.posts:Get(postId)
+  if pok and post and type(post.d) == "table" then self:_observe(post, postId, "withdrawn") end
+  return pok, prec
 end
 
 -- Live, not withdrawn signups for a post, oldest first.
