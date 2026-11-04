@@ -1,8 +1,9 @@
 describe("Groups KillWatch", function()
   local pubStatus, ns, published, opts, timers, now, snap, secret, instKey, w, store, jitter, owners
 
-  local function build()
+  local function build(db)
     return ns.Groups.KillWatch.new({
+      db = db,
       compat = {
         Safe = function(_, v) if v == secret then return nil end return v end,
         GroupSnapshot = function() return snap end,
@@ -355,6 +356,78 @@ describe("Groups KillWatch", function()
       bare:OnEncounterEnd(663, "", 9, 40, 1)
       flush()
       assert.equals(1, #published)
+    end)
+  end)
+
+  describe("pending reports survive a logout or reload", function()
+    it("a logout during the wait publishes the report at once", function()
+      local db = {}
+      w = build(db)
+      w:OnEncounterEnd(663, "", 9, 40, 1)
+      assert.equals(0, #published)
+      assert.is_table(db.killPending[663])
+      now = 10005
+      w:Flush()
+      assert.equals(1, #published)
+      assert.equals(10000, published[1].at)
+      assert.is_nil(db.killPending[663])
+      -- the jitter timer firing later doesn't publish it again
+      flush()
+      assert.equals(1, #published)
+    end)
+
+    it("a reload restores the pending report and publishes it on the next start", function()
+      local db = {}
+      w = build(db)
+      instKey = 389
+      w:OnZone()
+      w:OnEncounterEnd(2732, "", 1, 5, 1) -- a non-final dungeon boss: keeps its short expiry
+      -- /reload: the timer is gone, the db stays
+      timers = {}
+      now = 10040
+      local again = build(db)
+      assert.equals(1, again:Restore())
+      assert.equals(1, #published)
+      assert.equals(2732, published[1].encounter)
+      assert.equals(10000, published[1].at)
+      assert.same({ exp = 10040 + 2 * 86400 }, opts[1])
+      assert.is_nil(db.killPending[2732])
+      -- and it is deduped afterwards
+      again:OnEncounterEnd(2732, "", 1, 5, 1)
+      flush()
+      assert.equals(1, #published)
+    end)
+
+    it("a pending report older than 600 s is dropped on start; a covered one isn't published", function()
+      local db = {}
+      w = build(db)
+      w:OnEncounterEnd(663, "", 9, 40, 1)
+      now = 10600
+      local again = build(db)
+      assert.equals(0, again:Restore())
+      assert.equals(0, #published)
+      assert.same({}, db.killPending)
+      -- covered by 3 other reports by the time of the restart
+      now = 20000
+      snap = { members = { "A-R", "B-R" }, leader = "A-R", assists = {}, size = 2 }
+      w = build(db)
+      w:OnEncounterEnd(664, "", 9, 40, 1)
+      for i, by in ipairs({ "pB", "pC", "pD" }) do
+        store[#store + 1] = { id = "c" .. i, by = by, char = ({ "B-R", "C-R", "D-R" })[i],
+          d = { kind = "kill", instance = "mc", encounter = 664, members = { "A-R", "B-R" }, leader = "A-R",
+            at = 20000 + i } }
+      end
+      now = 20010
+      assert.equals(0, build(db):Restore())
+      assert.equals(0, #published)
+      assert.same({}, db.killPending)
+    end)
+
+    it("malformed saved entries are dropped", function()
+      local db = { killPending = { [663] = "junk", bad = { t = 10000 }, [664] = { t = 10000, d = { kind = "kill" } } } }
+      assert.equals(0, build(db):Restore())
+      assert.equals(0, #published)
+      assert.same({}, db.killPending)
     end)
   end)
 

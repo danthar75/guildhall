@@ -175,13 +175,14 @@ describe("Boot", function()
     assert.equal(ns.services.profile, kctx.profile)
     assert.equal(ns.services.playerChar, kctx.playerChar)
     assert.equal(ns.groups.after, kctx.after)
+    assert.is_table(kctx.db.killPending) -- pending reports persist in the Groups module db
     assert.equal(ns.services.profile, ns.groups.credit.ctx.profile)
   end)
 
   it("registers the Groups events, both spec events included", function()
     for _, e in ipairs({ "ENCOUNTER_START", "ENCOUNTER_END", "BOSS_KILL", "PLAYER_ENTERING_WORLD", "READY_CHECK",
       "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_TALENT_UPDATE", "CALENDAR_UPDATE_EVENT_LIST",
-      "GROUP_ROSTER_UPDATE" }) do
+      "GROUP_ROSTER_UPDATE", "PLAYER_LOGOUT" }) do
       assert.is_true(registered[e], e)
     end
   end)
@@ -199,7 +200,9 @@ describe("Boot", function()
     fire("READY_CHECK", "Leader", 30)
     fire("ACTIVE_TALENT_GROUP_CHANGED", 2, 1)
     fire("PLAYER_TALENT_UPDATE")
-    assert.same({ "start663", "end663:1", "boss663", "ready", "spec", "spec" }, got)
+    g.kills.Flush = function() got[#got + 1] = "flush" end
+    fire("PLAYER_LOGOUT")
+    assert.same({ "start663", "end663:1", "boss663", "ready", "spec", "spec", "flush" }, got)
   end)
 
   it("leaving an instance for the open world re-reads the calendar; open-world zoning doesn't", function()

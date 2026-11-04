@@ -3,8 +3,12 @@ local ADDON, ns = ...
 -- KillWatch: publishes one "kill" observation per boss kill from ENCOUNTER_END (success == 1), with
 -- BOSS_KILL as a fallback when no ENCOUNTER_END follows within 5 s. Wiring registers the events and
 -- calls OnEncounterStart / OnEncounterEnd / OnBossKill / OnZone / OnSpecChanged.
--- ctx: { compat, observations, now, after, random?, profile?, playerChar? }. A secret value means
+-- ctx: { compat, observations, now, after, random?, profile?, playerChar?, db? }. A secret value means
 -- nothing is published.
+-- Pending reports (Ruling F9): a report waiting out its random delay is also kept in
+-- db.killPending[encounter] = { t = kill time, d, final, short }, so a logout or reload doesn't lose it.
+-- Wiring calls Flush() on PLAYER_LOGOUT (publishes them at once) and Restore() at login (publishes
+-- those under 600 s old that aren't covered yet, drops the rest).
 --
 -- Volume: every client of a 40-man raid would otherwise publish every boss. So
 --   * a non-final dungeon boss kill expires after 2 days (Observations per-record exp): nothing
@@ -72,7 +76,14 @@ local W = {}
 W.__index = W
 
 function KillWatch.new(ctx)
-  return setmetatable({ ctx = ctx, started = {}, ended = {}, done = {}, pending = {}, mapId = nil }, W)
+  local self = setmetatable({ ctx = ctx, started = {}, ended = {}, done = {}, pending = {}, mapId = nil }, W)
+  if type(ctx.db) == "table" then
+    ctx.db.killPending = type(ctx.db.killPending) == "table" and ctx.db.killPending or {}
+    self.saved = ctx.db.killPending
+  else
+    self.saved = {}
+  end
+  return self
 end
 
 -- Records the first sighting of this instance this session.
@@ -173,22 +184,66 @@ function W:_publish(id, entry, isFinal)
     local dur = t0 and math.floor(now - t0)
     if dur and dur >= 1 and dur <= MAX_DUR then d.dur = dur end
   end
-  self.pending[id] = true
+  local entry_ = { t = now, d = d, final = isFinal == true, short = entry.kind == "dungeon" and not isFinal }
+  self.saved[id] = entry_
+  local token = {}
+  self.pending[id] = token
   ctx.after(self:_jitter(), function()
-    self.pending[id] = nil
-    local status
-    if self:_covered(d) then
-      status = "accepted"
-    else
-      local opts
-      if entry.kind == "dungeon" and not isFinal then opts = { exp = math.floor(ctx.now()) + SHORT_EXP } end
-      status = ctx.observations:Publish(d, opts)
-    end
-    if status == "accepted" then
-      self.done[id] = now
-      if isFinal then self.started[entry.instanceId] = nil end
-    end
+    if self.pending[id] ~= token then return end -- flushed or restored meanwhile
+    self:_finish(id, entry_)
   end)
+end
+
+-- Publishes one pending report unless it is covered, and clears it.
+function W:_finish(id, p)
+  local ctx = self.ctx
+  self.pending[id], self.saved[id] = nil, nil
+  local status
+  if self:_covered(p.d) then
+    status = "accepted"
+  else
+    local opts
+    if p.short then opts = { exp = math.floor(ctx.now()) + SHORT_EXP } end
+    status = ctx.observations:Publish(p.d, opts)
+  end
+  if status == "accepted" then
+    self.done[id] = p.t
+    local entry = ns.Instances.ByEncounter(id)
+    if p.final and entry then self.started[entry.instanceId] = nil end
+  end
+  return status
+end
+
+-- PLAYER_LOGOUT: publishes every pending report now. Returns how many were sent.
+function W:Flush()
+  local n = 0
+  local ids = {}
+  for id in pairs(self.saved) do ids[#ids + 1] = id end
+  for _, id in ipairs(ids) do
+    local p = self.saved[id]
+    if type(p) == "table" and type(p.d) == "table" and self:_finish(id, p) == "accepted" then n = n + 1 end
+  end
+  return n
+end
+
+-- At login: reports a previous session left pending are published when under 600 s old and not
+-- covered; older or malformed ones are dropped. Returns how many were published.
+function W:Restore()
+  local now, n, ids = self.ctx.now(), 0, {}
+  for id in pairs(self.saved) do ids[#ids + 1] = id end
+  for _, id in ipairs(ids) do
+    local p = self.saved[id]
+    local ok = type(id) == "number" and type(p) == "table" and type(p.t) == "number" and type(p.d) == "table"
+      and p.d.kind == "kill" and p.d.encounter == id and KillWatch.Validate(p.d) and now - p.t >= 0
+      and now - p.t < DEDUPE
+    if ok then
+      local covered = self:_covered(p.d)
+      if self:_finish(id, p) == "accepted" and not covered then n = n + 1 end
+    else
+      self.saved[id] = nil
+    end
+  end
+  return n
 end
 
 function W:OnEncounterEnd(encounterId, name, difficulty, groupSize, success)

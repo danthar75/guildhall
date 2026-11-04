@@ -154,7 +154,7 @@ local function build(n, s)
     observations = observations, onChange = function() changed(g) end,
   })
   local kills = G.KillWatch.new({ compat = s.compat, observations = observations, now = s.now, after = g.after,
-    random = s.random, profile = s.profile, playerChar = s.playerChar })
+    random = s.random, profile = s.profile, playerChar = s.playerChar, db = db })
   local creditCtx = { observations = observations, config = config, compat = s.compat, now = s.now,
     profile = s.profile }
   local credit = G.Credit.new(creditCtx)
@@ -176,6 +176,7 @@ local function build(n, s)
 
   svc:Start()
   kills:OnZone()
+  kills:Restore() -- reports a logout or reload left waiting
   calendar:Refresh()
   reminders:Start()
 end
@@ -239,6 +240,11 @@ events.PLAYER_TALENT_UPDATE = specChanged
 events.CALENDAR_UPDATE_EVENT_LIST = function(n)
   local g = n.groups
   if g then coalesce(g, "calendar", CAL_DELAY, function() g.calendar:Refresh() end) end
+end
+
+-- A kill report still in its random wait is published now rather than lost (Ruling F9).
+events.PLAYER_LOGOUT = function(n)
+  if n.groups then n.groups.kills:Flush() end
 end
 
 events.GROUP_ROSTER_UPDATE = function(n)
