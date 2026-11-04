@@ -54,4 +54,6 @@ Core/Leaderboard/Demo.lua
 Core/Leaderboard/Module.lua
 Modules/Groups/Perms.lua
 Modules/Groups/Instances.lua
+Modules/Groups/Post.lua
+Modules/Groups/Groups.lua
 Core/Boot.lua
