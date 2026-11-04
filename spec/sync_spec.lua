@@ -218,4 +218,96 @@ describe("Sync", function()
     wait(3)
     assert.is_not_nil(c.set:Get("a"))
   end)
+  -- I1: paged digest, purge before digest, rate-limited Start.
+  local function countKind(n, kind)
+    local c = { n = 0, payloads = {} }
+    local orig = n.comm.Send
+    n.comm.Send = function(self, m, k, p)
+      if k == kind then c.n = c.n + 1; c.payloads[#c.payloads + 1] = p end
+      return orig(self, m, k, p)
+    end
+    return c
+  end
+
+  it("syncs 500 records between two members (digest is paged under the chunk cap)", function()
+    bus = fakes.bus(clock, timers, { burst = 1e6 })
+    local a, c = node("Alice-Realm"), node("Carol-Realm")
+    for i = 1, 500 do
+      local id = string.format("abcdef012345:%d", i)
+      a.set:Apply(rec({ id = id, v = 2, t = 1100 }))
+      c.set:Apply(rec({ id = id, v = 1 }))
+    end
+    local reqs = countKind(c, "REQ")
+    c.sync:Start()
+    assert.is_true(reqs.n > 1)
+    wait(5)
+    local behind = 0
+    for i = 1, 500 do
+      if c.set:Get(string.format("abcdef012345:%d", i)).v ~= 2 then behind = behind + 1 end
+    end
+    assert.equal(0, behind)
+  end)
+
+  it("REQ pages partition the id space without gaps or overlap", function()
+    local c = node("Carol-Realm")
+    for i = 1, 120 do c.set:Apply(rec({ id = string.format("r%03d", i) })) end
+    local reqs = countKind(c, "REQ")
+    c.sync:Start()
+    assert.equal(3, reqs.n)
+    local p = reqs.payloads
+    assert.is_nil(p[1].after); assert.equal("r050", p[1].to)
+    assert.equal("r050", p[2].after); assert.equal("r100", p[2].to)
+    assert.equal("r100", p[3].after); assert.is_nil(p[3].to)
+    local total = 0
+    for _, pg in ipairs(p) do for _ in pairs(pg.have) do total = total + 1 end end
+    assert.equal(120, total)
+  end)
+
+  it("a peer answers a ranged REQ only with ids inside (after, to]", function()
+    local a = node("Alice-Realm")
+    for i = 1, 10 do a.set:Apply(rec({ id = string.format("r%02d", i) })) end
+    local b = node("Bob-Realm")
+    local got = {}
+    b.comm:On("test", "REC", function(p) for _, r in ipairs(p.rs) do got[#got + 1] = r.id end end)
+    b.comm:Send("test", "REQ", { have = {}, after = "r05", to = "r08" })
+    wait(1)
+    table.sort(got)
+    assert.same({ "r06", "r07", "r08" }, got)
+  end)
+
+  it("a REQ without a range (older peers) still covers every id", function()
+    local a = node("Alice-Realm")
+    for i = 1, 3 do a.set:Apply(rec({ id = "r" .. i })) end
+    local b = node("Bob-Realm")
+    local n = 0
+    b.comm:On("test", "REC", function(p) n = n + #p.rs end)
+    b.comm:Send("test", "REQ", { have = {} })
+    wait(1)
+    assert.equal(3, n)
+  end)
+
+  it("Start purges expired records before building the digest", function()
+    local c = node("Carol-Realm")
+    c.store["old"] = rec({ id = "old", exp = 900 })
+    c.set:Apply(rec({ id = "live" }))
+    local reqs = countKind(c, "REQ")
+    c.sync:Start()
+    assert.is_nil(c.store["old"])
+    assert.is_nil(reqs.payloads[1].have["old"])
+    assert.is_not_nil(reqs.payloads[1].have["live"])
+  end)
+
+  it("Start runs at most once per minute per set, with one trailing run", function()
+    local c = node("Carol-Realm")
+    local reqs = countKind(c, "REQ")
+    assert.is_true(c.sync:Start())
+    assert.is_false(c.sync:Start())
+    wait(10)
+    assert.is_false(c.sync:Start())
+    assert.equal(1, reqs.n)
+    wait(50)
+    assert.equal(2, reqs.n)  -- the coalesced trailing run
+    wait(120)
+    assert.equal(2, reqs.n)
+  end)
 end)

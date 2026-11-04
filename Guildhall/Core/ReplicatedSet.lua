@@ -98,14 +98,16 @@ function Set:Digest()
   return d
 end
 
-function Set:Missing(digest)
+-- after/to (optional strings) limit the result to ids in (after, to].
+function Set:Missing(digest, after, to)
   local now, out = self.now(), {}
   if type(digest) ~= "table" then digest = {} end
   for id, rec in pairs(self.store) do
+    local inRange = (after == nil or id > after) and (to == nil or id <= to)
     local e = digest[id]
     local pv, pt
     if type(e) == "table" and finite(e[1]) and finite(e[2]) then pv, pt = e[1], e[2] end
-    if rec.exp > now and (pv == nil or rec.v > pv or (rec.v == pv and rec.t > pt)) then out[#out + 1] = rec end
+    if inRange and rec.exp > now and (pv == nil or rec.v > pv or (rec.v == pv and rec.t > pt)) then out[#out + 1] = rec end
   end
   table.sort(out, function(a, b) return a.id < b.id end)
   return out

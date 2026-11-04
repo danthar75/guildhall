@@ -1,13 +1,18 @@
 local ADDON, ns = ...
 
 -- Sync: keeps one ReplicatedSet in step across guild members over Comm.
---   REQ {have = digest}  -> peers answer (after a random wait) with the records we lack
+--   REQ {have, after, to} -> peers answer (after a random wait) with the records we lack whose
+--                            id is in (after, to]; nil bounds are open. Start pages the digest
+--                            into sorted id ranges of PAGE entries so a large set never exceeds
+--                            Comm's chunk cap. A REQ with no bounds (older peers) covers every id.
 --   REC {rs = {records}} -> apply each record; every outcome is reported through onApplied
 -- While a reply is pending, records other peers have already sent (same or higher version) are dropped.
 local Sync = {}
 Sync.__index = Sync
 
 local BATCH = 5
+local PAGE = 50          -- digest entries per REQ (about 2 KB, under 10 chunks)
+local MIN_INTERVAL = 60  -- seconds between Start() runs per set; extra calls coalesce into one later run
 
 function Sync.new(opts)
   local self = setmetatable({}, Sync)
@@ -19,14 +24,49 @@ function Sync.new(opts)
   self.validate = opts.validate
   self.onApplied = opts.onApplied or function() end
   self.playerName = opts.playerName
+  self.now = opts.now or (opts.set and opts.set.now) or function() return 0 end
+  self.minInterval = opts.minInterval or MIN_INTERVAL
+  self.lastStart = nil
+  self.startQueued = false
   self.pending = nil   -- id -> record awaiting a reply; nil when no timer is scheduled
   self.comm:On(self.module, "REQ", function(p, sender) self:_onReq(p, sender) end)
   self.comm:On(self.module, "REC", function(p, sender) self:_onRec(p, sender) end)
   return self
 end
 
+-- Asks peers for what we lack. Returns true when REQs were sent, false when rate-limited
+-- (a single trailing run is then scheduled for when the interval ends).
 function Sync:Start()
-  self.comm:Send(self.module, "REQ", { have = self.set:Digest() })
+  local now = self.now()
+  if self.lastStart and now - self.lastStart < self.minInterval then
+    if not self.startQueued then
+      self.startQueued = true
+      self.after(self.lastStart + self.minInterval - now, function()
+        self.startQueued = false
+        self:Start()
+      end)
+    end
+    return false
+  end
+  self.lastStart = now
+  self.set:Purge()
+  local digest = self.set:Digest()
+  local ids = {}
+  for id in pairs(digest) do ids[#ids + 1] = id end
+  table.sort(ids)
+  local i, after = 1, nil
+  repeat
+    local have, last = {}, nil
+    for j = i, math.min(i + PAGE - 1, #ids) do
+      have[ids[j]] = digest[ids[j]]
+      last = ids[j]
+    end
+    i = i + PAGE
+    local to = i <= #ids and last or nil -- the last page is open-ended
+    self.comm:Send(self.module, "REQ", { have = have, after = after, to = to })
+    after = last
+  until i > #ids
+  return true
 end
 
 function Sync:Publish(rec)
@@ -41,8 +81,11 @@ function Sync:Publish(rec)
 end
 
 function Sync:_onReq(p, sender)
-  local have = type(p) == "table" and type(p.have) == "table" and p.have or {}
-  local missing = self.set:Missing(have)
+  if type(p) ~= "table" then p = {} end
+  local have = type(p.have) == "table" and p.have or {}
+  local lo = type(p.after) == "string" and p.after or nil
+  local hi = type(p.to) == "string" and p.to or nil
+  local missing = self.set:Missing(have, lo, hi)
   if #missing == 0 then return end
   local fresh = self.pending == nil
   if fresh then self.pending = {} end
