@@ -12,6 +12,7 @@ WhatsNew.ENTRIES = {
     "New Groups tab: post or join guild runs, now or scheduled.",
     "Finished dungeons, raid bosses, prepared raiders and spec switches now count on the leaderboard.",
     "Guild masters can choose which ranks can do what, and every change is recorded.",
+    "Guild masters choose whether runs with non-guild players count; calendar raids can include pugs.",
   } },
 }
 

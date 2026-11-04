@@ -24,7 +24,9 @@ describe("WhatsNew", function()
   it("has an entry for the first release with the group finder lines", function()
     local first = ns.WhatsNew.ENTRIES[#ns.WhatsNew.ENTRIES]
     assert.equal("0.1.0", first.version)
-    assert.equal(3, #first.lines)
+    assert.equal(4, #first.lines)
+    assert.equal("Guild masters choose whether runs with non-guild players count; calendar raids can include pugs.",
+      first.lines[4])
   end)
 
   it("keeps entries newest first", function()
