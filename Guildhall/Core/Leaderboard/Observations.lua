@@ -49,6 +49,14 @@ function Obs.Validate(d)
       return false, "bad field: " .. k
     end
   end
+  if d.kind == "bank" then
+    if d.type ~= "dep" and d.type ~= "wd" then return false, "bad bank type" end
+    if type(d.player) ~= "string" or d.player == "" then return false, "bad bank player" end
+    local amount = d.tab ~= nil and d.count or d.copper
+    if not isInt(amount) or amount <= 0 then return false, "bad bank amount" end
+    if d.tab ~= nil and (not isInt(d.tab) or d.tab < 1 or not isInt(d.item)) then return false, "bad bank tab" end
+    if d.tab == nil and (d.count ~= nil or d.item ~= nil) then return false, "bad bank money entry" end
+  end
   return true
 end
 

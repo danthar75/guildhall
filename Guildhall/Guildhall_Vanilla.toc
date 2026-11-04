@@ -23,6 +23,7 @@ Core/Leaderboard/Activity.lua
 Core/Leaderboard/Observations.lua
 Core/Leaderboard/Ledger.lua
 Core/Leaderboard/Scoring.lua
+Core/Leaderboard/Bank.lua
 Core/UI/Window.lua
 Core/UI/CopyBox.lua
 Core/UI/Launcher.lua

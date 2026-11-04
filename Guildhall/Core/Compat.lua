@@ -283,4 +283,89 @@ function Compat:TradePartner()
   return ns.Util.FullName(name, type(realm) == "string" and realm or nil, home)
 end
 
+-- Guild bank. The open flag is driven by events (HandleBankEvent); logs are read per tab.
+function Compat:SetBankOpen(open) self.bankOpen = open and true or false end
+function Compat:BankOpen() return self.bankOpen == true end
+
+-- Mainline: PLAYER_INTERACTION_MANAGER_FRAME_SHOW/_HIDE with Enum.PlayerInteractionType.GuildBanker.
+-- Classic: GUILDBANKFRAME_OPENED/_CLOSED. Returns true when the event was a bank open/close.
+function Compat:HandleBankEvent(event, interactionType)
+  local env = self.env
+  if event == "GUILDBANKFRAME_OPENED" then self:SetBankOpen(true); return true end
+  if event == "GUILDBANKFRAME_CLOSED" then self:SetBankOpen(false); return true end
+  if event == "PLAYER_INTERACTION_MANAGER_FRAME_SHOW" or event == "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" then
+    local kinds = env.Enum and env.Enum.PlayerInteractionType
+    local t = self:Safe(interactionType)
+    if kinds and kinds.GuildBanker ~= nil and t == kinds.GuildBanker then
+      self:SetBankOpen(event == "PLAYER_INTERACTION_MANAGER_FRAME_SHOW")
+      return true
+    end
+  end
+  return false
+end
+
+function Compat:BankTabCount()
+  local f = self.env.GetNumGuildBankTabs
+  if not f then return 0 end
+  local n = self:Safe((f()))
+  return type(n) == "number" and n or 0
+end
+
+-- The pseudo-tab that holds the money log (MAX_GUILDBANK_TABS + 1; 9 when the constant is absent).
+function Compat:BankMoneyTab()
+  local max = self:Safe(self.env.MAX_GUILDBANK_TABS)
+  return (type(max) == "number" and max or 8) + 1
+end
+
+function Compat:QueryBankLog(tab)
+  local f = self.env.QueryGuildBankLog
+  if f then f(tab) end
+end
+
+-- Seconds since an entry, from the game's years/months/days/hours-ago (month 30 d, year 365 d).
+local function agoSeconds(y, mo, d, h)
+  if type(y) ~= "number" or type(mo) ~= "number" or type(d) ~= "number" or type(h) ~= "number" then return nil end
+  return ((y * 365 + mo * 30 + d) * 24 + h) * 3600
+end
+
+-- Item log of one tab: array of { type, name, item, count, tab, ago }, or nil when the API is
+-- missing or the entry count is secret. An entry with any secret/unknown field is dropped alone.
+function Compat:BankLog(tab)
+  local env = self.env
+  if not (env.GetNumGuildBankTransactions and env.GetGuildBankTransaction) then return nil end
+  local n = self:Safe((env.GetNumGuildBankTransactions(tab)))
+  if type(n) ~= "number" then return nil end
+  local out = {}
+  for i = 1, n do
+    local rType, name, link, count, _, _, y, mo, d, h = env.GetGuildBankTransaction(tab, i)
+    rType, name, link, count = self:Safe(rType), self:Safe(name), self:Safe(link), self:Safe(count)
+    y, mo, d, h = self:Safe(y), self:Safe(mo), self:Safe(d), self:Safe(h)
+    local ago = agoSeconds(y, mo, d, h)
+    local id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
+    if type(rType) == "string" and type(name) == "string" and name ~= "" and id
+        and type(count) == "number" and ago then
+      out[#out + 1] = { type = rType, name = name, item = id, count = count, tab = tab, ago = ago }
+    end
+  end
+  return out
+end
+
+-- Money log: array of { type, name, copper, ago }, or nil (same rules as BankLog).
+function Compat:BankMoneyLog()
+  local env = self.env
+  if not (env.GetNumGuildBankMoneyTransactions and env.GetGuildBankMoneyTransaction) then return nil end
+  local n = self:Safe((env.GetNumGuildBankMoneyTransactions()))
+  if type(n) ~= "number" then return nil end
+  local out = {}
+  for i = 1, n do
+    local rType, name, amount, y, mo, d, h = env.GetGuildBankMoneyTransaction(i)
+    rType, name, amount = self:Safe(rType), self:Safe(name), self:Safe(amount)
+    local ago = agoSeconds(self:Safe(y), self:Safe(mo), self:Safe(d), self:Safe(h))
+    if type(rType) == "string" and type(name) == "string" and name ~= "" and type(amount) == "number" and ago then
+      out[#out + 1] = { type = rType, name = name, copper = amount, ago = ago }
+    end
+  end
+  return out
+end
+
 ns.compat = Compat.new(_G)
