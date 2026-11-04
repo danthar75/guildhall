@@ -302,7 +302,7 @@ The next module after the leaderboard is **contests** (user). Officers will run 
 
 ## Addendum (2026-11-04): officer bank review (user)
 
-- **Who:** officers and above.
+- **Who:** any guild rank the guild master grants the "Review bank contributions" permission (user). It defaults to the officer ranks.
 - **What they can do:** review every recorded guild bank deposit and withdrawal, and untick any entry that shouldn't count toward a member's contributions, with an optional reason.
 - **Effect:**
   - An unticked entry leaves the member's personal score in every live period.
@@ -311,4 +311,4 @@ The next module after the leaderboard is **contests** (user). Officers will run 
 - **Accountability:** every untick or re-tick is recorded in the shared change history.
 - **What the member sees:** "Excluded by an officer", plus the reason if one was given. The officer's name is visible only to officers.
 - **Scope:** bank entries only.
-- **Permissions:** this moves to the group finder's permission `bankreview` once Permissions exist.
+- **Permissions:** the core guild-rank Permissions system (from the group finder design) is built in this branch, so the guild master can set who reviews bank contributions. Only the guild master changes permissions.

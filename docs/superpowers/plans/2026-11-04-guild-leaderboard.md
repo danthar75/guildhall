@@ -605,9 +605,59 @@ In `spec/sync_spec.lua`, a new `describe("day buckets")`, using the existing two
 - The About tab lists every entry.
 - release.sh fails without a WhatsNew entry. This is a shell test in the spec, or covered by `tools/check-release.sh`.
 
-### Task 16: Officer bank review (added 2026-11-04, user request)
+### Task 16: Guild-rank permissions (moved here from the group finder plan, 2026-11-04, user request)
 
-**Why:** the user wants officers and above to be able to review guild bank log entries and untick any that shouldn't count toward a member's tracked contributions.
+**Why:** the user wants the people who can untick bank contributions to be chosen by guild rank, and only the guild master can set that. The core Permissions system was planned as the group finder's Task 1, and it moves here so the bank review can use it. The group finder later adds its own keys.
+
+**Files:**
+- Create: `Guildhall/Core/Permissions.lua` (both TOCs, after `Core/Leaderboard/Config.lua`) and `Guildhall/Core/UI/PermissionsView.lua` (both TOCs, after the Leaderboard UI files).
+- Modify:
+  - `Guildhall/Core/Leaderboard/Config.lua`: weights and retake checks use permissions; history `what` gains `"perms"`.
+  - `Guildhall/Core/Roster.lua`: `Roster:RankNames()`.
+  - `Guildhall/Core/Compat.lua`: `Compat:GuildRanks()`.
+  - `Guildhall/Core/UI/SettingsView.lua`: a "Permissions" section.
+- Test: `spec/permissions_spec.lua` (new), `spec/lbconfig_spec.lua`.
+
+**Interfaces:**
+- `Compat:GuildRanks() -> array of names | nil`, from `GuildControlGetNumRanks` and `GuildControlGetRankName(i)`. Index 1 is rank 0. Secret values give nil.
+- `Roster:RankNames() -> array`. Falls back to rank names seen in the roster cache.
+- `Permissions.KEYS` is an ordered array of `{ key, label, raidlead = bool }`. In v1:
+  - `weights`: "Edit leaderboard weights"
+  - `retake`: "Retake a month"
+  - `bankreview`: "Review bank contributions"
+- `Permissions.AddKey(def)` lets modules add keys. The group finder adds `checklists`, `prepared` and `flex`, all with `raidlead = true`.
+- `Permissions.new(ctx) -> perms`. `ctx` holds `config`, `roster`, `profile`, `now` and `compat`.
+- `perms:Grants(key) -> { ranks = { [rankIndex] = true }, raidlead = bool }`. Defaults to the officer ranks (`[Guildhall officers=N]`), with `raidlead = false`. Rank 0 is always granted.
+- `perms:Can(char, key, opts) -> bool`:
+  - true when the char's rank is in the grant;
+  - or when the grant has `raidlead` and `opts.raidLeaders` contains the char;
+  - false when the rank is unknown.
+- `perms:Publish(map) -> ok, err`. Only rank 0 can publish; anyone else gets `false, "Only the guild master can change permissions."`. It publishes the `"perms"` record in `core.config`, plus a history record `what = "perms"` in the same call.
+- **Incoming `"perms"` record:**
+  - accepted only if `roster:RankIndex(rec.char) == 0` when it arrives;
+  - an unknown roster defers it to a later sync;
+  - a newer accepted version wins.
+- **Weights and retakes:** `cfg:PublishWeights` and `cfg:RetakeMonth`, and the incoming checks for both, use `perms:Can(char, "weights" | "retake")`. With no perms record, the defaults keep today's officer rule.
+- **PermissionsView**, following the mockup board "Settings · Permissions":
+  - Caption, verbatim: "Only the Guild Master can change these. Ranks come from the game, in rank order."
+  - Rows are the keys' labels. Columns are `Roster:RankNames()`, plus "Raid leader & assistants" only when any key has `raidlead`.
+  - The Guild Master column is always ✓ and can't be edited. Checkboxes are enabled only for rank 0.
+  - Buttons: "Reset to officer ranks" and "Save".
+  - Below the grid, the 4 newest history entries, labelled "(full list under Change history)".
+
+- [ ] **Step 1: Failing tests.**
+  - "defaults grant officer ranks only"
+  - "a perms record from rank 1 is rejected; from rank 0 accepted"
+  - "permissions from a former GM stay; a new GM's record replaces them; unknown roster defers"
+  - "Can honours raidlead only with a matching raidLeaders set"
+  - "Publish writes one history entry what=perms with before and after"
+  - "a weights publish by a rank granted 'weights' is accepted; by an officer whose rank was removed is rejected"
+  - "a non-GM sees the grid read-only; GM save publishes the ticked ranks"
+- [ ] **Steps 2–4: Fail, implement, pass.** **Step 5: Commit** "Core: guild-rank permissions".
+
+### Task 17: Bank review (added 2026-11-04, user request)
+
+**Why:** the user wants the people allowed to review guild bank log entries to be able to untick any that shouldn't count toward a member's tracked contributions. Who is allowed is a guild-rank permission (`bankreview`, Task 16) that only the guild master sets. It defaults to the officer ranks.
 
 **Approved behaviour:**
 - **An excluded entry** drops out of the member's personal score in every live period, the same way a weight change rescores.
@@ -620,7 +670,7 @@ In `spec/sync_spec.lua`, a new `describe("day buckets")`, using the existing two
 - Modify:
   - `Guildhall/Core/Leaderboard/Config.lua`: exclusion records and their history
   - `Guildhall/Core/Leaderboard/Ledger.lua`: apply exclusions
-  - `Guildhall/Core/Leaderboard/UI/SettingsView.lua`: an officer-only "Bank review" button that opens the list
+  - `Guildhall/Core/Leaderboard/UI/SettingsView.lua`: a "Bank review" button that opens the list, shown with `bankreview`
   - `Guildhall/Core/Leaderboard/UI/View.lua`: show the reason under "Not counted"
 - Test: `spec/lbconfig_spec.lua`, `spec/ledger_spec.lua`, `spec/bankreview_spec.lua`
 
@@ -630,12 +680,12 @@ In `spec/sync_spec.lua`, a new `describe("day buckets")`, using the existing two
   - The Task 14 history writer.
   - `Roster:IsOfficer`.
 - **Exclusion records.** Each is a `core.config` record with id `"exclude:" .. ref`, holding `{ ref, excluded = bool, reason = string ≤ 80 | nil, by = char, at }`.
-  - Accepted only from an officer at arrival. An unknown roster defers the record to a later sync.
+  - Accepted only when `perms:Can(rec.char, "bankreview")` is true at arrival. An unknown roster defers the record to a later sync.
   - A newer version wins, so re-ticking is a new version with `excluded = false`.
   - Every accepted publish writes a history record with `what = "bank"`, `key = ref`, and before and after.
   - Records never expire. They are tiny, and the observations they point to live 400 days.
 - **Config methods:**
-  - `cfg:SetExcluded(ref, excluded, reason) -> ok, err`. Officers only. Publishes the record and its history entry in the same call.
+  - `cfg:SetExcluded(ref, excluded, reason) -> ok, err`. Needs `bankreview`. Publishes the record and its history entry in the same call.
   - `cfg:Exclusions() -> { [ref] = { excluded = true, reason, by, at } }`. Lists only the refs currently excluded.
 - **Ledger.** `L:Query` reads `ctx.config:Exclusions()` when `ctx.config` is present. A contribution whose `ref` is excluded is handled like this:
   - it gets `counted = false` and `why = "excluded by an officer"`, plus `reason`;
@@ -643,7 +693,7 @@ In `spec/sync_spec.lua`, a new `describe("day buckets")`, using the existing two
   - its signed value **still adds to `result.guild`** for its type;
   - it appears in `rows` when `includeUncounted` is set.
   - A config change calls `ledger:Invalidate()`.
-- **The review list.** `ns.Leaderboard.BankReview.Open()` is for officers only; others get "Only officers can review bank contributions."
+- **The review list.** `ns.Leaderboard.BankReview.Open()` needs `bankreview`; anyone else gets "Your rank can't review bank contributions. The guild master sets this under Settings → Permissions."
   - It lists every bank contribution row from `Query{ includeUncounted = true, types = { ["bank.gold"] = true, ["bank.items"] = true } }`, newest first.
   - Each row shows: date (server time), character display name, "deposited" or "withdrew", gold, or item link and count, tab, and status. Status is "counted", "not verified yet", or the existing why.
   - Each row has a checkbox, ticked when not excluded.
@@ -651,15 +701,14 @@ In `spec/sync_spec.lua`, a new `describe("day buckets")`, using the existing two
   - Filters: a player pick list, tab, and month (`Scoring.MonthKey`), plus "Show excluded only".
   - It scrolls with the mouse wheel and shows 14 rows. Empty state: "No guild bank activity recorded yet. Entries appear after someone with Guildhall opens the guild bank."
 - **The member's view.** In a player's own breakdown, an excluded row reads "Excluded by an officer", followed by ": <reason>" when there is a reason. The officer's name is shown only to officers.
-- **Later.** When the group finder's Permissions land, `SetExcluded` and the incoming check move to the permission `bankreview`, labelled "Review bank contributions", which defaults to the officer ranks. The group finder plan's Task 1 adds this key.
 
 - [ ] **Step 1: Failing tests.**
   - "an officer's exclusion removes the entry from the member's total but not the guild total"
   - "re-ticking restores it"
-  - "a non-officer's exclusion record is rejected"
+  - "an exclusion record from a rank without bankreview is rejected; granting the rank makes it accepted"
   - "each change writes one history record what=bank"
   - "the member's breakdown shows 'Excluded by an officer: moving guild funds'"
-  - "the review list is refused to a non-officer"
+  - "the review list is refused without bankreview"
   - "filters by player and month"
   - "an excluded entry inside a saved month leaves the month record unchanged"
-- [ ] **Step 2–4: Fail, implement, pass.** **Step 5: Commit** "Leaderboard: officer bank review".
+- [ ] **Step 2–4: Fail, implement, pass.** **Step 5: Commit** "Leaderboard: bank review".
