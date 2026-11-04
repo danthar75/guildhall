@@ -198,19 +198,20 @@ describe("Groups Credit", function()
   it("RaidLeaders returns leader and assists from verified kills only", function()
     local day = ns.Scoring.DayKey(T0 + 20 * HOUR, 0)
     local list = {}
-    pair(list, "mc", 663, FIVE, T0 + 20 * HOUR, { leader = "A-R", assists = { "B-R" } },
+    -- B-R is named by one reporter only: not counted
+    pair(list, "mc", 663, FIVE, T0 + 20 * HOUR, { leader = "A-R", assists = { "B-R", "C-R" } },
       { leader = "A-R", assists = { "C-R" } })
     list[#list + 1] = kill("p3", "mc", 664, FIVE, T0 + 21 * HOUR, { leader = "Z-R", assists = { "Y-R" } })
     pair(list, "mc", 665, FIVE, T0 + DAY + 20 * HOUR, { leader = "W-R" }, { leader = "W-R" })
     pair(list, "bwl", 610, FIVE, T0 + 20 * HOUR, { leader = "V-R" }, { leader = "V-R" })
-    ctx.observations = { List = function(_, kind) return kind == "kill" and list or {} end }
+    ctx.observations = { changes = 1, List = function(_, kind) return kind == "kill" and list or {} end }
     local credit = Credit.new(ctx)
-    assert.same({ ["A-R"] = true, ["B-R"] = true, ["C-R"] = true }, credit:RaidLeaders("mc", day))
+    assert.same({ ["A-R"] = true, ["C-R"] = true }, credit:RaidLeaders("mc", day))
     assert.same({}, credit:RaidLeaders("ony", day))
     -- module-level helper, once attached
     assert.same({}, Credit.RaidLeaders("mc", day))
     Credit.Attach(ctx)
-    assert.same({ ["A-R"] = true, ["B-R"] = true, ["C-R"] = true }, Credit.RaidLeaders("mc", day))
+    assert.same({ ["A-R"] = true, ["C-R"] = true }, Credit.RaidLeaders("mc", day))
   end)
 
   it("a guild member without Guildhall earns nothing, not even toward the guild total", function()
@@ -233,6 +234,67 @@ describe("Groups Credit", function()
     local why = {}
     for _, row in ipairs(r.rows) do why[row.char] = row.why or "ok" end
     assert.same({ ["A-R"] = "ok", ["B-R"] = "ok", ["C-R"] = "not using Guildhall" }, why)
+  end)
+
+  it("RaidLeaders caches per observations.changes and tz", function()
+    local list, lists = {}, 0
+    pair(list, "mc", 663, FIVE, T0 + 20 * HOUR, { leader = "A-R" }, { leader = "A-R" })
+    ctx.observations = { changes = 1, List = function() lists = lists + 1; return list end }
+    local credit = Credit.new(ctx)
+    local day = ns.Scoring.DayKey(T0 + 20 * HOUR, 0)
+    assert.same({ ["A-R"] = true }, credit:RaidLeaders("mc", day))
+    local again = credit:RaidLeaders("mc", day)
+    assert.same({ ["A-R"] = true }, again)
+    assert.equal(1, lists)
+    again["Z-R"] = true -- callers get a copy
+    assert.same({ ["A-R"] = true }, credit:RaidLeaders("mc", day))
+    assert.equal(1, lists)
+    pair(list, "mc", 664, FIVE, T0 + 21 * HOUR, { leader = "B-R" }, { leader = "B-R" })
+    ctx.observations.changes = 2
+    assert.same({ ["A-R"] = true, ["B-R"] = true }, credit:RaidLeaders("mc", day))
+    assert.equal(2, lists)
+    tz = -22 * HOUR -- both kills move to the previous server day
+    assert.same({}, credit:RaidLeaders("mc", day))
+    assert.equal(3, lists)
+  end)
+
+  it("one forged member list credits only the names another reporter confirms", function()
+    local honest = kill("p2", "rfc", RFC_FINAL, { "B-R", "X-P", "Y-P", "Z-P", "C-R" }, T0)
+    local fake = kill("p1", "rfc", RFC_FINAL, { "B-R", "C-R", "A-R", "D-R", "E-R" }, T0 + 5, { leader = "A-R" })
+    local list = { honest, fake }
+    local out = derive(list)
+    assert.same({ "B-R", "C-R" }, charsOf(out, "groups.dungeon"))
+    ctx.observations = { changes = 1, List = function() return list end }
+    assert.same({}, Credit.new(ctx):RaidLeaders("rfc", ns.Scoring.DayKey(T0, 0)))
+  end)
+
+  it("refs don't change when a late, older report joins the cluster", function()
+    local a = kill("p2", "rfc", RFC_FINAL, FIVE, T0 + 30)
+    local b = kill("p3", "rfc", RFC_FINAL, FIVE, T0 + 40)
+    local function refs(out)
+      local r = {}
+      for _, c in ipairs(out) do r[#r + 1] = c.ref end
+      table.sort(r)
+      return r
+    end
+    local before = refs(derive({ a, b }))
+    assert.equal(5, #before)
+    assert.equal("kill:rfc:" .. RFC_FINAL .. ":" .. ns.Scoring.DayKey(T0, 0) .. ":A-R:groups.dungeon", before[1])
+    local late = kill("p1", "rfc", RFC_FINAL, FIVE, T0)
+    assert.same(before, refs(derive({ a, b, late })))
+  end)
+
+  it("a verified kill without a guild majority gives its reporters 'not a guild group' rows", function()
+    local list = pair({}, "deadmines", 2747, { "A-R", "B-R", "X-R", "Y-R", "Z-R" }, T0)
+    local out = derive(list)
+    assert.same({}, charsOf(out, "groups.dungeon"))
+    assert.same({ "A-R", "B-R" }, charsOf(out, "groups.dungeon", false))
+    for _, c in ipairs(out) do assert.equal("not a guild group", c.why) end
+    -- a counted clear the same day wins over it
+    pair(list, "deadmines", 2747, FIVE, T0 + HOUR)
+    out = derive(list)
+    assert.same(FIVE, charsOf(out, "groups.dungeon"))
+    assert.same({}, charsOf(out, "groups.dungeon", false))
   end)
 
   it("derives the same contributions from shuffled input", function()
