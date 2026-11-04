@@ -202,6 +202,15 @@ So withdraw-and-redeposit loops add nothing (user's blacklist case).
 - Guild Info text is too small for a weight table, which is why the weights don't live there.
 - **Coverage:** every registered activity type and contribution type has a weight, including both bank types. A type a future module registers appears in the editor automatically with the module's default weight, until officers change it.
 - **Zero weights:** a weight of 0 removes that activity from the overall score but keeps its own board.
+- **Rescoring (user):** changing a weight recalculates every live period with the new weights, including past contributions. "All time" therefore always uses today's weights.
+
+**Monthly records (user).** Each month's top 5 is saved and never changes, even if weights change later.
+- **What's saved:** a *month record* holding the month, the guild's gold kept that month, the overall top 5 with points, the top 5 on each activity board, and the weights in force at the time. All of this is my call except "top 5 per month", which is yours.
+- **Who saves it:** an officer's client, automatically, at the first login after a 3-day grace period past month end. The grace period gives late observations time to sync (my call). The record is stored in the guild's replicated set. Other clients accept it only from an officer, just like weights.
+- **First one wins:** the first accepted record for a month is kept. An officer can deliberately retake a month from the record's view, for example after a sync problem. That needs confirmation and adds a log entry. In that one case the newest version wins (my call).
+- **Kept for good:** month records are never purged. That doesn't break the 400-day retention, because each record is small, about 1 KB.
+- **Opt-out:** someone who opts out later is shown as "(hidden)" in old records. The names are still stored, so turning opt-out off brings them back (my call).
+- **UI:** the period buttons gain "Past months ▾". Picking a month shows that month's saved top 5, labelled "Saved <date> by <officer>", with each activity's top 5 available through the board picker. Old months can't be recalculated, so a player who wasn't in the top 5 isn't shown for that month.
 
 **Periods:**
 - This week. The week starts at the weekly reset, approximated as Tuesday 15:00 UTC for US. The exact reset rule is left to the builder, ideally from the client.
