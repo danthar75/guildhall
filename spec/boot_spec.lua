@@ -3,7 +3,8 @@ describe("Boot", function()
   local fakes = require("spec.helpers.fakes")
   local ns, clock, timers, env, script, printed, sent, guild, restricted, inGuild
   local saved = {}
-  local GLOBALS = { "CreateFrame", "C_Timer", "GuildhallDB", "print", "GetNormalizedRealmName" }
+  local GLOBALS = { "CreateFrame", "C_Timer", "GuildhallDB", "print", "GetNormalizedRealmName", "Enum" }
+  local registered, probeCalls, probeEarly, spies
 
   local function fire(event, ...) script(nil, event, ...) end
   local function wait(s) clock.advance(s); timers.run(clock) end
@@ -13,9 +14,12 @@ describe("Boot", function()
     clock = fakes.clock(1000)
     timers = fakes.timers(clock)
     printed, sent, guild, restricted, inGuild = {}, {}, "GuildA", 0, nil
+    registered, probeCalls, probeEarly = {}, {}, nil
+    spies = { saveMonth = 0, refreshTz = 0, hooks = 0 }
+    _G.Enum = { AddOnRestrictionType = { Chat = 1, Map = 2 }, AddOnRestrictionState = { Inactive = 0 } }
     _G.CreateFrame = function()
       return {
-        RegisterEvent = function() end,
+        RegisterEvent = function(_, event) registered[event] = true end,
         SetScript = function(_, name, fn) if name == "OnEvent" then script = fn end end,
       }
     end
@@ -50,10 +54,31 @@ describe("Boot", function()
       Consent = { Show = function() end },
       Personal = function() return GuildhallDB and GuildhallDB.personal end,
     }
-    for _, f in ipairs({ "Listing", "Format", "MailDrafts", "Exchange" }) do
+    for _, f in ipairs({ "Activity", "Observations", "Ledger", "Scoring", "Bank", "Config" }) do
+      loadAddonFile(ns, "Guildhall/Core/Leaderboard/" .. f .. ".lua")
+    end
+    for _, f in ipairs({ "Category", "Listing", "Format", "MailDrafts", "Exchange", "Deals", "DealWatch" }) do
       loadAddonFile(ns, "Guildhall/Modules/Exchange/" .. f .. ".lua")
     end
+    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Module.lua")
+    -- count the calls the ordering/hook rules are about, on the instances Module/Exchange build
+    local cfgNew = ns.LbConfig.new
+    ns.LbConfig.new = function(ctx)
+      local c = cfgNew(ctx)
+      c.MaybeSaveMonth = function() spies.saveMonth = spies.saveMonth + 1; return false end
+      c.MaybeRefreshTz = function() spies.refreshTz = spies.refreshTz + 1; return false end
+      return c
+    end
+    local dwNew = ns.Exchange.DealWatch.new
+    ns.Exchange.DealWatch.new = function(ctx)
+      local w = dwNew(ctx)
+      w.InstallHooks = function() spies.hooks = spies.hooks + 1; return true end
+      return w
+    end
+    ns.RegisterModule("Probe", { events = { PROBE = function(n, ...) probeCalls[#probeCalls + 1] = { n, ... } end } })
     loadAddonFile(ns, "Guildhall/Core/Boot.lua")
+    fire("PROBE", "early") -- before ADDON_LOADED / login: module events must not fire yet
+    probeEarly = #probeCalls
     fire("ADDON_LOADED", "Guildhall")
     -- consent already given for this character in GuildA, so login publishes and syncs
     GuildhallDB.personal.profile.consented = true
@@ -70,6 +95,107 @@ describe("Boot", function()
     local body = ns.Serialize.Encode({ pv = 1, m = "exchange.listings", k = "REQ", p = payload })
     return "1:1/1:" .. body
   end
+
+  it("a module's events fire after boot and not after halt", function()
+    assert.equal(0, probeEarly)
+    fire("PROBE", 1, 2)
+    assert.equal(1, #probeCalls)
+    assert.equal(ns, probeCalls[1][1])
+    assert.equal(1, probeCalls[1][2])
+    assert.is_not_nil(ns.leaderboard)
+    guild = "GuildB"
+    fire("PLAYER_GUILD_UPDATE")
+    wait(3)
+    fire("PROBE", 3)
+    assert.equal(1, #probeCalls)
+    assert.is_nil(ns.leaderboard)
+  end)
+
+  it("a restriction lift starts every sync in services.syncs", function()
+    local syncs = ns.services.syncs
+    assert.is_true(#syncs >= 4) -- profiles, listings, observations, config
+    local started = {}
+    for i, sync in ipairs(syncs) do sync.Start = function() started[i] = true end end
+    fire("ADDON_RESTRICTION_STATE_CHANGED", 1, 0)
+    wait(1)
+    for i = 1, #syncs do assert.is_true(started[i], "sync " .. i) end
+    local has = false
+    for _, sync in ipairs(syncs) do if sync == ns.exchange.sync then has = true end end
+    assert.is_true(has)
+  end)
+
+  it("the tab order is Exchange, Leaderboard, Log, Settings", function()
+    -- Window appends Log and Settings after the module tabs, in registration order.
+    local tabs = {}
+    for _, name in ipairs(ns.Modules()) do
+      local def = ns.GetModule(name)
+      if type(def.tab) == "table" and type(def.tab.build) == "function" then tabs[#tabs + 1] = def.tab.title end
+    end
+    assert.same({ "Exchange", "Leaderboard" }, tabs)
+    assert.equal("Leaderboard", ns.GetModule("Leaderboard").settings.title)
+  end)
+
+  it("registers the DealWatch and bank events", function()
+    for _, e in ipairs({ "TRADE_CLOSED", "TRADE_ACCEPT_UPDATE", "UI_INFO_MESSAGE", "MAIL_SEND_SUCCESS",
+      "MAIL_FAILED", "MAIL_INBOX_UPDATE", "MAIL_CLOSED", "PLAYER_MONEY",
+      "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
+      "GUILDBANKFRAME_OPENED", "GUILDBANKFRAME_CLOSED", "GUILDBANKLOG_UPDATE" }) do
+      assert.is_true(registered[e], e)
+    end
+  end)
+
+  it("routes trade and mail events to DealWatch, and installs its hooks once", function()
+    assert.equal(1, spies.hooks)
+    local got
+    ns.exchange.dealWatch.OnEvent = function(_, event) got = event end
+    fire("TRADE_CLOSED")
+    assert.equal("TRADE_CLOSED", got)
+    assert.equal(ns.leaderboard.observations, ns.exchange.ctx.observations)
+  end)
+
+  it("routes guild bank events to the bank", function()
+    local opened, closed, logs = 0, 0, 0
+    local bank = ns.leaderboard.bank
+    bank.OnOpen = function() opened = opened + 1 end
+    bank.OnClose = function() closed = closed + 1 end
+    bank.OnLogUpdate = function() logs = logs + 1 end
+    fire("GUILDBANKFRAME_OPENED")
+    assert.equal(1, opened)
+    fire("GUILDBANKLOG_UPDATE")
+    assert.equal(1, logs)
+    fire("GUILDBANKFRAME_CLOSED")
+    assert.equal(1, closed)
+    fire("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", 99) -- not the guild banker (no Enum kind): ignored
+    assert.equal(1, opened)
+  end)
+
+  it("invalidates the ledger on observation, config and roster changes", function()
+    local n = 0
+    ns.leaderboard.ledger.Invalidate = function() n = n + 1 end
+    ns.Events:Fire("ObservationsChanged")
+    ns.Events:Fire("LeaderboardConfigChanged")
+    assert.equal(2, n)
+    fire("GUILD_ROSTER_UPDATE")
+    wait(3)
+    assert.is_true(n >= 3)
+  end)
+
+  it("saves months and refreshes tz only after the settle delay, and only as an officer", function()
+    assert.equal(0, spies.saveMonth)
+    assert.equal(0, spies.refreshTz)
+    ns.services.roster.IsOfficer = function() return nil end -- roster unknown
+    wait(91)
+    assert.equal(0, spies.saveMonth)
+  end)
+
+  it("an officer saves the month and refreshes tz 90 s after login", function()
+    ns.services.roster.IsOfficer = function() return true end
+    wait(89)
+    assert.equal(0, spies.saveMonth)
+    wait(2)
+    assert.equal(1, spies.saveMonth)
+    assert.equal(1, spies.refreshTz)
+  end)
 
   it("boots for the current guild", function()
     assert.equal("GuildA-Realm", ns.services.guildKey)

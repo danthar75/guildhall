@@ -29,6 +29,11 @@ local function refreshUI()
   if ns.UI and ns.UI.Window then ns.UI.Window:Refresh() end
 end
 
+-- Tells modules the roster cache changed (the Leaderboard ledger resolves ranks from it).
+local function rosterRefreshed()
+  if ns.Events then ns.Events:Fire("RosterRefreshed") end
+end
+
 local function copy(t) return ns.Util.DeepCopy(t) end
 
 local function charsOf(rec)
@@ -168,6 +173,9 @@ local function buildServices(guildKey)
     compat = compat, comm = comm, now = now, after = after, random = random, log = log,
     roster = roster, profile = profile, playerChar = playerChar, guildKey = guildKey,
     profileSet = profileSet, profileSync = profileSync,
+    -- Every sync in the addon, the core profile sync first. Modules append theirs when they
+    -- build it; restriction lifts walk this list.
+    syncs = { profileSync },
     -- Only Exchange exists today, so Boot builds its DB here. A later refactor could hand
     -- each module its own ns.DB.Module(...) table instead of a shared field.
     moduleDb = ns.DB.Module(sv, guildKey, "Exchange"),
@@ -201,6 +209,7 @@ local function halt(state, newKey)
   if s and s.comm then s.comm:Halt() end
   profileSync = nil
   ns.exchange = nil
+  ns.leaderboard = nil
   if state == "changed" then
     print("|cffffd200Guildhall|r: you changed guild. Type /reload to switch Guildhall to "
       .. ns.Util.DisplayName(newKey) .. ".")
@@ -236,15 +245,12 @@ local function onRestrictionLifted()
     local s = ns.services
     if not s or halted then return end
     s.comm:Pump()
-    if profileSync then
-      local ok, err = pcall(profileSync.Start, profileSync)
-      if not ok then ns.OnError(err) end
-    end
-    if ns.exchange and ns.exchange.sync then
-      local ok, err = pcall(ns.exchange.sync.Start, ns.exchange.sync)
+    for _, sync in ipairs(s.syncs) do
+      local ok, err = pcall(sync.Start, sync)
       if not ok then ns.OnError(err) end
     end
     s.roster:Refresh()
+    rosterRefreshed()
     refreshUI()
   end)
 end
@@ -349,6 +355,7 @@ local function onRosterUpdate()
     local ok, err = pcall(ns.services.roster.Refresh, ns.services.roster)
     suppressRosterRequest = false
     if not ok then ns.OnError(err) end
+    rosterRefreshed()
     refreshUI()
   end)
 end
@@ -393,6 +400,7 @@ handlers.PLAYER_ENTERING_WORLD = function()
   if booted then
     checkGuild()
     ns.services.roster:Refresh()
+    rosterRefreshed()
     refreshUI()
   else
     tryResolve()
@@ -431,11 +439,36 @@ handlers.ADDON_RESTRICTION_STATE_CHANGED = function(kind, state)
   end
 end
 
+-- Module events: a module may declare def.events = { EVENT = fn(ns, ...) }. Boot loads last, so
+-- every module is registered by now. Handlers run only while booted and not halted.
+local moduleHandlers = {}
+for _, name in ipairs(ns.Modules()) do
+  local def = ns.GetModule(name)
+  if type(def) == "table" and type(def.events) == "table" then
+    for event, fn in pairs(def.events) do
+      if type(fn) == "function" then
+        moduleHandlers[event] = moduleHandlers[event] or {}
+        table.insert(moduleHandlers[event], fn)
+        -- Not every client has every event (e.g. the Classic bank pair): pcall tolerates that.
+        pcall(frame.RegisterEvent, frame, event)
+      end
+    end
+  end
+end
+
 frame:SetScript("OnEvent", function(_, event, ...)
   local h = handlers[event]
-  if not h then return end
-  local ok, err = pcall(h, ...)
-  if not ok then ns.OnError(err) end
+  if h then
+    local ok, err = pcall(h, ...)
+    if not ok then ns.OnError(err) end
+  end
+  local list = moduleHandlers[event]
+  if list and booted and not halted then
+    for _, fn in ipairs(list) do
+      local ok, err = pcall(fn, ns, ...)
+      if not ok then ns.OnError(err) end
+    end
+  end
 end)
 
 for _, event in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "GUILD_ROSTER_UPDATE",

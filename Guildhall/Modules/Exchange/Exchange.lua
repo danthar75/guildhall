@@ -82,7 +82,24 @@ function ns.Exchange.Create(ctx)
     end,
     onApplied = logApplied,
   })
+  ctx.syncs = ctx.syncs or {}
+  ctx.syncs[#ctx.syncs + 1] = self.sync
   return self
+end
+
+-- The Leaderboard builds the observation set after Exchange logs in. Once it exists, deals
+-- seen by DealWatch and the day-old witness are recorded, and DealWatch's hooks go in (once).
+function Ex:AttachObservations(observations)
+  self.ctx.observations = observations
+  self.dealWatch = ns.Exchange.DealWatch.new({
+    compat = self.compat, exchange = self, observations = observations, profile = self.profile,
+    roster = self.roster, now = self.now, after = self.ctx.after,
+  })
+  if self.started then
+    self:_pruneDeclined()
+    self:_queueWitness()
+  end
+  self.dealWatch:InstallHooks()
 end
 
 function Ex:Start()
@@ -399,8 +416,20 @@ end
 
 function Ex:DismissDraft(id) self.drafts:Remove(id) end
 
+-- Exactly the events DealWatch:OnEvent handles.
+local DEALWATCH_EVENTS = { "TRADE_ACCEPT_UPDATE", "TRADE_CLOSED", "UI_INFO_MESSAGE", "MAIL_SEND_SUCCESS",
+  "MAIL_FAILED", "MAIL_INBOX_UPDATE", "MAIL_CLOSED", "PLAYER_MONEY" }
+local events = {}
+for _, event in ipairs(DEALWATCH_EVENTS) do
+  events[event] = function(n, ...)
+    local watch = n.exchange and n.exchange.dealWatch
+    if watch then watch:OnEvent(event, ...) end
+  end
+end
+
 if ns.RegisterModule then
   ns.RegisterModule("Exchange", {
+    events = events,
     OnLogin = function(n)
       if not n.services then return end
       n.exchange = n.Exchange.Create(n.services)
