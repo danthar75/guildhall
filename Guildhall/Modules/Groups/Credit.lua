@@ -3,15 +3,20 @@ local ADDON, ns = ...
 -- Credit: turns "kill" observations (KillWatch) into leaderboard contributions for cleared
 -- dungeons, raid bosses and full raid clears, and registers the six group activity types.
 --
+-- Reporters: a kill report counts only when its char is linked to the profile that sent it
+-- (profile:OwnerOf(rec.char) == rec.by), so a made-up `by` or an unlinked char can't act as a
+-- second reporter. Without a profile service no report counts.
 -- Verification: kills are sorted by (at, id) and clustered greedily, oldest first. A report joins a
 -- cluster's oldest report (the seed) when it comes from a profile not yet in the cluster, names the
 -- same instance and encounter, has `at` within 600 s of the seed and shares at least 2 member names
 -- with it. A cluster with two or more profiles is verified. Reports of one profile never verify
 -- each other. A member is credited, and a leader or assistant counts for RaidLeaders, only when at
 -- least 2 of the cluster's reporters list the name (one forged list can't add anyone).
--- Majority: a verified kill counts only when guild members (Roster:IsMember == true; an unknown
--- roster counts as non-guild) are more than half of the union of its members. A verified kill
--- without a majority gives uncounted rows, why = "not a guild group", to its reporters' own chars.
+-- Majority: a verified kill counts only when EVERY report's own member list has a guild majority:
+-- guild members (Roster:IsMember == true; an unknown roster counts as non-guild) are more than half
+-- of that list's distinct names. One honest list therefore vetoes a forged list padded with guild
+-- names. A verified kill without a majority gives uncounted rows, why = "not a guild group", to its
+-- reporters' own chars.
 -- Credit (char = member Name-Realm; the Ledger resolves the profile), deduplicated at derivation
 -- time, keeping the first in time order:
 --   groups.dungeon   per guild member at a counted final dungeon kill, once per
@@ -49,13 +54,24 @@ end
 
 local function finite(x) return type(x) == "number" and x == x and x ~= math.huge and x ~= -math.huge end
 
--- A kill observation this module can use: known instance, encounter of that instance, members.
-local function usable(rec)
-  if type(rec) ~= "table" or type(rec.by) ~= "string" or type(rec.d) ~= "table" then return false end
+-- A kill observation this module can use: known instance, encounter of that instance, members,
+-- and a reporter that owns the char it was sent from (a linked, consenting profile).
+local function usable(rec, profile)
+  if type(rec) ~= "table" or type(rec.by) ~= "string" or type(rec.char) ~= "string"
+      or type(rec.d) ~= "table" then
+    return false
+  end
   local d = rec.d
   if d.kind ~= "kill" or not finite(d.at) or type(d.members) ~= "table" then return false end
   local entry = ns.Instances.Get(d.instance)
-  return entry ~= nil and ns.Instances.ByEncounter(d.encounter) == entry
+  if entry == nil or ns.Instances.ByEncounter(d.encounter) ~= entry then return false end
+  return profile ~= nil and profile.OwnerOf ~= nil and profile:OwnerOf(rec.char) == rec.by
+end
+
+-- The profile service of a ctx (ctx.profile, else the config's).
+local function profileOf(ctx)
+  if type(ctx) ~= "table" then return nil end
+  return ctx.profile or (type(ctx.config) == "table" and ctx.config.profile) or nil
 end
 
 local function sharedNames(a, b)
@@ -114,11 +130,12 @@ local function build(reports)
     leaders = confirmedNames(reports, leadersOf) }
 end
 
--- Every cluster (verified or not), in time order of its seed.
-function Credit.Clusters(kills)
+-- Every cluster (verified or not), in time order of its seed. profile: the profile service
+-- (OwnerOf); reports whose char it doesn't link to their sender are left out.
+function Credit.Clusters(kills, profile)
   local recs = {}
   for _, rec in ipairs(kills or {}) do
-    if usable(rec) then recs[#recs + 1] = rec end
+    if usable(rec, profile) then recs[#recs + 1] = rec end
   end
   table.sort(recs, function(a, b)
     if a.d.at ~= b.d.at then return a.d.at < b.d.at end
@@ -147,10 +164,10 @@ end
 
 -- Verified kills: { id, instance, encounter, at, members (union), confirmed, leaders, reporters,
 -- reports }. confirmed and leaders hold only names that at least 2 reporters list (a single
--- forged list can't add anyone).
-function Credit.Verified(kills)
+-- forged list can't add anyone). profile: as Clusters.
+function Credit.Verified(kills, profile)
   local out = {}
-  for _, k in ipairs(Credit.Clusters(kills)) do
+  for _, k in ipairs(Credit.Clusters(kills, profile)) do
     if k.verified then out[#out + 1] = k end
   end
   return out
@@ -160,18 +177,35 @@ local function isGuild(roster, n)
   return roster ~= nil and roster.IsMember ~= nil and roster:IsMember(n) == true
 end
 
--- The guild members a kill credits (confirmed names only), and whether guild members are more
--- than half of the union of its members.
+-- Whether guild members are more than half of the distinct names of one list.
+local function guildMajority(names, roster)
+  local seen, n, g = {}, 0, 0
+  for _, name in ipairs(names or {}) do
+    if type(name) == "string" and not seen[name] then
+      seen[name] = true
+      n = n + 1
+      if isGuild(roster, name) then g = g + 1 end
+    end
+  end
+  return n > 0 and g > n / 2
+end
+
+-- The guild members a kill credits (confirmed names only), and whether it is a guild group: every
+-- report's own member list has a guild majority (a kill without reports: its member list).
 function Credit.GuildMembers(kill, roster)
-  local inUnion = 0
-  for _, n in ipairs(kill.members) do
-    if isGuild(roster, n) then inUnion = inUnion + 1 end
+  local majority = true
+  if type(kill.reports) == "table" and #kill.reports > 0 then
+    for _, r in ipairs(kill.reports) do
+      if not guildMajority(r.d and r.d.members, roster) then majority = false; break end
+    end
+  else
+    majority = guildMajority(kill.members, roster)
   end
   local list = {}
   for _, n in ipairs(kill.confirmed or {}) do
     if isGuild(roster, n) then list[#list + 1] = n end
   end
-  return list, inUnion > #kill.members / 2
+  return list, majority
 end
 
 local function clockOf(ctx)
@@ -182,7 +216,7 @@ end
 
 function Credit.Derive(list, ctx)
   local clock = clockOf(ctx)
-  local roster, profile = ctx and ctx.roster, ctx and ctx.profile
+  local roster, profile = ctx and ctx.roster, profileOf(ctx)
   local Scoring, Instances = ns.Scoring, ns.Instances
   local out, seen = {}, {}
 
@@ -226,7 +260,7 @@ function Credit.Derive(list, ctx)
     return list
   end
 
-  local clusters = Credit.Clusters(list)
+  local clusters = Credit.Clusters(list, profile)
   local covered = {}
   -- Pass 1: verified kills with a guild majority, in time order.
   for _, k in ipairs(clusters) do
@@ -271,9 +305,18 @@ end
 
 ns.Activity.RegisterDeriver("kill", Credit.Derive)
 
--- Reads the kill observations of ctx.observations; ctx: { observations, config?, compat?, now }.
+-- Reads the kill observations of ctx.observations; ctx: { observations, profile, config?, compat?, now }.
 local C = {}
 C.__index = C
+
+-- Bumped on ProfilesChanged: a newly linked char can verify a kill without a new observation.
+local profileGen = 0
+
+function Credit.ProfilesChanged()
+  profileGen = profileGen + 1
+end
+
+if ns.Events and ns.Events.On then ns.Events:On("ProfilesChanged", Credit.ProfilesChanged) end
 
 function Credit.new(ctx)
   return setmetatable({ ctx = ctx }, C)
@@ -281,16 +324,18 @@ end
 
 -- Index of verified kills by "<instance>|<server day>": leaders (leader or assistant) and members
 -- (confirmed names), each named by at least 2 of the kill's reporters. Cached per
--- observations.changes and tz; a store without a numeric `changes` is re-read on every call.
+-- observations.changes, tz and ProfilesChanged; a store without a numeric `changes` is re-read on
+-- every call.
 function C:_dayIndex()
   local ctx = self.ctx
   local obs = ctx.observations
   local tz = clockOf(ctx).tz
   local changes = obs and obs.changes
   local cache = self.cache
-  if not (cache and type(changes) == "number" and cache.changes == changes and cache.tz == tz) then
+  if not (cache and type(changes) == "number" and cache.changes == changes and cache.tz == tz
+      and cache.gen == profileGen) then
     local byDay, members, bosses = {}, {}, {}
-    for _, k in ipairs(Credit.Verified(obs and obs:List("kill") or {})) do
+    for _, k in ipairs(Credit.Verified(obs and obs:List("kill") or {}, profileOf(ctx))) do
       local key = k.instance .. "|" .. ns.Scoring.DayKey(k.at, tz)
       local set = byDay[key] or {}
       byDay[key] = set
@@ -302,7 +347,7 @@ function C:_dayIndex()
       bosses[key] = bset
       bset[k.encounter] = true
     end
-    cache = { changes = changes, tz = tz, byDay = byDay, members = members, bosses = bosses }
+    cache = { changes = changes, tz = tz, gen = profileGen, byDay = byDay, members = members, bosses = bosses }
     self.cache = cache
   end
   return cache
@@ -313,11 +358,11 @@ end
 -- = the longest `dur` its reports carry). A raid is cleared when every encounter in its bosses table
 -- has such a kill within one weekly reset period (Scoring.WeekStart); the entry is the kill that
 -- completed the set (its time and its guild members), and the set then starts again.
--- clock: a Scoring clock ({ tz, weekStart? }); defaults to { tz = 0 }.
-function Credit.Clears(kills, roster, clock)
+-- clock: a Scoring clock ({ tz, weekStart? }); defaults to { tz = 0 }. profile: as Clusters.
+function Credit.Clears(kills, roster, clock, profile)
   clock = clock or { tz = 0 }
   local out, covered = {}, {}
-  for _, k in ipairs(Credit.Verified(kills)) do
+  for _, k in ipairs(Credit.Verified(kills, profile)) do
     local entry, isFinal = ns.Instances.ByEncounter(k.encounter)
     local guild, majority = Credit.GuildMembers(k, roster)
     if majority and entry.kind == "dungeon" and isFinal then

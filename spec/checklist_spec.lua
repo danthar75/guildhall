@@ -22,6 +22,8 @@ describe("Groups Checklist", function()
     ConfigList = function() return {} end,
   }
 
+  -- every char "X-R" is linked to profile "pX" (the kill reporters "pA", "pB" own "A-R", "B-R")
+  local linked = { OwnerOf = function(_, n) return type(n) == "string" and ("p" .. n:match("^[^-]+")) or nil end }
   local killObs = {
     List = function(_, kind) if kind == "kill" then return kills end return {} end,
   }
@@ -40,7 +42,7 @@ describe("Groups Checklist", function()
     c.profile = {
       Id = function() return profileId end,
       IsExcluded = function() return false end,
-      OwnerOf = function() return nil end,
+      OwnerOf = linked.OwnerOf,
       OnlineChar = function() return nil end,
       CharsOf = function() return { char } end,
       set = { Get = function() return nil end },
@@ -81,7 +83,7 @@ describe("Groups Checklist", function()
   local function verifiedKill(at, leader, assists)
     for i, by in ipairs({ "pA", "pB" }) do
       seq = seq + 1
-      kills[#kills + 1] = { id = "k" .. seq, by = by, char = by .. "-R",
+      kills[#kills + 1] = { id = "k" .. seq, by = by, char = by:sub(2) .. "-R",
         d = { kind = "kill", instance = "mc", encounter = MC[1], at = at + i,
           members = { "A-R", "B-R", "Raider-R", leader }, leader = leader, assists = assists } }
     end
@@ -117,7 +119,7 @@ describe("Groups Checklist", function()
     cfgStore, obsStore, kills, clients = {}, {}, {}, {}
     items, unenchanted, zone = {}, {}, nil
     ns.Groups.Credit.Attach({ observations = killObs, config = nil, now = clock.now,
-      compat = { ServerOffset = function() return 0 end } })
+      compat = { ServerOffset = function() return 0 end }, profile = linked })
   end)
 
   -- The brief's six tests ------------------------------------------------------------------

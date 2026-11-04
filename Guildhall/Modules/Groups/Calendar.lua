@@ -122,7 +122,7 @@ function Calendar.Derive(list, ctx)
   end
   table.sort(items, function(a, b) return a.lk < b.lk end)
 
-  local kills = ns.Groups.Credit.Verified(ctx.observations and ctx.observations:List("kill") or {})
+  local kills = ns.Groups.Credit.Verified(ctx.observations and ctx.observations:List("kill") or {}, profile)
   table.sort(kills, function(a, b)
     if a.at ~= b.at then return a.at < b.at end
     return tostring(a.id) < tostring(b.id)

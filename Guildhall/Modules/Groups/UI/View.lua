@@ -286,7 +286,7 @@ local function guildLines()
   local out = {}
   local cfg = l.realConfig or l.config
   local clock = ns.Scoring.Clock(cfg, s and s.compat, D.Now())
-  for _, c in ipairs(ns.Groups.Credit.Clears(obs:List("kill"), s and s.roster, clock)) do
+  for _, c in ipairs(ns.Groups.Credit.Clears(obs:List("kill"), s and s.roster, clock, s and s.profile)) do
     local inst = ns.Instances.Get(c.instance)
     local text = Util.Escape(inst.short) .. " cleared by " .. namesText(c.names)
     if c.dur then text = text .. ", " .. math.floor(c.dur / 60 + 0.5) .. " min" end

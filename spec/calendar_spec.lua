@@ -19,6 +19,8 @@ describe("Groups Calendar", function()
     IsMember = function(_, n) return ranks[n] ~= nil end,
     ConfigList = function() return {} end,
   }
+  -- every char "X-R" is linked to profile "pX" (the kill reporters "pA", "pB" own "A-R", "B-R")
+  local linked = { OwnerOf = function(_, n) return type(n) == "string" and ("p" .. n:match("^[^-]+")) or nil end }
   local killObs = { List = function(_, kind) if kind == "kill" then return kills end return {} end }
   local function pid(char) return "p" .. char:match("^[^-]+") end
 
@@ -105,7 +107,7 @@ describe("Groups Calendar", function()
   local function verifiedKill(at, members, instance, encounter)
     for i, by in ipairs({ "pA", "pB" }) do
       seq = seq + 1
-      kills[#kills + 1] = { id = "k" .. seq, by = by, char = by .. "-R",
+      kills[#kills + 1] = { id = "k" .. seq, by = by, char = by:sub(2) .. "-R",
         d = { kind = "kill", instance = instance or "mc", encounter = encounter or 663, at = at + i,
           members = members or { "A-R", "B-R", "Raider-R" }, leader = "A-R", assists = {} } }
     end
@@ -138,7 +140,7 @@ describe("Groups Calendar", function()
     loaded = true
     cfgStore, obsStore, kills, clients, events = {}, {}, {}, {}, {}
     ns.Groups.Credit.Attach({ observations = killObs, config = nil, now = clock.now,
-      compat = { ServerOffset = function() return 0 end } })
+      compat = { ServerOffset = function() return 0 end }, profile = linked })
   end)
 
   -- Compat:GuildEvents ---------------------------------------------------------------------

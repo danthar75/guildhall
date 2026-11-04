@@ -52,9 +52,9 @@ end
 -- The ids are the cluster seed ids (Credit.Clusters): a late report older than the seed becomes the
 -- new seed and changes the id, which looks like a new kill. That only causes a spurious config sync
 -- restart, rate-limited like the rest, so it is harmless.
-local function verifiedIds(observations)
+local function verifiedIds(observations, profile)
   local ids = {}
-  for _, k in ipairs(ns.Groups.Credit.Verified(observations:List("kill"))) do
+  for _, k in ipairs(ns.Groups.Credit.Verified(observations:List("kill"), profile)) do
     if k.id ~= nil then ids[k.id] = true end
   end
   return ids
@@ -77,7 +77,7 @@ local function kick(g)
 end
 
 local function checkKills(g)
-  local ids, new = verifiedIds(g.observations), false
+  local ids, new = verifiedIds(g.observations, g.profile), false
   for id in pairs(ids) do
     if not g.verified[id] then new = true end
   end
@@ -142,7 +142,7 @@ local function build(n, s)
   G.Reminders.Defaults(personal)
   local db = n.DB.Module(GuildhallDB, s.guildKey, "Groups")
 
-  local g = { pending = {}, now = s.now, observations = observations, config = config }
+  local g = { pending = {}, now = s.now, observations = observations, config = config, profile = s.profile }
   -- timers of this module stop with a halt (or a rebuilt ns.groups)
   g.after = function(delay, cb)
     s.after(delay, function() if n.groups == g and not s.halted then cb() end end)
@@ -154,7 +154,8 @@ local function build(n, s)
     observations = observations, onChange = function() changed(g) end,
   })
   local kills = G.KillWatch.new({ compat = s.compat, observations = observations, now = s.now, after = g.after })
-  local creditCtx = { observations = observations, config = config, compat = s.compat, now = s.now }
+  local creditCtx = { observations = observations, config = config, compat = s.compat, now = s.now,
+    profile = s.profile }
   local credit = G.Credit.new(creditCtx)
   G.Credit.Attach(creditCtx)
   local svcCtx = { config = config, observations = observations, compat = s.compat, now = s.now,
@@ -168,7 +169,7 @@ local function build(n, s)
   })
   g.svc, g.kills, g.credit, g.checklist, g.flex, g.calendar, g.reminders =
     svc, kills, credit, checklist, flex, calendar, reminders
-  g.verified = verifiedIds(observations)
+  g.verified = verifiedIds(observations, s.profile)
   g.instance = s.compat:InstanceKey()
   n.groups = g
 

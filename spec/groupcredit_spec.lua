@@ -85,15 +85,15 @@ describe("Groups Credit", function()
 
   it("two profiles' reports pair; one report is not verified", function()
     local list = pair({}, "rfc", RFC_FINAL, FIVE, T0 + 10 * HOUR)
-    assert.equal(1, #Credit.Verified(list))
-    local v = Credit.Verified(list)[1]
+    assert.equal(1, #Credit.Verified(list, ctx.profile))
+    local v = Credit.Verified(list, ctx.profile)[1]
     assert.same({ "p1", "p2" }, v.reporters)
     assert.equal(T0 + 10 * HOUR, v.at)
     assert.same(FIVE, charsOf(derive(list), "groups.dungeon"))
 
     -- one report alone: an uncounted row for the reporter's own char only
     local single = { kill("p1", "rfc", RFC_FINAL, FIVE, T0 + 20 * HOUR) }
-    assert.equal(0, #Credit.Verified(single))
+    assert.equal(0, #Credit.Verified(single, ctx.profile))
     local out = derive(single)
     assert.equal(1, #out)
     assert.equal("A-R", out[1].char)
@@ -102,15 +102,15 @@ describe("Groups Credit", function()
 
     -- the same profile twice never verifies itself
     local twice = { kill("p1", "rfc", RFC_FINAL, FIVE, T0), kill("p1", "rfc", RFC_FINAL, FIVE, T0 + 20) }
-    assert.equal(0, #Credit.Verified(twice))
+    assert.equal(0, #Credit.Verified(twice, ctx.profile))
     assert.same({}, charsOf(derive(twice), "groups.dungeon"))
 
     -- too far apart, a different encounter, or fewer than 2 shared names: no pair
     local far = { kill("p1", "rfc", RFC_FINAL, FIVE, T0), kill("p2", "rfc", RFC_FINAL, FIVE, T0 + 601) }
-    assert.equal(0, #Credit.Verified(far))
+    assert.equal(0, #Credit.Verified(far, ctx.profile))
     local thin = { kill("p1", "rfc", RFC_FINAL, { "A-R", "B-R" }, T0),
       kill("p2", "rfc", RFC_FINAL, { "B-R", "C-R" }, T0 + 10) }
-    assert.equal(0, #Credit.Verified(thin))
+    assert.equal(0, #Credit.Verified(thin, ctx.profile))
   end)
 
   it("2 guild + 3 pugs at the last boss gives no credit even if 4 guild started", function()
@@ -258,14 +258,78 @@ describe("Groups Credit", function()
     assert.equal(3, lists)
   end)
 
-  it("one forged member list credits only the names another reporter confirms", function()
+  it("one forged member list can't make a pug a guild group: the honest list vetoes", function()
+    -- honest: 2 guild of 5. The forged list pads the union with guild names (5 guild of 8).
     local honest = kill("p2", "rfc", RFC_FINAL, { "B-R", "X-P", "Y-P", "Z-P", "C-R" }, T0)
     local fake = kill("p1", "rfc", RFC_FINAL, { "B-R", "C-R", "A-R", "D-R", "E-R" }, T0 + 5, { leader = "A-R" })
     local list = { honest, fake }
     local out = derive(list)
-    assert.same({ "B-R", "C-R" }, charsOf(out, "groups.dungeon"))
+    assert.same({}, charsOf(out, "groups.dungeon"))
+    assert.same({ "A-R", "B-R" }, charsOf(out, "groups.dungeon", false))
+    for _, c in ipairs(out) do assert.equal("not a guild group", c.why) end
+    assert.same({}, Credit.Clears(list, ctx.roster, nil, ctx.profile))
     ctx.observations = { changes = 1, List = function() return list end }
     assert.same({}, Credit.new(ctx):RaidLeaders("rfc", ns.Scoring.DayKey(T0, 0)))
+  end)
+
+  it("a guild group needs a guild majority in every report's own list", function()
+    local guild4 = { "A-R", "B-R", "C-R", "D-R", "X-P" }
+    -- both lists 4 guild of 5: counted
+    local list = pair({}, "rfc", RFC_FINAL, guild4, T0)
+    assert.same({ "A-R", "B-R", "C-R", "D-R" }, charsOf(derive(list), "groups.dungeon"))
+    local k = Credit.Verified(list, ctx.profile)[1]
+    assert.is_true(select(2, Credit.GuildMembers(k, ctx.roster)))
+    -- a third report whose own list is exactly half guild (a client that couldn't read some names):
+    -- not more than half, so the kill is not a guild group
+    list[#list + 1] = kill("p3", "rfc", RFC_FINAL, { "A-R", "B-R", "X-P", "Y-P" }, T0 + 60)
+    k = Credit.Verified(list, ctx.profile)[1]
+    assert.equal(3, #k.reports)
+    assert.is_false(select(2, Credit.GuildMembers(k, ctx.roster)))
+    assert.same({}, charsOf(derive(list), "groups.dungeon"))
+    -- duplicate names in a list count once
+    local dup = pair({}, "rfc", RFC_FINAL, { "A-R", "B-R", "X-P", "Y-P", "Z-P" }, T0 + DAY)
+    dup[2].d.members = { "A-R", "B-R", "A-R", "B-R", "A-R", "X-P", "Y-P", "Z-P" }
+    k = Credit.Verified(dup, ctx.profile)[1]
+    assert.is_false(select(2, Credit.GuildMembers(k, ctx.roster)))
+  end)
+
+  it("a report counts only from a linked profile that owns its char", function()
+    -- p9's char is not linked to any profile: its report can't pair with an honest one
+    local honest = kill("p1", "rfc", RFC_FINAL, FIVE, T0)
+    local ghost = { id = "g1", by = "p9", char = "Ghost-R",
+      d = { kind = "kill", instance = "rfc", encounter = RFC_FINAL, members = FIVE, at = T0 + 5 } }
+    assert.same({}, Credit.Verified({ honest, ghost }, ctx.profile))
+    assert.same({}, charsOf(derive({ honest, ghost }), "groups.dungeon"))
+    -- a made-up `by` on a char another profile owns
+    local stolen = { id = "g2", by = "p9", char = "B-R",
+      d = { kind = "kill", instance = "rfc", encounter = RFC_FINAL, members = FIVE, at = T0 + 5 } }
+    assert.same({}, Credit.Verified({ honest, stolen }, ctx.profile))
+    -- a report without a char
+    local nochar = { id = "g3", by = "p2",
+      d = { kind = "kill", instance = "rfc", encounter = RFC_FINAL, members = FIVE, at = T0 + 5 } }
+    assert.same({}, Credit.Verified({ honest, nochar }, ctx.profile))
+    -- without a profile service nothing verifies
+    assert.same({}, Credit.Verified(pair({}, "rfc", RFC_FINAL, FIVE, T0)))
+    -- honest linked reports still verify
+    local good = kill("p2", "rfc", RFC_FINAL, FIVE, T0 + 5)
+    assert.equal(1, #Credit.Verified({ honest, good }, ctx.profile))
+    assert.same(FIVE, charsOf(derive({ honest, good }), "groups.dungeon"))
+    -- RaidLeaders/Attendees ignore the unlinked report too
+    ctx.observations = { changes = 1, List = function() return { honest, ghost } end }
+    assert.same({}, Credit.new(ctx):Attendees("rfc", ns.Scoring.DayKey(T0, 0)))
+  end)
+
+  it("the Credit service re-reads verification when profiles change", function()
+    local list = pair({}, "rfc", RFC_FINAL, FIVE, T0)
+    ctx.observations = { changes = 1, List = function() return list end }
+    local linked = chars.p2
+    chars.p2 = nil
+    local credit = Credit.new(ctx)
+    local day = ns.Scoring.DayKey(T0, 0)
+    assert.same({}, credit:Attendees("rfc", day))
+    chars.p2 = linked
+    Credit.ProfilesChanged()
+    assert.is_true(credit:Attendees("rfc", day)["A-R"])
   end)
 
   it("refs don't change when a late, older report joins the cluster", function()
@@ -328,7 +392,7 @@ describe("Groups Credit", function()
     list[#list + 1] = kill("p3", "rfc", RFC_FINAL, FIVE, T0 + 3 * HOUR)     -- not verified
     pair(list, "rfc", RFC_FINAL, { "A-R", "B-R", "X-R", "Y-R", "Z-R" }, T0 + 4 * HOUR) -- no majority
     pair(list, "mc", 672, FIVE, T0 + 5 * HOUR)                              -- Ragnaros only: not a clear
-    local out = Credit.Clears(list, ctx.roster)
+    local out = Credit.Clears(list, ctx.roster, nil, ctx.profile)
     assert.equal(1, #out)
     assert.equal("strat_ud", out[1].instance)
     assert.equal(2520, out[1].dur)
@@ -343,7 +407,7 @@ describe("Groups Credit", function()
     for i = 1, 10 do pair(list, "mc", MC[i], FIVE, week2 + i * 600) end
     -- this week: all but one boss
     for i = 1, 9 do pair(list, "mc", MC[i], FIVE, T0 + i * 600) end
-    local out = Credit.Clears(list, ctx.roster, { tz = 0 })
+    local out = Credit.Clears(list, ctx.roster, { tz = 0 }, ctx.profile)
     assert.equal(1, #out)
     assert.equal("mc", out[1].instance)
     assert.equal(week2 + 6000, out[1].at)
