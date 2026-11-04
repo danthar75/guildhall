@@ -4,7 +4,7 @@
 
 A guild-helper addon for **World of Warcraft: Forever**. Its first feature is **Exchange**: an in-game LF / WTS board shared by everyone in your guild who runs Guildhall. Members can see who's buying and selling without alt-tabbing to Discord.
 
-Built by **Jon Roberts** ("Dor" in game) for the guild Emergence. It works in any guild.
+Built by **Dor** for the guild Emergence. It works in any guild.
 
 ## Install
 
@@ -55,7 +55,7 @@ Short version: a WoW addon is plain-text Lua that the game runs inside a sandbox
 
 ## How it was made
 
-Guildhall was designed, reviewed and tested by **Jon Roberts** ("Dor"), a senior software developer. Much of the code was written with **Claude** (Anthropic's AI assistant) as a coding assistant, working from Jon's design. It went through automated tests (`tools/check.sh`) and code review at every step. Built with Claude, reviewed by a human.
+Guildhall was designed, reviewed and tested by **Dor**, a senior software developer. Much of the code was written with **Claude** (Anthropic's AI assistant) as a coding assistant, working from Dor's design. It went through automated tests (`tools/check.sh`) and code review at every step. Built with Claude, reviewed by a human.
 
 ## Development
 

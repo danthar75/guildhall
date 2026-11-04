@@ -4,7 +4,7 @@
 ## IconTexture: Interface\AddOns\Guildhall\Media\Logo
 ## SavedVariables: GuildhallDB
 ## Version: 0.1.0
-## Author: Jon Roberts (Dor)
+## Author: Dor
 ## Notes: Guild exchange board (LF/WTS) shared with your guild. Built with Claude, reviewed by a human.
 
 Core/Init.lua

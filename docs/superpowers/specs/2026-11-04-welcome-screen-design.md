@@ -3,8 +3,8 @@
 Status: agreed in chat on 2026-11-04. It is built as the last step of the Leaderboard v1 branch.
 
 Labels:
-- **(user)**: Jon decided it.
-- **(my call)**: Claude decided it; Jon can override.
+- **(user)**: Dor decided it.
+- **(my call)**: Claude decided it; Dor can override.
 
 ## When it shows
 - **First open (user).** It appears the first time the Guildhall window is opened on an account. It opens on top of the window.
@@ -37,7 +37,7 @@ The same information is always available in an **About** tab, the last tab after
   - **The count creeps up with every update (user).** Let `n` be the number of released versions up to the current one: the count of `WhatsNew.lua` entries with a version ≤ the installed one, with the first release as 0. Then `lo = 10 + 2n` and `hi = 20 + 3n`, so 0.1.0 reads 10 or 20, the next release 12 or 23, then 14 or 26 (my call on the step size).
   - An entry may set `gnomes = { lo, hi }` to override the count for a special occasion (my call).
   - Every release therefore gets a `WhatsNew.lua` entry, even one with no news (`lines = {}`) that doesn't reopen the screen, so the count still moves.
-- **Credit (user):** "Made by Jon Roberts (Dor in game), a real-life senior software developer. Built with Claude, reviewed by a human." The "real-life senior software developer" wording is there to reassure players that a professional reviewed the code (user).
+- **Credit (user):** "Made by Dor, a real-life senior software developer. Built with Claude, reviewed by a human." The "real-life senior software developer" wording is there to reassure players that a professional reviewed the code (user).
 - **Buttons:** Close. Esc also closes it.
 
 ## Data

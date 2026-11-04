@@ -1,6 +1,6 @@
 # Guildhall: Guild Leaderboard v1 (design)
 
-Status: draft for review, 2026-11-04. Author: Claude, from conversation with Jon Roberts ("Dor").
+Status: draft for review, 2026-11-04. Author: Claude, from conversation with Dor.
 
 Related:
 - Parent design: `2026-11-02-guildhall-exchange-design.md` (core, Exchange, sync, trust model). Everything there still holds unless this document says otherwise.
@@ -275,7 +275,7 @@ Notes:
 ## Open questions for the user (to settle before planning)
 
 1. ~~What the UI may show~~. Decided: totals for everyone, your own breakdown for you, and everyone's breakdown for officers. See UI, and Privacy and trust.
-2. ~~Testing~~. Decided: Jon has several WoW accounts and will run two clients in the new Emergence guild on Forever. Pairing (trades, CoD, witnesses) and the bank log can therefore be tested in game, as soon as the guild has a bank tab. Simulated tests still cover every rule, so the build doesn't wait on the game. The in-game checks are listed in `docs/testing/forever-launch.md`.
+2. ~~Testing~~. Decided: Dor has several WoW accounts and will run two clients in the new Emergence guild on Forever. Pairing (trades, CoD, witnesses) and the bank log can therefore be tested in game, as soon as the guild has a bank tab. Simulated tests still cover every rule, so the build doesn't wait on the game. The in-game checks are listed in `docs/testing/forever-launch.md`.
 
 ## Next module: contests (shapes this build)
 

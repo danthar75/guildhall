@@ -2,7 +2,7 @@
 
 What to test when WoW Forever goes live. Split by whether you can test it on one account or need a second Guildhall client in the guild.
 
-**Plan (user):** the guild is created at launch. Jon runs a second WoW account in the same guild as the "other tester", so everything here can be done without outside help. The goal is to finish within 12 hours of launch, but it isn't a rush at the moment of launch.
+**Plan (user):** the guild is created at launch. Dor runs a second WoW account in the same guild as the "other tester", so everything here can be done without outside help. The goal is to finish within 12 hours of launch, but it isn't a rush at the moment of launch.
 - Run both clients at once, each with a character in the guild and Guildhall installed.
 - The guild master (rank 0) counts as an officer. To test non-officer views, put the second account's character at a low rank.
 Full step-by-step details for each item are in `in-game-checklist.md`; this file is the short list and the order to do it in.
@@ -13,7 +13,7 @@ New files (like the logo) need a full game restart, not just `/reload`.
 ## Order on launch night
 
 1. Solo: **Loading**, then your half of `/gh names` (save the output).
-2. On the second account: the other half of `/gh names`. **This is the release blocker.** If it passes, the first release can go out (Jon confirms first).
+2. On the second account: the other half of `/gh names`. **This is the release blocker.** If it passes, the first release can go out (Dor confirms first).
 3. Everything else below, in any order.
 
 ## Solo (no other testers needed)

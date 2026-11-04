@@ -10,7 +10,7 @@ local Welcome = {}
 UI.Welcome = Welcome
 
 local WIDTH = 440
-local CREDIT = "Made by Jon Roberts (Dor in game), a real-life senior software developer. Built with Claude, reviewed by a human."
+local CREDIT = "Made by Dor, a real-life senior software developer. Built with Claude, reviewed by a human."
 local GNOME = "No gnomes were harmed during the creation of this add-on. I mean, no more than %d or %d so almost none."
 
 -- The installed version, from the TOC; falls back to the newest WhatsNew entry.
