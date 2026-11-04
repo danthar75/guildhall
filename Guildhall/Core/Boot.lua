@@ -13,6 +13,7 @@ local compat = ns.compat
 local frame = CreateFrame("Frame")
 local handlers = {}
 local booted, resolving, noGuildNotified = false, false, false
+local halted = false -- guild changed or left mid-session: services stopped until /reload
 local profileSync
 
 local function after(d, cb)
@@ -174,16 +175,62 @@ local function buildServices(guildKey)
   }
 end
 
+-- Guild change -----------------------------------------------------------------------
+
+-- Compares the current guild with the one we booted for. Returns "same", "changed" (with the
+-- new key), "left" (no guild, readable) or "unknown" (no guild while restricted: the name
+-- may just be secret, so never act on it).
+function Boot.GuildState(c, bootedKey)
+  local key = c:GuildKey()
+  if key == bootedKey then return "same" end
+  if key ~= nil then return "changed", key end
+  if c:IsRestricted("Chat") or c:IsRestricted("Map") then return "unknown" end
+  return "left"
+end
+
+-- Stops serving the old guild: no sync, no answers, no writes into its stores. A full rebuild
+-- for the new guild is left to /reload.
+local function halt(state, newKey)
+  if halted then return end
+  halted = true
+  local s = ns.services
+  if s and s.comm then s.comm:Halt() end
+  profileSync = nil
+  ns.exchange = nil
+  if state == "changed" then
+    print("|cffffd200Guildhall|r: you changed guild. Type /reload to switch Guildhall to "
+      .. ns.Util.DisplayName(newKey) .. ".")
+  else
+    print("|cffffd200Guildhall|r: you left your guild, so Guildhall has stopped. Type /reload to reset it.")
+  end
+  refreshUI()
+end
+
+-- Guild info can be briefly empty while it reloads, so a mismatch is confirmed 2 s later.
+local guildCheckPending = false
+local function checkGuild()
+  if halted or not booted or guildCheckPending then return end
+  local bootedKey = ns.services.guildKey
+  local state = Boot.GuildState(compat, bootedKey)
+  if state == "same" or state == "unknown" then return end
+  guildCheckPending = true
+  after(2, function()
+    guildCheckPending = false
+    local again, key = Boot.GuildState(compat, bootedKey)
+    if again == "changed" or again == "left" then halt(again, key) end
+  end)
+end
+
 -- Restriction lift -----------------------------------------------------------------
 
 local liftPending = false
 local function onRestrictionLifted()
-  if liftPending then return end
+  if liftPending or halted then return end
   liftPending = true
   after(0.5, function()
     liftPending = false
     local s = ns.services
-    if not s then return end
+    if not s or halted then return end
     s.comm:Pump()
     if profileSync then
       local ok, err = pcall(profileSync.Start, profileSync)
@@ -287,10 +334,13 @@ local function onRosterUpdate()
     if resolving then attemptNow() else tryResolve() end
     return
   end
+  if halted then return end
+  checkGuild()
   if rosterPending then return end
   rosterPending = true
   after(1, function()
     rosterPending = false
+    if halted then return end
     suppressRosterRequest = true
     local ok, err = pcall(ns.services.roster.Refresh, ns.services.roster)
     suppressRosterRequest = false
@@ -335,7 +385,9 @@ end
 
 handlers.PLAYER_ENTERING_WORLD = function()
   -- Zoning (e.g. leaving an instance): refresh the roster; or retry the guild lookup.
+  if halted then return end
   if booted then
+    checkGuild()
     ns.services.roster:Refresh()
     refreshUI()
   else
@@ -347,7 +399,7 @@ handlers.GUILD_ROSTER_UPDATE = onRosterUpdate
 handlers.PLAYER_GUILD_UPDATE = onRosterUpdate
 
 handlers.CHAT_MSG_ADDON = function(prefix, msg, channel, sender)
-  if not booted then return end
+  if not booted or halted then return end
   ns.services.comm:Receive(prefix, msg, channel, sender)
 end
 

@@ -184,4 +184,24 @@ describe("Comm", function()
     deliver(line)
     assert.same({ 7 }, got)
   end)
+  it("Halt drops the queue and makes Send, Pump and Receive no-ops (I3)", function()
+    restricted = 1 -- lockdown: lines stay queued
+    comm:Send("m", "k", { x = 1 })
+    assert.equal(1, comm:Pending())
+    local got = 0
+    comm:On("m", "k", function() got = got + 1 end)
+    comm:Halt()
+    assert.equal(0, comm:Pending())
+    restricted = 0
+    assert.is_false(comm:Send("m", "k", { x = 2 }))
+    comm:Pump()
+    clock.advance(10); timers.run(clock)
+    assert.equal(0, #sent)
+    local other = mk({ playerName = "Other-Realm" })
+    local lines = {}
+    env.C_ChatInfo.SendAddonMessage = function(p, m) lines[#lines + 1] = m; return 0 end
+    other:Send("m", "k", { x = 3 })
+    deliver(lines[1])
+    assert.equal(0, got)
+  end)
 end)

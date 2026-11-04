@@ -42,6 +42,14 @@ end
 
 function Comm:Pending() return self.tail - self.head + 1 end
 
+-- Stops this Comm for good (guild changed mid-session): queued lines are dropped and
+-- Send, Pump and Receive do nothing from now on.
+function Comm:Halt()
+  self.halted = true
+  self.queue, self.head, self.tail = {}, 1, 0
+  self.assembly = {}
+end
+
 function Comm:_push(line)
   self.tail = self.tail + 1
   self.queue[self.tail] = line
@@ -60,6 +68,7 @@ function Comm:_pop()
 end
 
 function Comm:Send(module, kind, payload)
+  if self.halted then return false end
   local body = ns.Serialize.Encode({ pv = 1, m = module, k = kind, p = payload })
   local size = self.maxBytes - HEADER_RESERVE
   local n = math.max(1, math.ceil(#body / size))
@@ -86,6 +95,7 @@ function Comm:_schedule(delay)
 end
 
 function Comm:Pump()
+  if self.halted then return end
   self:_expire()
   local t = self.now()
   self.tokens = math.min(self.burst, self.tokens + (t - self.lastRefill) * self.refill)
@@ -121,6 +131,7 @@ function Comm:_expire()
 end
 
 function Comm:Receive(prefix, msg, channel, sender)
+  if self.halted then return end
   local compat = self.compat
   prefix, msg, channel, sender = compat:Safe(prefix), compat:Safe(msg), compat:Safe(channel), compat:Safe(sender)
   if type(prefix) ~= "string" or type(msg) ~= "string" or type(channel) ~= "string" or type(sender) ~= "string" then
