@@ -95,7 +95,7 @@ local function rows(d, ref, at, counted, why, sides)
   local out = {}
   local function add(type_, profile, value)
     out[#out + 1] = { type = type_, profile = profile, value = value, at = at, item = d.item,
-      ref = ref, counted = counted, why = why }
+      ref = ref, counted = counted, why = why, listing = d.listing }
   end
   if sides.seller then
     add("exchange.sales", d.seller, 1)
@@ -162,3 +162,36 @@ local function derive(kind)
 end
 
 for kind in pairs(PAIR_WINDOW) do ns.Activity.RegisterDeriver(kind, derive(kind)) end
+
+-- A listing counts once for its owner when a non-owner witnessed it, or when it ended in a
+-- paired deal (ctx.observations, when present, supplies the deal observations).
+local function listingOwner(id)
+  return type(id) == "string" and id:match("^(.+):%d+$") or nil
+end
+
+ns.Activity.RegisterDeriver("witness", function(list, ctx)
+  local out, done = {}, {}
+  local function add(listing, owner, at)
+    if done[listing] then return end
+    done[listing] = true
+    out[#out + 1] = { type = "exchange.listings", profile = owner, value = 1, at = at,
+      ref = "listing:" .. listing, counted = true }
+  end
+  for _, rec in ipairs(list) do
+    local d = rec.d
+    if type(d) == "table" and type(d.listing) == "string" and type(d.owner) == "string"
+        and type(d.at) == "number" and rec.by ~= d.owner then
+      add(d.listing, d.owner, d.at)
+    end
+  end
+  local obs = ctx and ctx.observations
+  if obs then
+    for kind in pairs(PAIR_WINDOW) do
+      for _, c in ipairs(ns.Activity.Deriver(kind)(obs:List(kind), ctx)) do
+        local owner = c.counted and listingOwner(c.listing)
+        if owner and c.profile == owner then add(c.listing, owner, c.at) end
+      end
+    end
+  end
+  return out
+end)

@@ -7,7 +7,9 @@ describe("Exchange", function()
     for _, f in ipairs({ "Util", "DB", "ReplicatedSet", "Sync", "Log", "Profile" }) do
       loadAddonFile(ns, "Guildhall/Core/" .. f .. ".lua")
     end
-    for _, f in ipairs({ "Listing", "Format", "MailDrafts", "Exchange" }) do
+    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Observations.lua")
+    for _, f in ipairs({ "Listing", "Format", "MailDrafts", "Deals", "Exchange" }) do
       loadAddonFile(ns, "Guildhall/Modules/Exchange/" .. f .. ".lua")
     end
     return ns
@@ -45,11 +47,17 @@ describe("Exchange", function()
     n.logStore = {}
     n.log = ns.Log.new(n.logStore, clock.now, function() return "" end)
     n.moduleDb = {}
-    n.ex = ns.Exchange.Create({
-      compat = compat, comm = bus:join(name), now = clock.now, after = timers.after,
+    local comm = bus:join(name)
+    local ctx = {
+      compat = compat, comm = comm, now = clock.now, after = timers.after,
       random = function(lo) return lo end, log = n.log, roster = n.roster, profile = n.profile,
       playerChar = name, moduleDb = n.moduleDb,
-    })
+    }
+    n.obs = ns.Observations.New({ comm = comm, now = clock.now, after = timers.after,
+      random = function(lo) return lo end, log = n.log, roster = n.roster, profile = n.profile,
+      playerChar = name, db = {} })
+    ctx.observations = n.obs
+    n.ex = ns.Exchange.Create(ctx)
     nodes[name] = n
     return n
   end
@@ -376,5 +384,106 @@ describe("Exchange", function()
     assert.equal("Exchange", ns.reg.def.tab.title)
     ns.reg.def.OnLogin(ns)
     assert.is_nil(ns.exchange)
+  end)
+  describe("manual deals and witnesses", function()
+    local LINK = "|Hitem:2589::|h[Linen Cloth]|h"
+    local function wts(n, kind) return post(n, { kind = kind or "WTS", item = LINK, qty = 20, mats = false, cod = false }) end
+    local function ids(n) return n.profile:Id() end
+    local function derive(n)
+      local out = {}
+      for _, kind in ipairs({ "manual" }) do
+        for _, c in ipairs(n.ns.Activity.Deriver(kind)(n.obs:List(kind), {})) do out[#out + 1] = c end
+      end
+      return out
+    end
+
+    it("RecordDeal on someone else's listing with me as partner works; a third party is refused", function()
+      local a, b, c = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 }), node("Cy-Realm", { id = 3 })
+      local rec = wts(a)
+      local ok, o = b.ex:RecordDeal(rec.id, ids(a), 20, 50000)
+      assert.is_true(ok, tostring(o))
+      assert.equal("manual", o.d.kind)
+      assert.equal(ids(a), o.d.seller); assert.equal(ids(b), o.d.buyer)
+      assert.equal(2589, o.d.item)
+      local ok2, why = c.ex:RecordDeal(rec.id, ids(b), 20, 50000)
+      assert.is_false(ok2); assert.is_string(why)
+      assert.is_false((b.ex:RecordDeal(rec.id, ids(b), 20, 50000)))
+      assert.is_false((b.ex:RecordDeal(rec.id, ids(a), 0, 50000)))
+      assert.is_false((b.ex:RecordDeal(rec.id, ids(a), 20, -1)))
+      assert.is_false((b.ex:RecordDeal(rec.id, ids(a), 20, 1.5)))
+      assert.is_false((b.ex:RecordDeal("nope", ids(a), 20, 5)))
+      -- an LF listing: the owner buys
+      local lf = wts(a, "LF")
+      local _, o2 = b.ex:RecordDeal(lf.id, ids(a), 5, 100)
+      assert.equal(ids(b), o2.d.seller); assert.equal(ids(a), o2.d.buyer)
+    end)
+
+    it("confirmation queue lists it for the partner only, and confirming pairs it", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local rec = wts(a)
+      assert.is_true(b.ex:RecordDeal(rec.id, ids(a), 20, 50000))
+      assert.equal(0, #b.ex:PendingConfirmations())
+      local q = a.ex:PendingConfirmations()
+      assert.equal(1, #q)
+      assert.equal(rec.id, q[1].listing.id)
+      for _, c in ipairs(derive(a)) do assert.is_false(c.counted) end
+      assert.is_true(a.ex:ConfirmDeal(q[1].obs.id))
+      assert.equal(0, #a.ex:PendingConfirmations())
+      local counted = 0
+      for _, c in ipairs(derive(b)) do if c.counted then counted = counted + 1 end end
+      assert.equal(4, counted)
+    end)
+
+    it("decline hides it", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local rec = wts(a)
+      b.ex:RecordDeal(rec.id, ids(a), 20, 50000)
+      local q = a.ex:PendingConfirmations()
+      a.ex:DeclineDeal(q[1].obs.id)
+      assert.equal(0, #a.ex:PendingConfirmations())
+      assert.is_true(a.moduleDb.declined[q[1].obs.id])
+    end)
+
+    it("a 25 h old listing gets one witness from a non-owner; the owner's client doesn't witness", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local rec = wts(a)
+      clock.advance(25 * 3600)
+      a.ex:Start()
+      assert.equal(0, #a.obs:List("witness"))
+      b.ex:Start()
+      local w = b.obs:List("witness")
+      assert.equal(1, #w)
+      assert.equal(rec.id, w[1].d.listing); assert.equal(ids(a), w[1].d.owner)
+      assert.equal(rec.t, w[1].d.at)
+      b.ex:Start(); b.ex:_witness()
+      assert.equal(1, #b.obs:List("witness"))
+    end)
+
+    it("a 23 h old listing gets no witness", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      wts(a)
+      clock.advance(23 * 3600)
+      b.ex:Start()
+      assert.equal(0, #b.obs:List("witness"))
+    end)
+
+    it("a listing with both a witness and a deal counts once", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local rec = wts(a)
+      b.ex:RecordDeal(rec.id, ids(a), 20, 50000)
+      a.ex:ConfirmDeal(a.ex:PendingConfirmations()[1].obs.id)
+      local function count(n)
+        local k = 0
+        for _, c in ipairs(n.ns.Activity.Deriver("witness")(n.obs:List("witness"), { observations = n.obs })) do
+          if c.type == "exchange.listings" then k = k + 1; assert.equal(ids(a), c.profile) end
+        end
+        return k
+      end
+      assert.equal(1, count(b))   -- deal alone
+      clock.advance(25 * 3600)
+      b.ex:Start()
+      assert.equal(1, #b.obs:List("witness"))
+      assert.equal(1, count(b))   -- deal plus witness
+    end)
   end)
 end)

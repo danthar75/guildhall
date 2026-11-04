@@ -28,8 +28,12 @@ function ns.Exchange.Create(ctx)
   db.listings = db.listings or {}
   db.imported = db.imported or {}
   db.drafts = db.drafts or {}
+  db.declined = db.declined or {}
   self.db = db
-  self.listings = ns.ReplicatedSet.new(SET_NAME, db.listings, { now = ctx.now, onChange = changed })
+  self.listings = ns.ReplicatedSet.new(SET_NAME, db.listings, { now = ctx.now, onChange = function()
+    changed()
+    if self.started then self:_witness() end
+  end })
   self.imported = ns.ReplicatedSet.new("exchange.imported", db.imported, { now = ctx.now, onChange = changed })
   self.drafts = MailDrafts.new(db.drafts)
 
@@ -85,6 +89,8 @@ function Ex:Start()
   self.listings:Purge()
   self.imported:Purge()
   self.sync:Start()
+  self.started = true
+  self:_witness()
 end
 
 function Ex:_gate()
@@ -158,6 +164,110 @@ function Ex:OfficerRemove(id)
   local status = self.sync:Publish(new)
   if status ~= "accepted" then return false, status end
   return true, new
+end
+
+local CONFIRM_WINDOW = 1209600   -- a manual deal waits this long for the other side (14 days)
+local WITNESS_AGE = 86400        -- a listing must be this old before anyone witnesses it
+
+local function dealKey(d)
+  return table.concat({ d.listing, tostring(d.item), d.count, d.copper, d.seller, d.buyer }, "|")
+end
+
+-- Records a deal done by hand (no trade window or CoD mail) on one of the listings. The other
+-- side confirms it later; until then it is unpaired. Returns true, record or false, reason.
+function Ex:RecordDeal(listingId, partner, count, copper)
+  local err = self:_gate()
+  if err then return false, err end
+  local me = self.profile:Id()
+  if type(partner) ~= "string" or partner == "" then return false, "no partner" end
+  if partner == me then return false, "partner is you" end
+  if type(count) ~= "number" or count < 1 or count ~= math.floor(count) then return false, "bad count" end
+  if type(copper) ~= "number" or copper < 0 or copper ~= math.floor(copper) then return false, "bad amount" end
+  local rec = self.listings:Get(listingId)
+  if not rec or type(rec.d) ~= "table" then return false, "unknown listing" end
+  if rec.by ~= me and rec.by ~= partner then return false, "neither of you owns that listing" end
+  local item = ns.Util.ItemIdFromLink(rec.d.item)
+  if not item then return false, "bad listing" end
+  local obs = self.ctx.observations
+  if not obs then return false, "unavailable" end
+  local weSell = (rec.d.kind == "WTS") == (rec.by == me)
+  local transfer = { me = me, partner = partner, at = self.now(),
+    give = weSell and { { id = item, n = count } } or {}, get = weSell and {} or { { id = item, n = count } },
+    giveCopper = weSell and 0 or copper, getCopper = weSell and copper or 0 }
+  local status, o = obs:Publish(ns.Exchange.Deals.Observation("manual", rec, transfer))
+  if status ~= "accepted" then return false, status end
+  return true, o
+end
+
+-- Manual observations from the other party that name me and still wait for my side.
+function Ex:PendingConfirmations()
+  local out = {}
+  local obs = self.ctx.observations
+  if not obs then return out end
+  local me, now = self.profile:Id(), self.now()
+  local mine = {}
+  local list = obs:List("manual")
+  for _, rec in ipairs(list) do
+    if rec.by == me and type(rec.d) == "table" then mine[dealKey(rec.d)] = true end
+  end
+  for _, rec in ipairs(list) do
+    local d = rec.d
+    if rec.by ~= me and type(d) == "table" and (d.seller == me or d.buyer == me)
+        and (rec.by == d.seller or rec.by == d.buyer) and type(d.at) == "number"
+        and now - d.at <= CONFIRM_WINDOW and not self.db.declined[rec.id] and not mine[dealKey(d)] then
+      local listing = self:Get(d.listing)
+      if listing then out[#out + 1] = { obs = rec, listing = listing } end
+    end
+  end
+  return out
+end
+
+function Ex:ConfirmDeal(obsId)
+  local err = self:_gate()
+  if err then return false, err end
+  for _, p in ipairs(self:PendingConfirmations()) do
+    if p.obs.id == obsId then
+      local d = ns.Util.DeepCopy(p.obs.d)
+      d.at = self.now()
+      local status = self.ctx.observations:Publish(d)
+      if status ~= "accepted" then return false, status end
+      return true
+    end
+  end
+  return false, "nothing to confirm"
+end
+
+function Ex:DeclineDeal(obsId)
+  if type(obsId) ~= "string" then return false end
+  self.db.declined[obsId] = true
+  changed()
+  return true
+end
+
+-- Publishes one witness observation for each listing a day old or more that someone else
+-- posted, once no witness exists in the observation set (so never twice, even after a reload).
+function Ex:_witness()
+  local obs = self.ctx.observations
+  if not obs or self:_gate() then return end
+  local now, seen = self.now(), nil
+  for _, rec in ipairs(self.listings:List(false)) do
+    local d = rec.d
+    if rec.del ~= true and rec.exp > now and type(d) == "table" and not self.profile:IsMine(rec.by) then
+      local created = type(d.created) == "number" and d.created or rec.t
+      if now - created >= WITNESS_AGE then
+        if not seen then
+          seen = {}
+          for _, w in ipairs(obs:List("witness")) do
+            if type(w.d) == "table" then seen[w.d.listing] = true end
+          end
+        end
+        if not seen[rec.id] then
+          seen[rec.id] = true
+          obs:Publish({ kind = "witness", listing = rec.id, owner = rec.by, at = created })
+        end
+      end
+    end
+  end
 end
 
 function Ex:Get(id)
