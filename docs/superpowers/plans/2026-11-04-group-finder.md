@@ -107,6 +107,7 @@
 - **Calendar signups come from the player's own client only.** It publishes its own status, and it does so outside instances.
 - **Guild membership in a snapshot** is decided by the deriving client's roster (`Roster:IsMember(name)`, added in Task 2). The reporter's own count is not trusted.
 - **Post notes** are at most 120 characters. The key item is an item id, or a typed name of at most 64 characters.
+- **Raid boss kills are deduplicated per lockout week**, per player and encounter. The weekly lockout allows one kill per boss, so a second report (from an alt raid, or after a reset) can't double it. *Cost:* none on normal raids.
 - **The leaderboard needs no change.** The new types appear on its board picker automatically, through `Activity.Types()`.
 
 ## Review Focus
