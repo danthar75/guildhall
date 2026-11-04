@@ -67,6 +67,14 @@ describe("Log", function()
       "  before: n=1 name=Old\n  after: n=2 name=New", out)
   end)
 
+  it("Export prints a plain list (e.g. profile chars) as names, not 1=...", function()
+    log:Add({ action = "profile-link", result = "accepted", id = "p1", v = 1, author = "p1",
+      after = { "Alice-Realm", "Bob-Realm" } })
+    local out = log:Export(log:Query())
+    local tail = "\n  after: Alice-Realm, Bob-Realm"
+    assert.equal(tail, out:sub(-#tail))
+  end)
+
   it("Export omits absent optionals and does not raise on odd types", function()
     log:Add({ action = "x", result = "ignored" })
     local out = log:Export(log:Query())

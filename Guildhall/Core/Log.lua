@@ -73,6 +73,17 @@ end
 
 local function fields(d)
   if type(d) ~= "table" then return str(d) end
+  -- A plain list (profile chars) reads better as names than as 1=... 2=...
+  local n = #d
+  if n > 0 then
+    local count = 0
+    for _ in pairs(d) do count = count + 1 end
+    if count == n then
+      local names = {}
+      for i = 1, n do names[i] = type(d[i]) == "table" and "{...}" or tostring(d[i]) end
+      return table.concat(names, ", ")
+    end
+  end
   local keys = {}
   for k in pairs(d) do keys[#keys + 1] = k end
   table.sort(keys, function(a, b)
