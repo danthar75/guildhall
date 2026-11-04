@@ -2,7 +2,7 @@
 describe("Leaderboard.View", function()
   local fakes = require("spec.helpers.fakes")
   local ns, W, view, texts, buttons, picked, errors, result, officer, hidden, month, timers, handlers, popups
-  local retaken
+  local retaken, retakeResult, retakeErr
   local NOW = 1699999999 -- 2023-11-14 21:33 UTC
   local GLOBALS = { "CreateFrame", "StaticPopup_Show", "StaticPopupDialogs" }
   local saved = {}
@@ -17,6 +17,7 @@ describe("Leaderboard.View", function()
     popups = {}
     _G.StaticPopup_Show = function(which, text, _, data) popups[#popups + 1] = { which, text, data } end
     texts, buttons, errors, timers, handlers, picked, retaken = {}, {}, {}, {}, {}, nil, nil
+    retakeResult, retakeErr = true, nil
     officer, hidden, month = false, {}, nil
     ns = {}
     loadAddonFile(ns, "Guildhall/Core/Util.lua")
@@ -34,7 +35,7 @@ describe("Leaderboard.View", function()
         return res
       end,
       Text = function(_, _, text)
-        local t = W.new("FontString"); t.text = text; texts[#texts + 1] = t; return t
+        local t = W.new("FontString"); t.text = text; t.shown = true; texts[#texts + 1] = t; return t
       end,
       Button = function(_, text, _, onClick)
         local b = W.new("Button"); b.onClick = onClick; buttons[text] = b; b.text = text; return b
@@ -44,6 +45,8 @@ describe("Leaderboard.View", function()
       end,
     }
     ns.Activity.Register({ id = "exchange.sales", label = "Sales", unit = "count", verify = "paired", weight = 5, order = 20 })
+    ns.Activity.Register({ id = "exchange.purchases", label = "Purchases", unit = "count", verify = "paired", weight = 5, order = 30 })
+    ns.Activity.Register({ id = "bank.items", label = "Bank items", unit = "items", verify = "paired", weight = 0.05, order = 70 })
     ns.Activity.Register({ id = "exchange.gold.earned", label = "Gold earned", unit = "gold", verify = "paired", weight = 0.1, order = 40 })
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/UI/View.lua")
 
@@ -76,7 +79,7 @@ describe("Leaderboard.View", function()
         Tz = function() return 0 end,
         Months = function() return month and { "2023-10" } or {} end,
         Month = function(_, ym) return ym == "2023-10" and month or nil end,
-        RetakeMonth = function(_, ym) retaken = ym; return true end,
+        RetakeMonth = function(_, ym) retaken = ym; return retakeResult, retakeErr end,
       },
     }
     local parent = W.new("Frame")
@@ -90,11 +93,11 @@ describe("Leaderboard.View", function()
   end)
 
   local function has(s)
-    for _, t in ipairs(texts) do if t.text == s then return true end end
+    for _, t in ipairs(texts) do if t.text == s and t.shown then return true end end
     return false
   end
   local function hasLike(s)
-    for _, t in ipairs(texts) do if type(t.text) == "string" and t.text:find(s, 1, true) then return true end end
+    for _, t in ipairs(texts) do if t.shown and type(t.text) == "string" and t.text:find(s, 1, true) then return true end end
     return false
   end
   local function click(w)
@@ -160,7 +163,7 @@ describe("Leaderboard.View", function()
       }
       hidden.p2 = true
       view:Refresh()
-      buttons["Past months ▾"].onClick()
+      buttons["Past months"].onClick()
       picked.onPick("2023-10")
     end)
 
@@ -213,6 +216,97 @@ describe("Leaderboard.View", function()
     assert.equal("3", view.rows[3].rank.text) -- ranks are over the listed profiles
     assert.is_true(has("Gold kept in the guild this month: 4,312 g"))
     assert.is_false(has("(hidden)"))
+  end)
+
+  it("uses ASCII for pickers and section headers", function()
+    assert.is_true(has("Board: Overall") or buttons["Board: Overall"] ~= nil or view.boardBtn.text == "Board: Overall")
+    assert.equal("Board: Overall", view.boardBtn.calls.SetText[#view.boardBtn.calls.SetText][1])
+    click(view.pinned)
+    assert.is_true(hasLike("- Sales (1)"))
+    assert.is_true(hasLike("+ Not counted (1)"))
+    for _, t in ipairs(texts) do
+      if type(t.text) == "string" then assert.is_falsy(t.text:find("[\226-\244]")) end
+    end
+  end)
+
+  it("clears stale list text when the selection changes", function()
+    click(view.pinned)
+    assert.is_true(hasLike("Runecloth"))
+    click(view.rows[1])
+    assert.is_false(hasLike("Runecloth"))
+  end)
+
+  it("shows your own unranked score of 0 when you have no entry", function()
+    result.byProfile.p14 = nil
+    view:Refresh()
+    assert.is_true(has("Your score: 0 points"))
+    assert.is_true(hasLike("Not counted (1)"))
+    assert.is_false(hasLike("#1  Thalwyn"))
+    click(view.rows[1])
+    assert.is_true(has("#1  Thalwyn"))
+  end)
+
+  it("a past month shows no online dot or status", function()
+    month = { month = "2023-10", from = 1, to = 2, goldKept = 0, savedBy = "Dor-Realm", savedAt = 1696464000,
+      overall = { { profile = "p1", name = "Thalwyn-Realm", value = 412, rank = 1 } }, boards = {} }
+    view:Refresh()
+    buttons["Past months"].onClick()
+    picked.onPick("2023-10")
+    click(view.rows[1])
+    assert.is_false(view.d.dot.shown)
+    assert.is_false(has("online"))
+    assert.is_false(has("offline"))
+  end)
+
+  it("shows the reason when a retake fails", function()
+    month = { month = "2023-10", from = 1, to = 2, goldKept = 0, savedBy = "Dor-Realm", savedAt = 1696464000,
+      overall = {}, boards = {} }
+    officer = true
+    view:Refresh()
+    buttons["Past months"].onClick()
+    picked.onPick("2023-10")
+    retakeResult, retakeErr = false, "officers only"
+    ns.Leaderboard.View.DoRetake("2023-10")
+    assert.is_true(has("Retake failed: officers only"))
+  end)
+
+  it("words the unpaired reason by row type", function()
+    result.rows[#result.rows + 1] = { type = "bank.items", profile = "p14", value = 20, at = NOW - 10, item = "Linen",
+      counted = false, why = "unpaired" }
+    click(view.pinned)
+    view.d.lines[1].toggle = false
+    -- open the Not counted list
+    for _, l in ipairs(view.d.lines) do
+      if l.toggle == "uncounted" then click(l) end
+    end
+    assert.is_true(hasLike("the other player's client hasn't confirmed it yet"))
+    assert.is_true(hasLike("no second guildmate with Guildhall has seen this in the bank log yet"))
+  end)
+
+  it("describes items like the mockup and groups collapsed headers on one line", function()
+    local r = result.rows
+    r[1].counterparty = "Brakka-Realm"
+    r[#r + 1] = { type = "exchange.purchases", profile = "p14", value = 1, at = NOW - 500, item = "Silk", counted = true }
+    r[#r + 1] = { type = "bank.items", profile = "p14", value = 20, at = NOW - 400, item = "Linen", counted = true }
+    click(view.pinned)
+    assert.is_true(hasLike("Sold [Runecloth] to Brakka"))
+    local a, b
+    for _, l in ipairs(view.d.lines) do
+      if l.toggle == "exchange.purchases" then a = l end
+      if l.toggle == "bank.items" then b = l end
+    end
+    assert.is_truthy(a and b)
+    local function y(l) local c = l.calls.SetPoint; return c[#c][3] end
+    assert.equal(y(a), y(b))
+    click(b)
+    assert.is_true(hasLike("Deposited [Linen] x20"))
+  end)
+
+  it("shows the dashed divider only with a pinned row", function()
+    assert.is_true(view.dashes[1].shown)
+    result = { byProfile = { p1 = { ["exchange.sales"] = 3 }, p14 = { ["exchange.sales"] = 1 } }, guild = {}, goldKept = 0, rows = {} }
+    view:Refresh()
+    assert.is_false(view.dashes[1].shown)
   end)
 
   it("refreshes on data events only while visible, at most once a second", function()
