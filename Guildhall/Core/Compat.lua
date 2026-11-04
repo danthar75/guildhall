@@ -88,7 +88,7 @@ end
 function Compat:PlayerFullName()
   local env = self.env
   local name = env.UnitName and env.UnitName("player") or "Unknown"
-  local realm = env.GetNormalizedRealmName and env.GetNormalizedRealmName() or nil
+  local realm = env.GetNormalizedRealmName and self:Safe(env.GetNormalizedRealmName()) or nil
   return ns.Util.FullName(name, nil, realm)
 end
 
@@ -108,7 +108,7 @@ function Compat:GuildKey()
   name = self:Safe(name)
   if name == nil or name == "" then return nil end
   realm = self:Safe(realm)
-  local home = env.GetNormalizedRealmName and env.GetNormalizedRealmName() or nil
+  local home = env.GetNormalizedRealmName and self:Safe(env.GetNormalizedRealmName()) or nil
   return ns.Util.FullName(name, realm, home)
 end
 
@@ -164,6 +164,12 @@ function Compat:SecondsUntilWeeklyReset()
   return s
 end
 
+function Compat:_isSecret(v)
+  local env = self.env
+  if env.issecretvalue and env.issecretvalue(v) then return true end
+  return env.canaccessvalue ~= nil and not env.canaccessvalue(v)
+end
+
 -- Both sides of the open trade window: { give = {{id,n}}, get = {{id,n}}, giveCopper, getCopper },
 -- or nil when the APIs are missing or ANY value is secret (an incomplete snapshot is never kept).
 -- Slots 1-6 are the tradable ones (slot 7 is the will-not-be-traded slot).
@@ -175,11 +181,13 @@ function Compat:TradeSnapshot()
     local out = {}
     for i = 1, 6 do
       local rawLink = linkFn(i)
-      if rawLink ~= nil then
-        local link = self:Safe(rawLink)
+      if self:Safe(rawLink) == nil and self:_isSecret(rawLink) then return nil end
+      local link = self:Safe(rawLink)
+      -- An empty slot has no link (skipped); a link with no readable count aborts the snapshot.
+      if link ~= nil then
         local _, _, n = infoFn(i)
         n = self:Safe(n)
-        if link == nil or n == nil then return nil end
+        if n == nil then return nil end
         local id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
         if id and type(n) == "number" and n > 0 then out[#out + 1] = { id = id, n = n } end
       end
@@ -200,7 +208,7 @@ function Compat:TradePartner()
   local name, realm = env.UnitName("NPC")
   name, realm = self:Safe(name), self:Safe(realm)
   if type(name) ~= "string" or name == "" then return nil end
-  local home = env.GetNormalizedRealmName and env.GetNormalizedRealmName() or nil
+  local home = env.GetNormalizedRealmName and self:Safe(env.GetNormalizedRealmName()) or nil
   return ns.Util.FullName(name, type(realm) == "string" and realm or nil, home)
 end
 

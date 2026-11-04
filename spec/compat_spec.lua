@@ -203,6 +203,12 @@ describe("Compat", function()
       assert.is_nil(Compat.new(tradeEnv({ issecretvalue = function(v) return v == 20 end })):TradeSnapshot())
     end)
 
+    it("TradeSnapshot is nil when an item link is secret, but an empty slot is fine", function()
+      local LINK = "|Hitem:2589::|h[Linen Cloth]|h"
+      assert.is_nil(Compat.new(tradeEnv({ issecretvalue = function(v) return v == LINK end })):TradeSnapshot())
+      assert.is_not_nil(Compat.new(tradeEnv({ issecretvalue = function() return false end })):TradeSnapshot())
+    end)
+
     it("TradePartner is the NPC unit as a full name, nil when absent or secret", function()
       assert.equal("Bob-ArgentDawn", Compat.new(tradeEnv()):TradePartner())
       assert.is_nil(Compat.new({}):TradePartner())

@@ -50,7 +50,7 @@ function Deals.Match(transfer, listings, ctx)
   if type(transfer) ~= "table" or transfer.me == nil or transfer.partner == nil
       or transfer.me == transfer.partner then return nil end
   local at = transfer.at
-  local best
+  local best, bestActive
   for _, rec in ipairs(listings or {}) do
     local d = rec.d
     local ok = type(d) == "table" and (d.kind == "WTS" or d.kind == "LF")
@@ -66,7 +66,11 @@ function Deals.Match(transfer, listings, ctx)
         local paid = sellerIsMe and transfer.getCopper or transfer.giveCopper
         local back = sellerIsMe and transfer.giveCopper or transfer.getCopper
         if total(items, id) > 0 and (paid or 0) > 0 and (back or 0) == 0 then
-          if not best or (rec.t or 0) > (best.t or 0) then best = rec end
+          -- An active listing beats an ended one; within the same group the newest t wins.
+          if not best or (isActive and not bestActive)
+              or (isActive == bestActive and (rec.t or 0) > (best.t or 0)) then
+            best, bestActive = rec, isActive
+          end
         end
       end
     end

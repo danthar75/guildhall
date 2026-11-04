@@ -72,6 +72,13 @@ describe("Exchange deals", function()
       assert.is_nil(Deals.Match(transfer(), { l }))
     end)
 
+    it("prefers an active listing over a newer ended one", function()
+      local live = listing({ id = "A", t = 1000 })
+      local ended = listing({ id = "B", t = 2000, del = true })
+      assert.equal(live, Deals.Match(transfer(), { live, ended }))
+      assert.equal(live, Deals.Match(transfer(), { ended, live }))
+    end)
+
     it("picks the newest of several matches", function()
       local a, b = listing({ id = "A", t = 1000 }), listing({ id = "B", t = 2000 })
       assert.equal(b, Deals.Match(transfer(), { a, b }))
