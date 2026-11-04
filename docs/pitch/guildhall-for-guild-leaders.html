@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Guildhall Exchange Proposal</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans+SC:wght@500;700;800&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one reading column on a dark guild-hall ground; the in-game board mockup breaks out wider as the centrepiece. */
+  :root {
+    color-scheme: dark;
+    --ground: #15171c;      /* hall stone, slight blue bias */
+    --panel: #1d2027;
+    --wood: #2a2419;        /* in-game frame fill */
+    --edge: #5e4f33;        /* brass border */
+    --ink: #e7e1d3;
+    --ink-soft: #b3ab99;
+    --ink-faint: #81796a;
+    --gold: #e8c15a;        /* accent */
+    --lf: #8cc6f0;
+    --wts: #f0b25e;
+    --online: #49d16a;
+    --offline: #6c6c6c;
+    --epic: #b46cf2;
+    --rare: #3f8fe6;
+    --common-green: #4fdc5a;
+    --rule: #2c3038;
+    --display: "Alegreya Sans SC", "Trebuchet MS", sans-serif;
+    --body: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--ground); }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font: 18px/1.6 var(--body);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: env(safe-area-inset-top, 0px) env(safe-area-inset-bottom, 0px);
+  }
+  .col { max-width: 44rem; margin: 0 auto; }
+  .wide { max-width: 64rem; margin: 0 auto; }
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.15; margin: 0; }
+  h2 { font-size: 1.7rem; color: var(--gold); font-weight: 700; letter-spacing: .02em; }
+  h3 { font-size: 1.15rem; font-weight: 700; letter-spacing: .03em; }
+  p { margin: 0; }
+  a { color: var(--gold); }
+  code, .mono { font-family: var(--mono); font-size: .88em; }
+  section { padding-block: 3rem; border-top: 1px solid var(--rule); display: grid; gap: 1.1rem; }
+
+  header.hero { padding-block: 4.5rem 3rem; display: grid; gap: 1.2rem; }
+  .eyebrow { font-family: var(--display); letter-spacing: .14em; font-size: .85rem; color: var(--ink-faint); text-transform: uppercase; }
+  .hero h1 { font-size: clamp(2.6rem, 8vw, 4.4rem); font-weight: 800; color: var(--ink); }
+  .hero h1 span { color: var(--gold); }
+  .hero .lede { font-size: 1.3rem; color: var(--ink-soft); max-width: 36rem; }
+  .pinned { border-left: 3px solid var(--edge); padding: .6rem 1rem; background: var(--panel); font-family: var(--mono); font-size: .9rem; color: var(--ink-soft); white-space: pre-line; }
+  .note { color: var(--ink-faint); font-size: .95rem; }
+
+  ul.plain { margin: 0; padding-left: 1.2rem; display: grid; gap: .55rem; }
+  ul.plain li::marker { color: var(--gold); }
+
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1.4rem 2rem; }
+  .grid2 > div { display: grid; gap: .35rem; align-content: start; min-width: 0; }
+  .grid2 p { color: var(--ink-soft); }
+
+  /* In-game frame mockup */
+  .frame { background: var(--wood); border: 2px solid var(--edge); border-radius: 6px; padding: 12px; font-size: 15px; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+  .frame-title { text-align: center; font-family: var(--display); color: var(--gold); font-weight: 700; letter-spacing: .06em; margin-bottom: 10px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tabs span { padding: 3px 10px; border: 1px solid var(--edge); border-bottom: none; border-radius: 4px 4px 0 0; background: #221d14; color: var(--ink-soft); font-size: 13px; }
+  .tabs span.on { background: #46391f; color: var(--gold); }
+  .board { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; border-top: 1px solid var(--edge); padding-top: 8px; }
+  .rows { display: grid; align-content: start; }
+  .row { padding: 7px 8px; border-bottom: 1px solid #3a3122; display: grid; gap: 2px; }
+  .row.sel { background: #3d321c; }
+  .row .meta { color: var(--ink-faint); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  .tag { font-family: var(--mono); font-size: 11px; padding: 0 5px; border-radius: 3px; border: 1px solid currentColor; margin-right: 4px; }
+  .tag.lf { color: var(--lf); } .tag.wts { color: var(--wts); }
+  .item-epic { color: var(--epic); } .item-rare { color: var(--rare); } .item-green { color: var(--common-green); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+  .dot.on { background: var(--online); } .dot.off { background: var(--offline); }
+  .detail { background: #1b1710; border: 1px solid var(--edge); border-radius: 4px; padding: 10px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+  .detail .who { display: flex; align-items: center; gap: 6px; }
+  .detail .small { color: var(--ink-faint); font-size: 13px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .btn { background: #7b1414; border: 1px solid #c9a24a; color: var(--gold); padding: 3px 10px; border-radius: 3px; font-size: 13px; font-family: var(--body); font-weight: 500; }
+  .newbtn { margin-top: 8px; justify-self: start; }
+  .example-flag { font-size: .85rem; color: var(--ink-faint); text-align: center; margin-top: .6rem; }
+  @media (max-width: 560px) { .board { grid-template-columns: minmax(0, 1fr); } }
+
+  .discord { background: #2b2d31; border-radius: 6px; padding: .9rem 1rem; font-family: var(--mono); font-size: .88rem; color: #dbdee1; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .whisper { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: .7rem 1rem; font-family: var(--mono); font-size: .88rem; color: #f19cf2; overflow-wrap: anywhere; }
+
+  .rules { display: grid; gap: .9rem; }
+  .rule { display: grid; grid-template-columns: 2.2rem minmax(0, 1fr); gap: .2rem .8rem; align-items: start; }
+  .rule .mark { font-family: var(--display); font-weight: 800; color: var(--gold); font-size: 1.1rem; text-align: center; border: 1px solid var(--edge); border-radius: 50%; width: 2.2rem; height: 2.2rem; line-height: 2.1rem; }
+  .rule p { color: var(--ink-soft); }
+
+  .stages { display: grid; gap: .8rem; }
+  .stage { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 1rem; padding-bottom: .8rem; border-bottom: 1px dashed var(--rule); }
+  .stage b { font-family: var(--display); color: var(--gold); letter-spacing: .03em; }
+  .stage p { color: var(--ink-soft); }
+  @media (max-width: 520px) { .stage { grid-template-columns: minmax(0, 1fr); gap: .2rem; } }
+
+  ol.asks { margin: 0; padding-left: 1.4rem; display: grid; gap: .8rem; }
+  ol.asks li::marker { color: var(--gold); font-family: var(--display); font-weight: 700; }
+  footer { padding-block: 2.5rem 3.5rem; border-top: 1px solid var(--rule); color: var(--ink-faint); font-size: .95rem; }
+  @media (prefers-reduced-motion: no-preference) { .frame { transition: transform .3s ease; } .frame:hover { transform: translateY(-2px); } }
+</style>
+</head>
+<body>
+
+<header class="hero col">
+  <div class="eyebrow">A proposal for Emergence leadership · WoW Forever</div>
+  <h1>Guildhall: <span>#exchange</span>, in the game</h1>
+  <p class="lede">An addon that brings our guild exchange into WoW, so members can see who's buying and selling without alt-tabbing to Discord, and more of our gold stays in the guild.</p>
+  <p class="note">Nothing is built yet. Before any work starts, I'd like to know whether leadership wants this.</p>
+</header>
+
+<section class="col">
+  <h2>Why</h2>
+  <p>Our <code>#exchange</code> channel gives members a place to buy from and sell to each other before going to the auction house. The pinned format is simple:</p>
+  <div class="pinned">LF [item]
+I [will / will not] provide materials
+I am [open / not open] to CoD</div>
+  <p>But people are in the game when they're trading, and Discord is in another window. Posts get buried, nobody can tell whether a seller is online, and old requests stay up after they've been filled. Guildhall puts the same board where the trading actually happens.</p>
+</section>
+
+<section class="wide">
+  <div class="col" style="display:grid; gap:1.1rem; width:100%">
+    <h2>What it looks like</h2>
+    <p>A window you open with <code>/gh</code> or a minimap button. Listings are on the left, and the selected listing's full details are on the right.</p>
+  </div>
+  <div class="frame" role="img" aria-label="Mockup of the Guildhall Exchange window with three example listings">
+    <div class="frame-title">Guildhall · Exchange</div>
+    <div class="tabs"><span class="on">All</span><span>Buying (LF)</span><span>Selling</span><span>Mine</span></div>
+    <div class="board">
+      <div class="rows">
+        <div class="row sel"><div><span class="tag lf">LF</span><span class="item-epic">[Robe of the Archmage]</span></div><div class="meta"><span class="dot on"></span>Thalwyn · 6d left</div></div>
+        <div class="row"><div><span class="tag wts">WTS</span><span class="item-green">[Runecloth] x40</span></div><div class="meta"><span class="dot off"></span>Brakka · 3d left</div></div>
+        <div class="row"><div><span class="tag lf">LF</span><span class="item-rare">[Flask of Supreme Power]</span></div><div class="meta"><span class="dot on"></span>Mireth · 1d left</div></div>
+        <span class="btn newbtn">+ New listing</span>
+      </div>
+      <div class="detail">
+        <div><span class="tag lf">LF</span><span class="item-epic">[Robe of the Archmage]</span></div>
+        <div class="who"><span class="dot on"></span>Thalwyn (online)</div>
+        <div>I <b>will</b> provide materials</div>
+        <div>I am <b>open</b> to CoD</div>
+        <div class="small">Note: have the cloth, need a tailor. Tipping 20g.</div>
+        <div class="small">Posted 1d ago · expires in 6d</div>
+        <div class="btns"><span class="btn">Whisper</span><span class="btn">Copy for Discord</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="example-flag">Example listings and names, for illustration only.</p>
+</section>
+
+<section class="col">
+  <h2>What it does</h2>
+  <div class="grid2">
+    <div><h3>Post in our format</h3><p>Buying (LF) or selling, the item (shift-click it to link it), materials yes/no, CoD yes/no, and an optional note for price, quantity or timing.</p></div>
+    <div><h3>Shared across the guild</h3><p>Every member running Guildhall sees the same board. Listings stay up when the poster logs off.</p></div>
+    <div><h3>Clears itself</h3><p>Listings expire after 7 days. The poster can renew one, edit it, or take it down early.</p></div>
+    <div><h3>Shows who's online</h3><p>A green dot means the poster is online, on any of their characters. Grey means offline.</p></div>
+    <div><h3>One click to respond</h3><p>If they're online, Whisper opens chat with a message ready to send. If they're offline, Mail fills in a letter at the mailbox.</p></div>
+    <div><h3>Keeps Discord in the loop</h3><p>Copy for Discord turns any listing into a post in the pinned format, so members without the addon still see it in <code>#exchange</code>.</p></div>
+  </div>
+  <p>The Whisper button opens chat like this. You can change the text, and you press Enter yourself:</p>
+  <div class="whisper">To Thalwyn: Hi! Saw your Guildhall listing for [Robe of the Archmage]. Are you still looking?</div>
+  <p>Copy for Discord produces this:</p>
+  <div class="discord">LF Robe of the Archmage
+I will provide materials
+I am open to CoD
+Note: have the cloth, need a tailor. Tipping 20g.
+(Thalwyn, in game via Guildhall)</div>
+</section>
+
+<section class="col">
+  <h2>Ground rules</h2>
+  <div class="rules">
+    <div class="rule"><div class="mark">1</div><div><h3>It never sends anything for you</h3><p>Whispers and mail are only filled in. You read them and press Send. Gold, items and CoD are always attached by hand.</p></div></div>
+    <div class="rule"><div class="mark">2</div><div><h3>It stays within Forever's addon rules</h3><p>Forever uses the same addon restrictions as Midnight. Guildhall doesn't touch combat data. Inside dungeons and raids, Blizzard limits addon messages and guild data, so the board shares new listings in town and the open world, and catches up when you leave an instance.</p></div></div>
+    <div class="rule"><div class="mark">3</div><div><h3>Your alts are shared only if you agree</h3><p>Guildhall groups your characters so the online dot and "my listings" work across alts. The first time, it shows you which characters it would link, and you can leave any of them out.</p></div></div>
+    <div class="rule"><div class="mark">4</div><div><h3>Officers can clean up</h3><p>Officers can remove any listing. Who counts as an officer is set by a short tag in the Guild Information text, for example <code>[Guildhall officers=2]</code>, so leadership controls it with no addon settings to hand out.</p></div></div>
+    <div class="rule"><div class="mark">5</div><div><h3>There's a paper trail</h3><p>Each member's addon keeps an activity log of every listing created, edited, renewed or removed, and who passed it along. If something odd happens, officers can compare logs.</p></div></div>
+  </div>
+</section>
+
+<section class="col">
+  <h2>What it won't do (for now)</h2>
+  <ul class="plain">
+    <li><b>No direct Discord connection.</b> WoW addons can't access the internet, so there's no bot. Copy for Discord is the bridge.</li>
+    <li><b>No price checking</b> or auction house scanning.</li>
+    <li><b>Members without the addon</b> won't see the in-game board. They still have <code>#exchange</code>.</li>
+    <li><b>No Emergence art yet.</b> The look can take on guild colours, a logo or a banner later without reworking the addon.</li>
+  </ul>
+</section>
+
+<section class="col">
+  <h2>Built to grow</h2>
+  <p>The Exchange is the first feature on a Guildhall core that's meant to hold more. Settings, guild messaging, the activity log and the window are shared, so later tools can be added without starting over. If leadership has ideas for what the guild needs next, I'd like to hear them.</p>
+</section>
+
+<section class="col">
+  <h2>Plan</h2>
+  <div class="stages">
+    <div class="stage"><b>Done</b><p>Researched Forever's addon rules and wrote a full design and build plan.</p></div>
+    <div class="stage"><b>Next, if you're in</b><p>Build the core and the Exchange, testing the basics on Classic Era before Forever launches.</p></div>
+    <div class="stage"><b>Launch week</b><p>Test on Forever itself, especially the dungeon and raid restrictions, then share a test version with a few volunteers.</p></div>
+    <div class="stage"><b>After that</b><p>Open it up to the guild, fix what people run into, and decide together on what comes next.</p></div>
+  </div>
+</section>
+
+<section class="col">
+  <h2>What I need from you</h2>
+  <ol class="asks">
+    <li><b>Is this worth building?</b> Would leadership recommend it to members alongside <code>#exchange</code>?</li>
+    <li><b>Is the pinned format right?</b> Should listings carry anything else, such as a price field or a crafter tag?</li>
+    <li><b>Which ranks should count as officers</b> for removing listings?</li>
+    <li><b>Any concerns?</b> For example about alts being visible, or about addon use in general.</li>
+  </ol>
+  <p class="note">Reply to me on Discord. A quick yes, no or "not now" is enough.</p>
+</section>
+
+<footer class="col">
+  Guildhall is a fan-made addon proposal for the Emergence guild. It's not affiliated with Blizzard Entertainment. Listings and names on this page are examples.
+</footer>
+
+</body>
+</html>
