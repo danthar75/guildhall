@@ -290,7 +290,10 @@ function C:MaybeSaveMonth(ledger, now)
   local saved = false
   for _, e in ipairs(due) do
     local d = self:_monthData(e.ym, ledger, now)
-    if self:_publish("month:" .. e.ym, d, nil, 2 * e.anchor - now) then saved = true end
+    -- A month with no activity is not frozen: the ledger may simply not have synced yet.
+    if #d.overall > 0 or d.goldKept > 0 then
+      if self:_publish("month:" .. e.ym, d, nil, 2 * e.anchor - now) then saved = true end
+    end
   end
   return saved
 end

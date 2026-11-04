@@ -86,6 +86,33 @@ describe("Comm", function()
     assert.equals(0, called)
   end)
 
+  it("a 60-chunk message at 1 chunk/s is reassembled; a sender that goes silent for 31 s is dropped and logged", function()
+    local sender = mk({ burst = 10, refill = 1 })
+    local lines = {}
+    local env2 = fakes.compat({ C_ChatInfo = { SendAddonMessage = function(p, m) lines[#lines + 1] = m; return 0 end } })
+    sender.compat = env2
+    local got = 0
+    comm:On("ex", "post", function() got = got + 1 end)
+    local big = {}
+    for i = 1, 400 do big[i] = "entry number " .. i .. " with some text" end
+    sender:Send("ex", "post", big)
+    for _ = 1, 200 do clock.advance(1); timers.run(clock) end
+    assert.is_true(#lines >= 60)
+    for _, l in ipairs(lines) do clock.advance(1); deliver(l) end
+    assert.equals(1, got)
+    assert.same({}, ignored)
+    -- silent sender: partial set dropped and reported
+    got = 0
+    local n0 = #lines
+    sender:Send("ex", "post", big)
+    for _ = 1, 200 do clock.advance(1); timers.run(clock) end
+    for i = n0 + 1, n0 + 5 do deliver(lines[i]) end
+    clock.advance(31)
+    deliver("junk")
+    assert.equals(0, got)
+    assert.same({ "Other-Realm", "incomplete" }, ignored[#ignored - 1] or ignored[#ignored])
+  end)
+
   it("ignores unknown module/kind", function()
     comm:Send("zz", "nope", { 1 })
     assert.has_no.errors(function() deliver(sent[1][2]) end)

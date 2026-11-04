@@ -224,7 +224,7 @@ describe("Leaderboard Config", function()
   end
 
   it("a fresh client receives all 7 saved months", function()
-    bus = fakes.bus(clock, timers, { burst = 100000 })   -- pacing is Comm's concern, not this spec's
+    bus = fakes.bus(clock, timers, { burst = 10, refill = 1 })   -- production pacing
     local a = build("Boss-Realm")
     for m = 4, 10 do
       local ym, d = bigMonth(m)
@@ -232,7 +232,7 @@ describe("Leaderboard Config", function()
     end
     local d = build("Grunt-Realm")
     d.sync:Start()
-    drain()
+    for _ = 1, 3000 do clock.advance(1); timers.run(clock) end
     assert.equal(7, #d:Months())
     assert.equal(7, #a:Months())
   end)
@@ -299,6 +299,18 @@ describe("Leaderboard Config", function()
     assert.is_true(#months >= 10 and #months <= 13)
     assert.equal("2028-11", months[1])
     for _, ym in ipairs(months) do assert.is_true(cfg:Month(ym).from >= clock.now() - 34560000) end
+  end)
+
+  it("first login on an empty ledger saves no months; once activity exists, only months with activity are saved", function()
+    clock.advance(utc(2026, 12, 10) - clock.now())
+    cfg:MaybeSaveMonth(ledger({}), clock.now())
+    assert.same({}, cfg:Months())
+    local l = { Query = function(_, q)
+      if q.from == utc(2026, 11, 1) then return { byProfile = { p1 = { sales = 3 } }, guild = {}, goldKept = 0 } end
+      return { byProfile = {}, guild = {}, goldKept = 0 }
+    end }
+    cfg:MaybeSaveMonth(l, clock.now())
+    assert.same({ "2026-11" }, cfg:Months())
   end)
 
   it("Month returns a copy", function()

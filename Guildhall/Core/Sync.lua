@@ -349,7 +349,11 @@ function Sync:_flush()
   for _, id in ipairs(ids) do
     local r = pending[id]
     if not fits({ r }) then
-      if ns.OnError then ns.OnError("Sync " .. tostring(self.module) .. ": record too large to send: " .. id) end
+      self.oversize = self.oversize or {}
+      if ns.OnError and not self.oversize[id] then
+        self.oversize[id] = true
+        ns.OnError("Sync " .. tostring(self.module) .. ": record too large to send: " .. id)
+      end
     else
       batch[#batch + 1] = r
       if #batch > 1 and not fits(batch) then
