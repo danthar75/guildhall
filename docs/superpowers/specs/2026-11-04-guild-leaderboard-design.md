@@ -130,6 +130,8 @@ Unmatched manual observations expire from the prompt queue after 14 days.
 
 This blocks post-and-delete spam (my call).
 
+**Witness rule (my call, from the builder check).** Only the owner creates a listing, so on its own it would be `self` and unranked. Instead, the first other client that holds the listing record when it is at least 24 hours old publishes a small *witness* observation. A client skips this if a witness already exists. One witness from a different profile makes the activity `paired`. The witness is permanent (400 days), unlike the listing record itself, which is purged at expiry.
+
 **Self-deals:** deals between two characters of the same profile never count, by definition (different profiles required).
 
 ### Guild bank contributions
@@ -152,6 +154,17 @@ This blocks post-and-delete spam (my call).
 - A bank entry counts when it has been reported by at least two different players' clients, or by one client that isn't the depositor (`paired`).
 - The donor's own client may also report it. That alone is not enough.
 - Duplicate log readings of the same entry are merged by `(tab, type, player, itemID, count, approxAt rounded to the hour, ordinal among identical entries)`.
+
+**Who gets credit (my call, from the builder check).** Bank entries are logged by character name. A deposit is credited to a player only if its character is a **linked character of a consenting Guildhall profile**. All other deposits count toward the **guild total only** and never appear on a board:
+- guild members who don't run Guildhall
+- players who haven't given consent yet
+- alts a player chose not to link
+
+The reasons:
+- Non-users can't opt out, so ranking them would surprise them.
+- Crediting an unlinked alt would reveal a link the player declined.
+
+Bank observations are therefore keyed by character name, and resolved to a profile at display time.
 
 **Netting:** contribution per player per period is net:
 - gold: deposits minus withdrawals, floored at 0
@@ -224,14 +237,35 @@ Top of the tab:
 - Observations reveal who traded what with whom, and for how much, to every guild member running Guildhall. This is new information flow.
 - **Open:** the user needs to OK this. See "Open questions for the user".
 
-## Storage and sync budget (left to the builder, with limits)
+## Storage and sync budget
 
-- Observations are small, about 100 bytes serialized. Keep the set under about 5,000 live records, and purge expired ones before building digests. The paged digest already handles large sets.
+**Sync changes (my call, from the builder check).** The existing paged digest (50 ids per REQ) would cost about 900 messages per login for 5,000 observations, roughly 15 minutes on the shared queue. So `core.observations` gets a **bucketed digest**:
+1. A REQ carries one short hash per UTC day, over the `(id, v, t)` of that day's records, keyed by observation time.
+2. The receiver compares hashes and asks for id digests only for days that differ.
+3. Peers reply with the records for those days.
+
+Notes:
+- The listings and profiles sets keep the current protocol.
+- No peers are released yet, so this needs no backward compatibility. It must not change the existing sets' wire format.
+
+**Limits:**
+- Observations are small, about 100 bytes serialized.
+- Target about 5,000 live records for an active guild.
+- Purge expired records before building digests.
 - Contributions are computed on demand when the tab opens. They can be cached per period, and are never synced.
 
 ## Open questions for the user (to settle before planning)
 
-1. **Visibility of deal amounts.** Is it OK that individual deals, with item, partner and gold, are visible to every guild member running Guildhall? The alternative is that only totals show. Records still have to sync for verification, but the UI would show only aggregates.
+1. **What the UI may show.** Records must sync to verify deals and bank entries. The question is what the UI shows:
+   - Individual deals, with item, partner and gold.
+   - Individual bank entries. Note that the game can restrict who sees a tab's log, and syncing could show members entries they can't see in game.
+   - Or totals only. "Totals only" also means the Log tab must summarise observations instead of printing their contents.
+2. **Testing.** Classic Era has no guild bank, so the bank half and two-player pairing can only be tested on Forever. That needs:
+   - a guild with a bank
+   - log access
+   - a second Guildhall user
+
+   If that isn't available soon, the bank half is accepted on simulated tests only until it is.
 
 ## Left to the builder
 
