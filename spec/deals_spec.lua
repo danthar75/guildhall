@@ -528,6 +528,59 @@ describe("Exchange deals", function()
       assert.equal(1, #published)
     end)
 
+    it("a take settled on a later update is rebased: S1 paid first, S2 vanishes unpaid later, only S1 publishes", function()
+      inbox[1] = codMail({ cod = 70000, items = { { id = 2589, n = 5 } } })
+      inbox[2] = codMail()
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      listings[1].d.qty = 5
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      hooks.TakeInboxItem(2, 1)
+      inbox[1] = inbox[2]; inbox[2] = nil
+      money = money - 70000
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(1, #published)
+      inbox = {}
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(1, #published)
+    end)
+
+    it("twin mails taken back to back and paid on separate updates both publish", function()
+      inbox[1] = codMail()
+      inbox[2] = codMail()
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      hooks.TakeInboxItem(2, 1)
+      inbox[2] = nil
+      money = money - 50000
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(1, #published)
+      inbox = {}
+      money = money - 50000
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(2, #published)
+    end)
+
+    it("a slot with count 0 and every other field nil counts as empty", function()
+      local c = realCompat({ SendMailNameEditBox = { GetText = function() return "Bob-R" end },
+        GetSendMailCOD = function() return 50000 end,
+        GetSendMailItemLink = function(i) if i == 1 then return LINK2 end end,
+        GetSendMailItem = function(i) if i == 1 then return "x", 2589, nil, 20 end
+          return nil, nil, nil, 0 end,
+        issecretvalue = function() return false end })
+      local snap = c:SendMailSnapshot()
+      assert.is_not_nil(snap)
+      assert.equal(1, #snap.items)
+      local ib = realCompat({ GetInboxHeaderInfo = function() return nil, nil, "Bob-R", "s", 0, 50000 end,
+        GetInboxItemLink = function(_, i) if i == 1 then return LINK2 end end,
+        GetInboxItem = function(_, i) if i == 1 then return "x", 2589, nil, 20 end return nil, nil, nil, 0 end,
+        issecretvalue = function() return false end })
+      assert.equal(1, #ib:InboxCod(1).items)
+    end)
+
     it("a slot with a name and count but no id and no link makes the snapshot nil", function()
       local c = realCompat({ SendMailNameEditBox = { GetText = function() return "Bob-R" end },
         GetSendMailCOD = function() return 50000 end,

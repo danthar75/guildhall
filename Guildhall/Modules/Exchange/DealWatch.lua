@@ -137,10 +137,12 @@ function W:_sendSuccess()
 end
 
 -- Settlement with one shared ledger. A pending take succeeds only when (a) fewer mails with its
--- signature remain than when it was taken (less takes already counted in this walk), (b) the money
--- spent since the oldest pending take still covers its CoD (each success deducts it), and
--- (c) it is at most PENDING_TTL seconds old. Older takes are discarded at any settle, unreadable
--- money discards everything, and unbacked takes wait for the next event until they expire.
+-- signature remain than when it was taken, (b) the money spent since the oldest pending take still
+-- covers its CoD (each success deducts it), and (c) it is at most PENDING_TTL seconds old. Each
+-- success rebases every other pending take (its CoD leaves their moneyBefore, and same-signature
+-- takes lose one from countBefore), so a later settle never re-counts that mail or that money.
+-- Older takes are discarded at any settle, unreadable money discards everything, and unbacked
+-- takes wait for the next event until they expire.
 function W:_settle()
   local ctx = self.ctx
   if #self.pending == 0 then return end
@@ -150,21 +152,25 @@ function W:_settle()
   for _, p in ipairs(self.pending) do
     if now - p.t <= PENDING_TTL then live[#live + 1] = p end
   end
-  self.pending = live
-  if #live == 0 then return end
+  if #live == 0 then self.pending = live; return end
   local spend = live[1].moneyBefore - money
-  local counts, counted, keep = self:_liveCounts(), {}, {}
+  local counts = self:_liveCounts()
   for _, p in ipairs(live) do
-    local avail = p.countBefore - (counts[p.sig] or 0) - (counted[p.sig] or 0)
-    if avail > 0 and spend >= p.cod then
+    if not p.done and p.countBefore - (counts[p.sig] or 0) > 0 and spend >= p.cod then
+      p.done = true
       spend = spend - p.cod
-      counted[p.sig] = (counted[p.sig] or 0) + 1
+      for _, q in ipairs(live) do
+        if not q.done then
+          q.moneyBefore = q.moneyBefore - p.cod
+          if q.sig == p.sig then q.countBefore = q.countBefore - 1 end
+        end
+      end
       self:_publishTaken(p.mail)
-    elseif avail <= 0 and p.countBefore - (counts[p.sig] or 0) > 0 then
-      -- its vanished mail was already claimed by an earlier take (e.g. the double hook): drop it
-    else
-      keep[#keep + 1] = p
     end
+  end
+  local keep = {}
+  for _, p in ipairs(live) do
+    if not p.done then keep[#keep + 1] = p end
   end
   self.pending = keep
 end

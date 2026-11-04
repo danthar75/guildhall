@@ -201,18 +201,21 @@ function Compat:TradeSnapshot()
   return { give = give, get = get, giveCopper = giveCopper, getCopper = getCopper }
 end
 
--- One attachment slot: nil = unreadable (abort the whole snapshot), false = empty slot (every raw
--- field nil), else { id, n }. A slot with ANY non-nil field (name, link, id, count; secret counts)
--- is occupied, and an occupied slot without a usable id aborts. The item id prefers the slot's
--- itemID (works while the link is uncached) and falls back to parsing the link.
+-- One attachment slot: nil = unreadable (abort the whole snapshot), false = empty slot, else
+-- { id, n }. A slot is occupied when name, link or id is non-nil, any of name, link, id or count is
+-- secret, or count is a number > 0 (a readable count of 0 or nil alone is empty). An occupied slot
+-- without a usable id or count aborts. The item id prefers the slot's itemID (works while the link
+-- is uncached) and falls back to parsing the link.
 function Compat:_attachment(rawName, rawLink, rawId, rawN)
-  if rawName == nil and rawLink == nil and rawId == nil and rawN == nil then return false end
+  local n = self:Safe(rawN)
+  local occupied = rawName ~= nil or rawLink ~= nil or rawId ~= nil
+    or (rawN ~= nil and self:_isSecret(rawN)) or (type(n) == "number" and n > 0)
+  if not occupied then return false end
   if self:Safe(rawLink) == nil and self:_isSecret(rawLink) then return nil end
   local link, id = self:Safe(rawLink), self:Safe(rawId)
   if type(id) ~= "number" then
     id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
   end
-  local n = self:Safe(rawN)
   if not id or type(n) ~= "number" or n <= 0 then return nil end
   return { id = id, n = n }
 end
