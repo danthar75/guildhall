@@ -121,6 +121,10 @@ Needs Forever. Account A and account B are your two accounts, both in the guild 
 - [ ] **Fresh install catches up on permission-dependent records.** With a rank granted "Review bank contributions" and an exclusion made by that rank, install Guildhall fresh on B (delete its SavedVariables) and log in. Expected: within about two minutes B shows the exclusion (the member's score drops on B too) with no /reload, and B's Log shows at most one "author lacks permission" line for it.
 - [ ] **Long message check (later).** In a test guild (or later, once the real guild has 5 or more saved months), install Guildhall fresh on one account and log in. Expected: it receives every saved month, with none missing from Past months.
 
+### Beta label
+
+- [ ] **Beta label shows.** On the character screen's AddOns list the addon reads "Guildhall (Beta)". The welcome screen and About tab show "Version 0.1.0 (beta)" and the orange beta note.
+
 ## Groups
 
 ### Solo

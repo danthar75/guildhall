@@ -244,6 +244,27 @@ describe("Welcome", function()
     assert.equal(n, #W.created)
   end)
 
+  it("shows the beta label and note while ns.BETA is set, and neither once it is off", function()
+    -- The real values come from Init.lua; check them there, then render with them.
+    local init = {}
+    loadAddonFile(init, "Guildhall/Core/Init.lua")
+    assert.is_true(init.BETA)
+    assert.is_true(isAllowed(init.BETA_NOTE))
+    ns.BETA, ns.BETA_NOTE = init.BETA, init.BETA_NOTE
+    ns.UI.Welcome:Show()
+    local text = allText()
+    assert.is_truthy(text:find("(beta)", 1, true))
+    assert.is_truthy(text:find(init.BETA_NOTE, 1, true))
+  end)
+
+  it("shows no beta label when ns.BETA is off", function()
+    ns.BETA, ns.BETA_NOTE = nil, "Should not show"
+    ns.UI.Welcome:Show()
+    local text = allText()
+    assert.is_nil(text:find("(beta)", 1, true))
+    assert.is_nil(text:find("Should not show", 1, true))
+  end)
+
   it("welcome and module text is allowed glyphs only", function()
     ns.UI.Welcome:Show()
     for _, t in ipairs(ns.texts) do assert.is_true(isAllowed(tostring(t.text)), tostring(t.text)) end

@@ -82,13 +82,15 @@ function UI.AboutContent(parent, opts)
   title:SetPoint("TOPLEFT", frame, "TOPLEFT", left, -4)
   local accent = ns.Theme and ns.Theme.Get and ns.Theme.Get("accent")
   if accent then title:SetTextColor(accent[1], accent[2], accent[3]) end
-  local ver = UI.Text(frame, "GameFontHighlight", "Version " .. version)
+  local ver = UI.Text(frame, "GameFontHighlight", "Version " .. version .. (ns.BETA and " (beta)" or ""))
   ver:SetPoint("TOPLEFT", frame, "TOPLEFT", left, -28)
   height = 56
   -- Anchor point for the stacked text: a spacer under the header.
   prev = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   prev:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -56)
   prev:SetText(" ")
+
+  if ns.BETA and ns.BETA_NOTE then text("GameFontNormal", ns.BETA_NOTE, 6, { 1, 0.6, 0.2 }) end
 
   -- What's new.
   local news = opts.news

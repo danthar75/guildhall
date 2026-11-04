@@ -2,6 +2,8 @@
 
 # Guildhall
 
+> **Beta.** Guildhall is being tested in the guild Emergence. Expect rough edges, and please report problems (see [Reporting problems](#reporting-problems)).
+
 A guild-helper addon for **World of Warcraft: Forever**. Its first feature is **Exchange**: an in-game LF / WTS board shared by everyone in your guild who runs Guildhall. Members can see who's buying and selling without alt-tabbing to Discord.
 
 Built by **Dor** for the guild Emergence. It works in any guild.
