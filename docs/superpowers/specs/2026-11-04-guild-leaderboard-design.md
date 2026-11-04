@@ -277,6 +277,20 @@ Notes:
 1. ~~What the UI may show~~. Decided: totals for everyone, your own breakdown for you, and everyone's breakdown for officers. See UI, and Privacy and trust.
 2. ~~Testing~~. Decided: Jon has several WoW accounts and will run two clients in the new Emergence guild on Forever. Pairing (trades, CoD, witnesses) and the bank log can therefore be tested in game, as soon as the guild has a bank tab. Simulated tests still cover every rule, so the build doesn't wait on the game. The in-game checks are listed in `docs/testing/forever-launch.md`.
 
+## Next module: contests (shapes this build)
+
+The next module after the leaderboard is **contests** (user). Officers will run short, time-limited contests based on guild bank donations, for example "most fish donated in 3 hours". This build doesn't include contests, but it must leave room for them:
+
+- **Keep bank observations raw.** Each record holds its exact item ID, count, character and time. Netting and totals are calculated when asked, over any time window and any item filter, never baked in at storage. A contest is then just another query.
+- **One shared query function.** Totals and rankings come from a single function that takes a time window, an activity or item filter, and a list of excluded ranks and tabs. Leaderboard periods and month records call it, and so will contests.
+- **Item filters.** Filters must work by item class and subclass (for example "any fish": Tradegoods > Meat or Cooking, mapped by the builder) and by an explicit list of item IDs. The Category module's item-class code is the base.
+- **Bank log time precision.** The game reports bank log times only as "N hours ago". Times are therefore accurate only to about an hour, and the most accurate time is the one recorded when a client reads the log soon after the deposit. For short contests:
+  - the client should re-read the log often while the bank is open
+  - the earliest observer's time wins
+  - entries close to a contest's edges should count only if they fall clearly inside it (contest design will decide)
+- **Frozen results.** Month records are an officer-published, frozen result record. Contest results will reuse the same record type and code.
+- **Registry.** Contests register as a consumer of observations. They are not a new kind of observation.
+
 ## Left to the builder
 
 - Exact record field names and serialization.
