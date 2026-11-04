@@ -28,10 +28,15 @@ function M.timers(clock0)
   return self
 end
 
+-- compat(overrides): a real Compat instance over a fake env. overrides are merged into the env;
+-- the env exposes env.sent (count of C_ChatInfo.SendAddonMessage calls).
 function M.compat(overrides)
-  local c = {}
-  for k, v in pairs(overrides or {}) do c[k] = v end
-  return c
+  local ns = {}
+  loadAddonFile(ns, "Guildhall/Core/Util.lua")
+  loadAddonFile(ns, "Guildhall/Core/Compat.lua")
+  local env = { sent = 0, GetServerTime = function() return 1000 end }
+  for k, v in pairs(overrides or {}) do env[k] = v end
+  return ns.Compat.new(env), env
 end
 
 return M
