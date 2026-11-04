@@ -37,6 +37,7 @@ function Sync:Publish(rec)
   if status == "accepted" then
     self.comm:Send(self.module, "REC", { rs = { rec } })
   end
+  return status
 end
 
 function Sync:_onReq(p, sender)

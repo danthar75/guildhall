@@ -251,9 +251,11 @@ describe("Exchange", function()
 
   it("imported records appear in List all but not mine, and are never sent", function()
     local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
-    local sent = 0
-    local orig = a.ex.sync.comm.Send
-    a.ex.sync.comm.Send = function(self, ...) sent = sent + 1; return orig(self, ...) end
+    local lines = {}
+    local oc = a.ex.sync.comm.compat
+    local osend = oc.SendAddon
+    oc.SendAddon = function(self, prefix, line, ...) lines[#lines + 1] = line; return osend(self, prefix, line, ...) end
+    a.online["Alice-Realm"] = true
     a.moduleDb.imported["imp:1"] = { id = "imp:1", v = 1, t = 1000, by = a.profile:Id(), exp = 5000, del = false,
       d = { kind = "WTS", item = "Discord thing", mats = false, cod = false, src = "discord", poster = "Zed" } }
     assert.equal(1, #a.ex:List("all"))
@@ -264,10 +266,58 @@ describe("Exchange", function()
     assert.equal("unknown", status); assert.is_nil(char)
     assert.equal("no-contact", a.ex:Contact(rec))
     assert.equal(0, #a.opened)
-    a.ex:Start(); clock.advance(10); timers.run(clock)
+    post(a)
+    b.ex:Start(); clock.advance(10); timers.run(clock)
+    assert.is_true(#lines > 0)
+    for _, l in ipairs(lines) do assert.is_nil(l:find("imp:1", 1, true)) end
     assert.is_nil(b.ex:Get("imp:1"))
+    assert.equal(1, #b.ex:List("all"))
     a.ex:RemoveImported("imp:1")
-    assert.equal(0, #a.ex:List("all"))
+    assert.equal(1, #a.ex:List("all"))
+  end)
+
+  it("imported record with an online guildmate char reports that guildmate", function()
+    local a = node("Alice-Realm", { id = 1 })
+    a.online["Alice-Realm"] = true; a.online["Zed-Realm"] = true
+    local rec = { id = "imp:2", v = 1, t = 1000, by = a.profile:Id(), char = "Zed-Realm", exp = 5000, del = false,
+      d = { kind = "WTS", item = "X", mats = false, cod = false, src = "discord", poster = "Zed" } }
+    a.moduleDb.imported["imp:2"] = rec
+    local st, c = a.ex:Status(rec)
+    assert.equal("online", st); assert.equal("Zed-Realm", c)
+    assert.equal("whisper", a.ex:Contact(rec))
+    assert.truthy(a.opened[1]:match("^/w Zed%-Realm "))
+    a.online["Zed-Realm"] = false
+    assert.equal("offline", (a.ex:Status(rec)))
+    a.online["Zed-Realm"] = nil
+    assert.equal("unknown", (a.ex:Status(rec)))
+  end)
+
+  it("actions fail when the publish is not accepted", function()
+    local a = node("Alice-Realm", { id = 1 })
+    local rec = post(a)
+    clock.advance(604800 + 1)
+    local ok, err = a.ex:Edit(rec.id, { item = "Silk" })
+    assert.is_false(ok); assert.equal("expired", err)
+  end)
+
+  it("Contact on own listing is no-contact", function()
+    local a = node("Alice-Realm", { id = 1 })
+    local rec = post(a)
+    assert.equal("no-contact", a.ex:Contact(rec))
+    assert.equal(0, #a.opened)
+  end)
+
+  it("a combined edit and renew keeps before/after in the log", function()
+    local a = node("Alice-Realm", { id = 1 })
+    local rec = post(a)
+    clock.advance(10)
+    local new = a.ex.listings:Get(rec.id)
+    local r = a.ns.Exchange.Listing.Renew(a.ns.Util.DeepCopy(new), "Alice-Realm", clock.now())
+    r.d.item = "Silk"
+    a.ex.sync:Publish(r)
+    local e = a.logStore[#a.logStore]
+    assert.equal("renew", e.action)
+    assert.equal("Silk", e.after.item); assert.equal("Linen Cloth", e.before.item)
   end)
 
   it("registers the module and OnLogin guards missing services", function()

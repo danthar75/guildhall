@@ -41,6 +41,13 @@ function ns.Exchange.Create(ctx)
         e.action, e.before, e.after = "remove", copy(old.d), copy(rec.d)
       elseif rec.exp > old.exp then
         e.action = "renew"
+        if rec.d ~= nil and old.d ~= nil then
+          local b, a = copy(old.d), copy(rec.d)
+          local changed = false
+          for k in pairs(b or {}) do if type(b[k]) == "table" or b[k] ~= a[k] then changed = true end end
+          for k in pairs(a or {}) do if type(a[k]) == "table" or (b or {})[k] ~= a[k] then changed = true end end
+          if changed then e.before, e.after = b, a end
+        end
       else
         e.action, e.before, e.after = "edit", copy(old.d), copy(rec.d)
       end
@@ -90,7 +97,8 @@ function Ex:Post(d)
   local ok, verr = ns.Exchange.Listing.Validate(d)
   if not ok then return false, verr end
   local rec = ns.Exchange.Listing.New(d, self.profile:Id(), self.playerChar, self.now(), self:_nextId())
-  self.sync:Publish(rec)
+  local status = self.sync:Publish(rec)
+  if status ~= "accepted" then return false, status end
   return true, rec
 end
 
@@ -105,7 +113,8 @@ function Ex:_mutate(id, build, validatePayload)
     local ok, verr = ns.Exchange.Listing.Validate(new.d)
     if not ok then return false, verr end
   end
-  self.sync:Publish(new)
+  local status = self.sync:Publish(new)
+  if status ~= "accepted" then return false, status end
   return true, new
 end
 
@@ -136,7 +145,8 @@ function Ex:OfficerRemove(id)
   local err = self:_gate()
   if err then return false, err end
   local new = ns.Exchange.Listing.Remove(rec, self.playerChar, self.now(), true, self.profile:Id())
-  self.sync:Publish(new)
+  local status = self.sync:Publish(new)
+  if status ~= "accepted" then return false, status end
   return true, new
 end
 
@@ -172,7 +182,18 @@ function Ex:List(filter)
 end
 
 -- Returns "online"|"offline"|"unknown", charToContact.
+function Ex:_isImported(rec)
+  return self.db.imported[rec.id] ~= nil or (type(rec.d) == "table" and rec.d.src == "discord")
+end
+
 function Ex:Status(rec)
+  if self:_isImported(rec) then
+    if not rec.char then return "unknown", nil end
+    local o = self.roster:IsOnline(rec.char)
+    if o == true then return "online", rec.char end
+    if o == false then return "offline", rec.char end
+    return "unknown", rec.char
+  end
   local on = self.profile:OnlineChar(rec.by)
   if on then return "online", on end
   local chars = self.profile:CharsOf(rec.by)
@@ -185,6 +206,7 @@ function Ex:Status(rec)
 end
 
 function Ex:Contact(rec)
+  if self.profile:IsMine(rec.by) and not self:_isImported(rec) then return "no-contact" end
   local status, char = self:Status(rec)
   if not char then return "no-contact" end
   local F = ns.Exchange.Format
