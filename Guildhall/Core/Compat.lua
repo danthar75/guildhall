@@ -501,7 +501,11 @@ function Compat:GuildEvents(fromT, toT)
     self.calOpened = true
     cal.OpenCalendar()
   end
-  local offset = self:ServerOffset() or 0
+  -- Event times use the real realm offset (ServerOffset), not cfg:Tz: the calendar reports realm
+  -- wall-clock, which is what the offset converts to epoch; cfg:Tz is only the guild's chosen
+  -- day boundary and may differ. An unknown offset means the times can't be trusted: read nothing.
+  local offset = self:ServerOffset()
+  if offset == nil then return nil end
   local cur = dateFn("!*t", fromT + offset)
   local statusMap = CAL_STATUS
   local enum = env.Enum and env.Enum.CalendarStatus

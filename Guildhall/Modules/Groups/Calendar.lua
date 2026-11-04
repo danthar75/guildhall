@@ -82,7 +82,7 @@ local function parse(rec)
     return nil
   end
   if d.post ~= nil then
-    return { key = "g|" .. d.post, from = d.from, to = d.to, instance = d.instance, withdrawn = d.status == "withdrawn" }
+    return { post = true, key = "g|" .. d.post, from = d.from, to = d.to, instance = d.instance, withdrawn = d.status == "withdrawn" }
   end
   return { key = "c|" .. d.title .. "|" .. d.start, from = d.start - PRE, to = d.start + POST_WINDOW,
     instance = d.instance, withdrawn = false }
@@ -140,11 +140,14 @@ function Calendar.Derive(list, ctx)
   end
 
   -- candidate credits: (char, instance, kill day) -> earliest kill, then item key
+  -- A signup must come before the kill (and, for a post, inside its own window): a self-declared
+  -- window around a kill that already happened earns nothing.
   local best, rows = {}, {}
   for _, p in ipairs(items) do
     local found
+    local valid = not p.post or p.at <= p.to
     for _, k in ipairs(kills) do
-      if k.at >= p.from and k.at <= p.to then
+      if valid and p.at <= k.at and k.at >= p.from and k.at <= p.to then
         local entry = ns.Instances.Get(k.instance)
         if (p.instance == nil and entry and entry.kind == "raid") or p.instance == k.instance then
           local ok, day = attended(k, p.char)

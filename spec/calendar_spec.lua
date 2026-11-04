@@ -150,6 +150,10 @@ describe("Groups Calendar", function()
       loadAddonFile(cns, "Guildhall/Core/Compat.lua")
       loadAddonFile(cns, "Guildhall/Modules/Groups/Instances.lua")
       env = calEnv(extra)
+      if extra == nil or extra.C_DateAndTime == nil then
+        env.C_DateAndTime = { GetServerTimeLocal = function() return 1000000 end }
+        env.GetServerTime = env.GetServerTime or function() return 1000000 end
+      end
       local c = cns.Compat.new(env)
       return c, cns
     end
@@ -188,6 +192,21 @@ describe("Groups Calendar", function()
       assert.equal("ony and mc night", list[3].title)
       c:GuildEvents(from(), from() + 14 * DAY)
       assert.equal(1, env.C_Calendar.opened)
+    end)
+
+    it("converts event times with the real server offset and reads nothing when it is unknown", function()
+      events = { ev(5, "MC night", 3) }
+      local function withOffset(off)
+        return compatFor({ C_DateAndTime = { GetServerTimeLocal = function() return 1000000 + off end },
+          GetServerTime = function() return 1000000 end })
+      end
+      local list = withOffset(-18000):GuildEvents(from(), from() + 14 * DAY)
+      assert.equal(utc(2026, 11, 6, 1), list[1].start)   -- 20:00 at UTC-5 is 01:00 UTC the next day
+      list = withOffset(3600):GuildEvents(from(), from() + 14 * DAY)
+      assert.equal(utc(2026, 11, 5, 19), list[1].start)
+      local bare = compatFor()
+      bare.env.C_DateAndTime = nil
+      assert.is_nil(bare:GuildEvents(from(), from() + 14 * DAY))
     end)
 
     it("matches titles on whole words only", function()
@@ -342,6 +361,23 @@ describe("Groups Calendar", function()
     assert.equal(0, counted(derive(raider), "Raider-R"))
     postObs(raider, "post1", "signedup", now - 600, now + 3600, now + 1)
     assert.equal(1, counted(derive(raider), "Raider-R"))
+  end)
+
+  it("a signup published after the kill earns nothing; one before it still does", function()
+    local raider = client("Raider-R")
+    local now = clock.now()
+    verifiedKill(now - 1000)
+    postObs(raider, "late", "signedup", now - 5000, now + 5000, now)
+    assert.equal(0, counted(derive(raider), "Raider-R"))
+    local early = client("A-R")
+    postObs(early, "early", "signedup", now - 5000, now + 5000, now - 2000)
+    assert.equal(1, counted(derive(early), "A-R"))
+    -- a post signup after its own window end never counts
+    local odd = client("B-R")
+    kills = {}
+    verifiedKill(now + 100)
+    postObs(odd, "odd", "signedup", now - 5000, now - 4000, now)
+    assert.equal(0, counted(derive(odd), "B-R"))
   end)
 
   it("a calendar signup is credited only when paired with a verified kill", function()

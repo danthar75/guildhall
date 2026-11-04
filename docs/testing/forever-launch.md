@@ -127,3 +127,6 @@ Needs Forever. Account A and account B are your two accounts, both in the guild 
 
 - [ ] **Which BFD encounter ids fire.** Run `/etrace` filtered to ENCOUNTER_END, then kill bosses in Blackfathom Deeps. Expected: the first value is in 2761-2767 (Aku'mai 2767) or in 2910-2916 (Aku'mai 2910). Note which set fires; Guildhall accepts both, and the unused set can be dropped later.
 - [ ] **Optional bosses map to the right wing.** With `/etrace` filtered to ENCOUNTER_END, kill Postmaster Malown (2798) and Skul (2799) in Stratholme, and Tsu'zee (2794) and Lord Hel'nurath (2793) in Dire Maul. Expected: Malown and Skul are on the Live side (Strat Live), Tsu'zee and Hel'nurath in Dire Maul West. If a boss was in the other wing, move its id in `Modules/Groups/Instances.lua`.
+- [ ] **Calendar reads with another month open.** Open the calendar UI on a different month, then relog or `/reload`. Expected: guild events for today through 14 days ahead are still read correctly.
+- [ ] **Calendar event maps to its raid.** Create guild events for a raid (e.g. MC) and one with only the raid name in the title. Expected: each maps to its raid, through the instance id or through the title.
+- [ ] **Calendar time is server time.** Create a guild event at 20:00 server time. Expected: it shows at 20:00 server time on the board.
