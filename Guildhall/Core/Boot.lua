@@ -158,7 +158,17 @@ local function buildServices(guildKey)
 
   local roster = ns.Roster.new(rosterCompat, g.cache)
   g.sets.profiles = g.sets.profiles or {}
-  local profileSet = ns.ReplicatedSet.new("profiles", g.sets.profiles, { now = now })
+  -- Profile links decide who earns credit, so the Leaderboard ledger must rebuild when they change.
+  -- Syncs apply records in bursts: coalesce to one event.
+  local profilesChangedPending = false
+  local profileSet = ns.ReplicatedSet.new("profiles", g.sets.profiles, { now = now, onChange = function()
+    if profilesChangedPending then return end
+    profilesChangedPending = true
+    after(1, function()
+      profilesChangedPending = false
+      if ns.Events then ns.Events:Fire("ProfilesChanged") end
+    end)
+  end })
   local profile = ns.Profile.new({
     personal = sv.personal, set = profileSet, roster = roster, now = now, random = random,
     playerChar = playerChar, guildKey = guildKey,
@@ -206,6 +216,7 @@ local function halt(state, newKey)
   if halted then return end
   halted = true
   local s = ns.services
+  if s then s.halted = true end
   if s and s.comm then s.comm:Halt() end
   profileSync = nil
   ns.exchange = nil

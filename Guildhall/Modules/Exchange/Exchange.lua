@@ -90,6 +90,7 @@ end
 -- The Leaderboard builds the observation set after Exchange logs in. Once it exists, deals
 -- seen by DealWatch and the day-old witness are recorded, and DealWatch's hooks go in (once).
 function Ex:AttachObservations(observations)
+  if self.dealWatch then return end
   self.ctx.observations = observations
   self.dealWatch = ns.Exchange.DealWatch.new({
     compat = self.compat, exchange = self, observations = observations, profile = self.profile,
@@ -286,6 +287,7 @@ function Ex:_pruneDeclined()
 end
 
 function Ex:_queueWitness()
+  if self.ctx.halted then return end
   local after = self.ctx.after
   if not after then return self:_witness() end
   if self.witnessQueued then return end
@@ -301,7 +303,7 @@ end
 -- even after a reload).
 function Ex:_witness()
   local obs = self.ctx.observations
-  if not obs or self:_gate() then return end
+  if not obs or self.ctx.halted or self:_gate() then return end
   local now, seen = self.now(), nil
   for _, rec in ipairs(self.listings:List(false)) do
     local d = rec.d

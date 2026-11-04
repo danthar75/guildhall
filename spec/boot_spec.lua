@@ -75,6 +75,7 @@ describe("Boot", function()
       w.InstallHooks = function() spies.hooks = spies.hooks + 1; return true end
       return w
     end
+    ns.RegisterModule("Thrower", { events = { PROBE = function() error("boom") end } })
     ns.RegisterModule("Probe", { events = { PROBE = function(n, ...) probeCalls[#probeCalls + 1] = { n, ... } end } })
     loadAddonFile(ns, "Guildhall/Core/Boot.lua")
     fire("PROBE", "early") -- before ADDON_LOADED / login: module events must not fire yet
@@ -133,6 +134,65 @@ describe("Boot", function()
     end
     assert.same({ "Exchange", "Leaderboard" }, tabs)
     assert.equal("Leaderboard", ns.GetModule("Leaderboard").settings.title)
+  end)
+
+  it("the window's tabs read Exchange, Leaderboard, Log, Settings", function()
+    local real = ns.UI
+    ns.UI = nil
+    loadAddonFile(ns, "Guildhall/Core/UI/Window.lua")
+    local keys = ns.UI.Window:TabKeys()
+    ns.UI = real
+    assert.same({ "Exchange", "Leaderboard", "Log", "Settings" }, keys)
+  end)
+
+  it("a profile change invalidates the ledger", function()
+    local n = 0
+    ns.leaderboard.ledger.Invalidate = function() n = n + 1 end
+    ns.services.profileSet.onChange()
+    ns.services.profileSet.onChange() -- a burst coalesces
+    assert.equal(0, n)
+    wait(2)
+    assert.equal(1, n)
+  end)
+
+  it("one throwing module handler does not stop the next, and the error is reported", function()
+    fire("PROBE", 1)
+    assert.equal(1, #probeCalls)
+    local found = false
+    for _, m in ipairs(printed) do if m:find("boom", 1, true) then found = true end end
+    assert.is_true(found)
+  end)
+
+  it("after a halt the witness and the bank tick do nothing", function()
+    local ex, queries, lists = ns.exchange, 0, 0
+    ns.services.compat.QueryBankLog = function() queries = queries + 1 end
+    ns.services.compat.BankMoneyTab = function() return 9 end
+    fire("GUILDBANKFRAME_OPENED")
+    local q0 = queries
+    local obs = ns.leaderboard.observations
+    obs.List = function() lists = lists + 1; return {} end
+    guild = "GuildB"
+    fire("PLAYER_GUILD_UPDATE"); wait(3)
+    assert.is_true(ns.services.halted)
+    ex:_queueWitness(); ex:_witness()
+    wait(120)
+    assert.equal(0, lists)
+    assert.equal(q0, queries)
+  end)
+
+  it("a failing Leaderboard login removes its appended syncs and reports", function()
+    local lb = ns.GetModule("Leaderboard")
+    local s = ns.services
+    local before = #s.syncs
+    ns.LbConfig.new = function() error("ctor boom") end
+    ns.leaderboard = nil
+    lb.OnLogin(ns)
+    assert.equal(before, #s.syncs)
+    assert.is_nil(ns.leaderboard)
+    assert.is_nil(s.observations)
+    local found = false
+    for _, m in ipairs(printed) do if m:find("ctor boom", 1, true) then found = true end end
+    assert.is_true(found)
   end)
 
   it("registers the DealWatch and bank events", function()

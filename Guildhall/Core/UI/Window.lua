@@ -304,6 +304,13 @@ local function collectTabs()
   return list
 end
 
+-- Tab keys in display order (for specs).
+function Window:TabKeys()
+  local keys = {}
+  for i, tab in ipairs(collectTabs()) do keys[i] = tab.key end
+  return keys
+end
+
 local function savePosition()
   local db = UI.WindowDB()
   if not db then return end

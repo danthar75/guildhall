@@ -34,6 +34,7 @@ end
 ns.Events:On("ObservationsChanged", invalidate)
 ns.Events:On("LeaderboardConfigChanged", invalidate)
 ns.Events:On("RosterRefreshed", invalidate)
+ns.Events:On("ProfilesChanged", invalidate)
 
 -- Waits for the first sync exchange (Sync exposes no completion signal, so a fixed delay), then
 -- lets an officer client refresh the tz and freeze finished months.
@@ -48,9 +49,7 @@ local function scheduleOfficerWork(s)
   end)
 end
 
-local function onLogin(n)
-  local s = n.services
-  if not s then return end
+local function build(n, s)
   local db = n.DB.Module(GuildhallDB, s.guildKey, "Leaderboard")
   db.observations = db.observations or {}
   db.config = db.config or {}
@@ -59,7 +58,6 @@ local function onLogin(n)
     comm = s.comm, profile = s.profile, log = s.log, now = s.now, after = s.after, random = s.random,
     playerChar = s.playerChar, db = db.observations, syncs = s.syncs,
   })
-  s.observations = observations
   local config = n.LbConfig.new({
     comm = s.comm, compat = s.compat, roster = s.roster, profile = s.profile, log = s.log, now = s.now,
     after = s.after, random = s.random, playerChar = s.playerChar, db = db.config, syncs = s.syncs,
@@ -67,8 +65,13 @@ local function onLogin(n)
   local ledger = n.Ledger.new({ observations = observations, profile = s.profile, roster = s.roster, now = s.now })
   local bank = n.Bank.new({
     compat = s.compat, observations = observations, profile = s.profile, roster = s.roster,
-    now = s.now, after = s.after, moduleDb = db,
+    now = s.now, moduleDb = db,
+    -- the bank's re-read tick must not outlive a halt
+    after = function(delay, cb)
+      s.after(delay, function() if n.leaderboard and not s.halted then cb() end end)
+    end,
   })
+  s.observations = observations
   n.leaderboard = { observations = observations, ledger = ledger, config = config, bank = bank }
 
   observations:Start()
@@ -89,6 +92,19 @@ for event, opens in pairs({ PLAYER_INTERACTION_MANAGER_FRAME_SHOW = true, PLAYER
 end
 events.GUILDBANKLOG_UPDATE = function(n)
   if n.leaderboard then n.leaderboard.bank:OnLogUpdate() end
+end
+
+-- If a constructor throws midway, drop the syncs already appended (a restriction lift would
+-- otherwise start orphans) and report the error.
+local function onLogin(n)
+  local s = n.services
+  if not s then return end
+  local count = #s.syncs
+  local ok, err = pcall(build, n, s)
+  if ok then return end
+  for i = #s.syncs, count + 1, -1 do s.syncs[i] = nil end
+  n.leaderboard, s.observations = nil, nil
+  n.OnError(err)
 end
 
 ns.RegisterModule("Leaderboard", {
