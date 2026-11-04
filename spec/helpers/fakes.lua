@@ -68,4 +68,47 @@ function M.bus(clock, timers, commOpts)
   return bus
 end
 
+-- widgets(): a permissive fake of WoW frames for UI specs. Every widget accepts any method
+-- call (recorded in w.calls[method] as arrays of args) and returns nil, except: Create*/
+-- CreateTexture/CreateFontString return a new widget, GetText returns the last SetText,
+-- IsShown/IsVisible follow Show/Hide, GetChecked follows SetChecked. W.created lists
+-- {type, widget} for each CreateFrame call; W.CreateFrame is the global to install.
+function M.widgets()
+  local W = { created = {} }
+  local function new(kind)
+    local w = { kind = kind, calls = {}, shown = false }
+    return setmetatable(w, { __index = function(t, k)
+      local f = function(self, ...)
+        local list = self.calls[k]
+        if not list then list = {}; self.calls[k] = list end
+        list[#list + 1] = { ... }
+        if k == "CreateTexture" or k == "CreateFontString" then return new(k) end
+        if k == "SetText" then self.text = (...) end
+        if k == "GetText" then return self.text end
+        if k == "Show" then self.shown = true end
+        if k == "Hide" then self.shown = false end
+        if k == "IsShown" or k == "IsVisible" then return self.shown end
+        if k == "SetChecked" then self.checked = (...) and true or false end
+        if k == "GetChecked" then return self.checked end
+        if k == "GetStringHeight" or k == "GetWidth" or k == "GetFrameLevel" then return 10 end
+        return nil
+      end
+      rawset(t, k, f)
+      return f
+    end })
+  end
+  W.new = new
+  function W.CreateFrame(kind)
+    local w = new(kind)
+    W.created[#W.created + 1] = { kind, w }
+    return w
+  end
+  function W.ofKind(kind)
+    local out = {}
+    for _, c in ipairs(W.created) do if c[1] == kind then out[#out + 1] = c[2] end end
+    return out
+  end
+  return W
+end
+
 return M

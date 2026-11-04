@@ -37,7 +37,7 @@ local ERRORS = {
   ["bad kind"] = "Choose Buying (LF) or Selling (WTS).",
   ["bad item"] = "Choose an item (shift-click or drag one in) or type its name.",
   ["bad qty"] = "Quantity must be a whole number from 1 to 9999.",
-  ["bad note"] = "The note can be at most 200 characters.",
+  ["bad note"] = "The note is too long (200 bytes; accented letters take 2).",
   ["bad mats"] = "Choose whether you will provide materials.",
   ["bad cod"] = "Choose whether you are open to COD.",
 }
@@ -150,15 +150,23 @@ local function takeCursorItem()
   if ClearCursor then ClearCursor() end
 end
 
-local function onInsertLink(...)
+-- Runs inside Blizzard's InsertLink call, so nothing may escape: the whole body runs under
+-- UI.Try and every argument goes through Compat:Safe (a secret string can't be searched).
+local function scanInsertLink(...)
   if not (frame and frame:IsShown()) then return end
+  local compat = ns.compat
   for i = 1, select("#", ...) do
     local v = select(i, ...)
+    if compat then v = compat:Safe(v) end
     if type(v) == "string" and v:find("|H", 1, true) then
-      UI.Try(Form.LoadLink, v)
+      Form.LoadLink(v)
       return
     end
   end
+end
+
+local function onInsertLink(...)
+  UI.Try(scanInsertLink, ...)
 end
 
 -- Post-hook only (never replaced), installed once. The link still also reaches an open chat box.
@@ -281,7 +289,7 @@ local function build()
   local nameLabel = UI.Text(frame, "GameFontNormal", "Name:")
   nameLabel:SetPoint("TOPLEFT", 20, -128)
   f.name = input(frame, 280)
-  f.name:SetMaxLetters(255)
+  f.name:SetMaxBytes(256) -- 255 bytes + terminator: Validate counts bytes, not letters
   f.name:SetPoint("TOPLEFT", 92, -124)
   on(f.name, "OnTextChanged", function(self, userInput)
     if f.settingName or not userInput then return end
@@ -305,7 +313,7 @@ local function build()
   f.count = UI.Text(frame, "GameFontDisableSmall")
   f.count:SetPoint("TOPRIGHT", -20, -246)
   f.note = input(frame, 356)
-  f.note:SetMaxLetters(NOTE_MAX)
+  f.note:SetMaxBytes(NOTE_MAX + 1) -- bytes + terminator, matching Validate and the counter
   f.note:SetPoint("TOPLEFT", 24, -262)
   on(f.note, "OnTextChanged", function(self)
     f.count:SetText(string.format("%d/%d", #(self:GetText() or ""), NOTE_MAX))
