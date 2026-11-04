@@ -70,6 +70,24 @@ function Details.ServerDate(t, fmt)
   return f("!" .. fmt, t + Details.Tz())
 end
 
+-- Ruling T11c: one wall-clock rule. Post and event start times are realm wall-clock, so they are
+-- shown (and, in the form, entered) with the real realm offset, Compat:ServerOffset(); the
+-- leaderboard clock (Details.Tz) only when that is unknown. Details.Tz (cfg:Tz) stays for day and
+-- month boundary keys.
+function Details.WallTz()
+  local s = services()
+  local c = s and s.compat
+  local off = c and c.ServerOffset and c:ServerOffset() or nil
+  if type(off) == "number" then return off end
+  return Details.Tz()
+end
+
+-- Server wall-clock text of a start time.
+function Details.StartDate(t, fmt)
+  local f = date or os.date
+  return f("!" .. fmt, t + Details.WallTz())
+end
+
 function Details.Today() return ns.Scoring.DayKey(Details.Now(), Details.Tz()) end
 
 local function profiles()
@@ -235,7 +253,7 @@ local function chatLine(post, filled)
     local n = filled.open[r] or 0
     if n > 0 then need[#need + 1] = n .. " " .. NEED_WORD[r] end
   end
-  local when = d.start and (" " .. Details.ServerDate(d.start, "%a %H:%M") .. " server time") or ""
+  local when = d.start and (" " .. Details.StartDate(d.start, "%a %H:%M") .. " server time") or ""
   local who = Util.DisplayName(post.char or Details.CharOf(post.by) or "")
   if #need == 0 then return entry.name .. when .. ": group full." end
   return "LFM " .. entry.name .. when .. ": need " .. table.concat(need, ", ") .. ". Whisper " .. who .. "."
@@ -251,7 +269,7 @@ end
 
 local function whenText(start)
   if start == nil then return "Now" end
-  return Details.ServerDate(start, "%a %d %b %H:%M")
+  return Details.StartDate(start, "%a %d %b %H:%M")
 end
 
 local function showDungeon(post)
@@ -471,7 +489,7 @@ local function showRaid(entry)
       if s.roster and s.roster.IsMember and s.roster:IsMember(ch) == true then guild = guild + 1 end
     end
   end
-  local head = (start and (Details.ServerDate(start, "%a %d %b %H:%M") .. " server time") or "Now")
+  local head = (start and (Details.StartDate(start, "%a %d %b %H:%M") .. " server time") or "Now")
     .. " · " .. accepted .. " accepted · in raid now: " .. inRaid .. " (" .. guild .. " guild)"
   if inst then
     local k = g.credit and g.credit.Bosses and g.credit:Bosses(instance, Details.Today()) or 0

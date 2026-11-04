@@ -163,7 +163,7 @@ function G:Assign(postId, profileId, role)
   local err = self:_gate()
   if err then return false, err end
   local new = ns.Groups.Post.Assign(rec, profileId, role, self.playerChar, self.now())
-  local ok, verr = ns.Groups.Post.Validate(new.d)
+  local ok, verr = ns.Groups.Post.CheckEdit(rec.d, new.d, self.now())
   if not ok then return false, verr end
   return publish(self.postSync, new, self.checkPost)
 end

@@ -256,9 +256,10 @@ local function build()
 end
 
 -- Opens the editor for an instance's checklist id, or a new checklist when id is nil (or gone).
+-- Returns true, or false, "unknown instance".
 function Editor.Open(instance, id)
   local entry = type(instance) == "string" and ns.Instances.Get(instance)
-  if not entry then return end
+  if not entry then return false, "unknown instance" end
   build()
   if ns.Groups.Form and ns.Groups.Form.ListenLinks then ns.Groups.Form.ListenLinks(onLink) end
   local cl = ns.groups and ns.groups.checklist
@@ -284,6 +285,7 @@ function Editor.Open(instance, id)
   frame:ClearAllPoints()
   frame:SetPoint("CENTER")
   frame:Show()
+  return true
 end
 
 function Editor.IsShown() return frame ~= nil and frame:IsShown() end

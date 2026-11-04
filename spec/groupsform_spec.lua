@@ -341,6 +341,22 @@ describe("Groups.Form", function()
       assert.equal("Shift-click or drag an item in, or type its item ID.", e().error.text)
     end)
 
+    it("an unknown instance is refused", function()
+      assert.same({ false, "unknown instance" }, { ns.Groups.ChecklistEditor.Open("nope", nil) })
+      assert.same({ true }, { ns.Groups.ChecklistEditor.Open("mc", nil) })
+    end)
+
+    it("with the post form open too, one shift-click fills only one of them", function()
+      form().Open()
+      ns.Groups.ChecklistEditor.Open("mc", nil)
+      hook(LINK)
+      local filled = (f().wantLink ~= nil and 1 or 0) + (e().itemLink ~= nil and 1 or 0)
+      assert.equal(1, filled)
+      form().Hide()
+      hook(LINK)
+      assert.equal(LINK, e().itemLink)
+    end)
+
     it("a permission error shows the message cl:Save returned", function()
       saved.refuse = "no permission"
       ns.Groups.ChecklistEditor.Open("mc", nil)

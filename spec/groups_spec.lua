@@ -101,6 +101,24 @@ describe("Groups", function()
     assert.equal("bad instance", select(2, P.CheckNew({ role = "t", need = { t = 0, h = 1, d = 3 } }, 400)))
   end)
 
+  it("an edit that moves start gets CheckNew's window; one that keeps it doesn't", function()
+    local P = node("Alice-Realm").Post
+    local old = now({ start = 500 })
+    assert.equal("start in past", select(2, P.CheckEdit(old, now({ start = 300 }), 400)))
+    assert.equal("start too far", select(2, P.CheckEdit(old, now({ start = 400 + 1209601 }), 400)))
+    assert.is_true((P.CheckEdit(old, now({ start = 600 }), 400)))
+    -- after the start has passed, an edit that leaves start alone is still fine
+    assert.is_true((P.CheckEdit(old, now({ start = 500, assign = { abc = "d" } }), 900)))
+    assert.equal("bad note", select(2, P.CheckEdit(old, now({ start = 500, note = string.rep("x", 121) }), 400)))
+  end)
+
+  it("the poster can still assign after a scheduled start has passed", function()
+    local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+    local post = mustPost(a, { start = 100600 })
+    clock.advance(1200)
+    assert.is_true((a.g:Assign(post.id, b.profile:Id(), "d")))
+  end)
+
   it("a post may turn its reminder off; remind is a boolean", function()
     local a = node("Alice-Realm")
     local rec = mustPost(a, { start = 200000, remind = false })

@@ -107,6 +107,14 @@ function Post.CheckNew(d, now)
   return true
 end
 
+-- An edit of one of our own posts: Validate, and CheckNew's start window when the edit moves start.
+function Post.CheckEdit(old, d, now)
+  if type(old) == "table" and d ~= nil and type(d) == "table" and d.start ~= old.start then
+    return Post.CheckNew(d, now)
+  end
+  return Post.Validate(d)
+end
+
 local function expOf(d, now)
   if d.start ~= nil then return d.start + START_TTL end
   return (d.created or now) + NOW_TTL

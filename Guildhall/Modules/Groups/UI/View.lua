@@ -159,13 +159,13 @@ end
 
 local function rowText(e)
   if e.kind == "calendar" then
-    return Util.Escape(e.ev.title) .. " · " .. D.ServerDate(e.start, "%a %H:%M"), "|cff9d9d9dCalendar|r"
+    return Util.Escape(e.ev.title) .. " · " .. D.StartDate(e.start, "%a %H:%M"), "|cff9d9d9dCalendar|r"
   end
   local post = e.post
   local name = Util.Escape(ns.Instances.Get(post.d.instance).name)
   local tags = D.Tags(post, groups().svc:Filled(post))
   if e.start == nil then return name .. " · " .. D.NameOf(post.by), tags end
-  return name .. " · " .. D.ServerDate(e.start, "%a %H:%M"), tags
+  return name .. " · " .. D.StartDate(e.start, "%a %H:%M"), tags
 end
 
 local function selectedEntry(list)

@@ -36,7 +36,6 @@ local ERRORS = {
   ["bad need"] = "Still need takes whole numbers from 0 to 39.",
   ["bad role"] = "Pick your role.",
   ["bad want"] = "The item name is too long (64 bytes at most).",
-  ["bad start"] = "Pick a time in the future.",
 }
 
 local frame
@@ -87,8 +86,12 @@ local function scanInsertLink(...)
     local v = select(i, ...)
     if c and c.Safe then v = c:Safe(v) end
     if type(v) == "string" and v:find("|H", 1, true) then
+      -- The first listener that takes the link wins, so one shift-click fills one form.
       for _, fn in ipairs(listeners) do
-        if UI.Try(fn, v) == true then linkAt = GetTime and GetTime() or nil end
+        if UI.Try(fn, v) == true then
+          linkAt = GetTime and GetTime() or nil
+          return
+        end
       end
       return
     end
@@ -104,8 +107,8 @@ end
 -- Runs inside Blizzard's InsertLink call, so nothing may escape.
 local function onInsertLink(...) UI.Try(scanInsertLink, ...) end
 
--- fn(link) runs for every inserted link (each listener checks its own frame is shown) and returns
--- true when it took the link. Post-hook only, installed once.
+-- fn(link) runs for an inserted link (each listener checks its own frame is shown) and returns
+-- true when it took the link; later listeners then don't see it. Post-hook only, installed once.
 function Form.ListenLinks(fn)
   local known = false
   for _, l in ipairs(listeners) do if l == fn then known = true end end
@@ -148,13 +151,10 @@ end
 
 -- Time --------------------------------------------------------------------------------------------
 
--- The realm offset for the day labels: the real one, else the leaderboard clock's.
+-- The wall-clock offset for the day labels (Details.WallTz, Ruling T11c).
 local function labelOffset()
-  local c = compat()
-  local off = c and c.ServerOffset and c:ServerOffset()
-  if off then return off end
   local D = ns.Groups.Details
-  return D and D.Tz and D.Tz() or 0
+  return D and D.WallTz and D.WallTz() or 0
 end
 
 -- Server midnight of today (as an epoch shifted by the offset, i.e. realm wall-clock seconds).
@@ -182,6 +182,8 @@ end
 local function scheduledStart()
   local h, m = parseTime(f.time:GetText())
   if not h then return nil, "Enter the time as HH:MM, server time." end
+  -- Details.WallTz's rule, but posting never falls back to the leaderboard clock: an unknown realm
+  -- offset refuses rather than guess.
   local c = compat()
   local off = c and c.ServerOffset and c:ServerOffset()
   if type(off) ~= "number" then

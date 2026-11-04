@@ -228,6 +228,27 @@ describe("Groups.View", function()
     assert.same({}, errors)
   end)
 
+  it("start times use the realm offset, not the leaderboard tz (Ruling T11c)", function()
+    -- cfg:Tz is 0; the realm is UTC+1. 20:00 server time on Wed 15 Nov is 19:00 UTC.
+    ns.services.compat.ServerOffset = function() return 3600 end
+    local START = 1699920000 + 86400 + 72000 - 3600
+    posts = {
+      post("p3:g1_1", "p3", { instance = "mc", role = "h", need = { t = 2, h = 7, d = 29 }, start = START }),
+      post("p2:g1_1", "p2", { instance = "strat_ud", role = "t", need = { t = 0, h = 1, d = 3 }, start = START + 60 }),
+    }
+    events = { { title = "BWL night", start = START + 120, instance = "bwl", source = "Calendar", accepted = 3 } }
+    build()
+    local r = shownRows()
+    assert.equal("Molten Core · Wed 20:00", r[2].name.text)
+    assert.is_truthy(r[3].name.text:find("Wed 20:01", 1, true))
+    assert.is_truthy(r[4].name.text:find("BWL night · Wed 20:02", 1, true))
+    assert.is_true(hasLike("Wed 15 Nov 20:00 server time")) -- the raid details header
+    assert.is_false(hasLike("19:00"))
+    click(r[3])
+    assert.is_true(hasLike("Wed 15 Nov 20:01")) -- the dungeon details
+    assert.is_false(hasLike("19:01"))
+  end)
+
   it("Prepared checkbox disabled without permission", function()
     posts = { post("p3:g1_1", "p3", { instance = "mc", role = "h", need = { t = 2, h = 7, d = 29 }, start = NOW + 600 }) }
     signups["p3:g1_1"] = { { profile = "p2", char = "Brakka-R", roles = { d = true }, at = NOW - 60 } }
