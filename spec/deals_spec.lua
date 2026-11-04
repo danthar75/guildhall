@@ -185,4 +185,142 @@ describe("Exchange deals", function()
       assert.equal(1, (sum(list, "exchange.purchases", false)))
     end)
   end)
+
+  describe("CoD mail (DealWatch)", function()
+    local published, now, mailSnap, inbox, listings, hooks, scripts, env
+    local LINK2 = "|Hitem:2589::|h[Linen Cloth]|h"
+
+    local function build(compatOver)
+      local compat = {
+        Safe = function(_, v) return v end,
+        SendMailSnapshot = function() return mailSnap and { to = mailSnap.to, cod = mailSnap.cod, items = mailSnap.items } end,
+        InboxCount = function() local n = 0; for k in pairs(inbox) do if k > n then n = k end end; return n end,
+        InboxCod = function(_, i) return inbox[i] end,
+      }
+      for k, v in pairs(compatOver or {}) do compat[k] = v end
+      local w = ns.Exchange.DealWatch.new({
+        compat = compat,
+        exchange = { listings = { List = function() return listings end } },
+        observations = { Publish = function(_, d) published[#published + 1] = d; return "ok", {} end },
+        profile = { Id = function() return "ann" end,
+          OwnerOf = function(_, c) return ({ ["Bob-R"] = "bob" })[c] end },
+        roster = { Norm = function(_, n) return n end },
+        now = function() return now end, after = function() end, env = env,
+        hooksecurefunc = function(name, fn) hooks[name] = fn end,
+      })
+      w:InstallHooks()
+      return w
+    end
+
+    before_each(function()
+      loadAddonFile(ns, "Guildhall/Modules/Exchange/DealWatch.lua")
+      published, now, hooks, scripts = {}, 5000, {}, {}
+      env = {}
+      mailSnap = { to = "Bob-R", cod = 50000, items = { { id = 2589, n = 20 } } }
+      inbox = {}
+      listings = { { id = "L1", v = 1, t = 1000, by = "ann", char = "Ann-R", exp = 700000, del = false,
+        d = { kind = "WTS", item = LINK2, qty = 20, cod = true, created = 1000 } } }
+    end)
+
+    it("seller CoD send publishes after MAIL_SEND_SUCCESS only", function()
+      local w = build()
+      hooks.SendMail("Bob-R", "s", "b")
+      assert.equal(0, #published)
+      w:OnEvent("MAIL_SEND_SUCCESS")
+      w:OnEvent("MAIL_SEND_SUCCESS")
+      assert.equal(1, #published)
+      assert.same({ kind = "cod", listing = "L1", seller = "ann", buyer = "bob", item = 2589, count = 20,
+        copper = 50000, at = 5000 }, published[1])
+    end)
+
+    it("a failed send (no success event) publishes nothing", function()
+      local w = build()
+      hooks.SendMail("Bob-R", "s", "b")
+      w:OnEvent("MAIL_FAILED")
+      w:OnEvent("MAIL_SEND_SUCCESS")
+      assert.equal(0, #published)
+    end)
+
+    it("Era fallback: fields already cleared in the post-hook, PreClick snapshot is used", function()
+      env.SendMailMailButton = { HookScript = function(_, n, fn) scripts[n] = fn end }
+      local w = build()
+      scripts.PreClick()
+      mailSnap = nil   -- cleared by the time SendMail's post-hook runs
+      hooks.SendMail("Bob-R", "s", "b")
+      w:OnEvent("MAIL_SEND_SUCCESS")
+      assert.equal(1, #published)
+    end)
+
+    it("buyer taking a CoD item from a cached header publishes once", function()
+      inbox[1] = { sender = "Bob-R", cod = 50000, items = { { id = 2589, n = 20 } } }
+      -- the buyer is "ann", the sender "bob": the listing is owned by bob
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      hooks.AutoLootMailItem(1)
+      assert.equal(1, #published)
+      assert.same({ kind = "cod", listing = "L1", seller = "bob", buyer = "ann", item = 2589, count = 20,
+        copper = 50000, at = 5000 }, published[1])
+    end)
+
+    it("CoD observations 29 days apart pair; 31 days apart don't", function()
+      local function rec(id, by, at)
+        return { id = id, by = by, d = { kind = "cod", listing = "L1", seller = "ann", buyer = "bob",
+          item = 2589, count = 20, copper = 50000, at = at } }
+      end
+      local function sales(list)
+        local n = 0
+        for _, c in ipairs(ns.Activity.Deriver("cod")(list, {})) do
+          if c.type == "exchange.sales" and c.counted then n = n + c.value end
+        end
+        return n
+      end
+      assert.equal(1, sales({ rec("o1", "ann", 5000), rec("o2", "bob", 5000 + 29 * 86400) }))
+      assert.equal(0, sales({ rec("o1", "ann", 5000), rec("o2", "bob", 5000 + 31 * 86400) }))
+    end)
+
+    it("a mail with no CoD is ignored", function()
+      mailSnap = nil
+      inbox[1] = nil
+      local w = build()
+      hooks.SendMail("Bob-R", "s", "b")
+      w:OnEvent("MAIL_SEND_SUCCESS")
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      assert.equal(0, #published)
+    end)
+
+    it("a secret sender is ignored (real Compat)", function()
+      local cns = {}
+      loadAddonFile(cns, "Guildhall/Core/Util.lua")
+      loadAddonFile(cns, "Guildhall/Core/Compat.lua")
+      local real = cns.Compat.new({
+        GetInboxNumItems = function() return 1 end,
+        GetInboxHeaderInfo = function() return nil, nil, "SECRET", "s", 0, 50000 end,
+        GetInboxItemLink = function(_, i) if i == 1 then return LINK2 end end,
+        GetInboxItem = function() return "x", 2589, nil, 20 end,
+        issecretvalue = function(v) return v == "SECRET" end,
+      })
+      listings[1].by = "bob"
+      local w = build({ Safe = function(_, v) return real:Safe(v) end,
+        InboxCount = function() return real:InboxCount() end,
+        InboxCod = function(_, i) return real:InboxCod(i) end })
+      assert.has_no.errors(function()
+        w:OnEvent("MAIL_INBOX_UPDATE")
+        hooks.TakeInboxItem(1, 1)
+      end)
+      assert.equal(0, #published)
+    end)
+
+    it("hook bodies never raise", function()
+      local w = build({ SendMailSnapshot = function() error("boom") end, InboxCod = function() error("boom") end })
+      assert.has_no.errors(function()
+        hooks.SendMail("Bob-R", "s", "b")
+        w:OnEvent("MAIL_INBOX_UPDATE")
+        hooks.TakeInboxItem(1, 1)
+        hooks.AutoLootMailItem(1)
+      end)
+    end)
+  end)
 end)

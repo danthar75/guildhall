@@ -201,6 +201,63 @@ function Compat:TradeSnapshot()
   return { give = give, get = get, giveCopper = giveCopper, getCopper = getCopper }
 end
 
+-- Reads the filled-in Send Mail fields: { to, cod, items = {{id,n}} }, or nil when the CoD is 0,
+-- the APIs/fields are missing, or ANY value is secret.
+function Compat:SendMailSnapshot()
+  local env = self.env
+  local box = env.SendMailNameEditBox
+  if not (box and box.GetText and env.GetSendMailCOD and env.GetSendMailItemLink and env.GetSendMailItem) then return nil end
+  local to = self:Safe(box:GetText())
+  local cod = self:Safe(env.GetSendMailCOD())
+  if type(to) ~= "string" or to == "" or type(cod) ~= "number" or cod <= 0 then return nil end
+  local items = {}
+  for i = 1, env.ATTACHMENTS_MAX_SEND or 12 do
+    local rawLink = env.GetSendMailItemLink(i)
+    if self:Safe(rawLink) == nil and self:_isSecret(rawLink) then return nil end
+    local link = self:Safe(rawLink)
+    if link ~= nil then
+      local _, _, _, n = env.GetSendMailItem(i)
+      n = self:Safe(n)
+      if n == nil then return nil end
+      local id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
+      if id and type(n) == "number" and n > 0 then items[#items + 1] = { id = id, n = n } end
+    end
+  end
+  if #items == 0 then return nil end
+  return { to = to, cod = cod, items = items }
+end
+
+function Compat:InboxCount()
+  local env = self.env
+  if not env.GetInboxNumItems then return 0 end
+  local n = self:Safe((env.GetInboxNumItems()))
+  return type(n) == "number" and n or 0
+end
+
+-- A CoD mail in the inbox: { sender, cod, items = {{id,n}} }, or nil (no CoD, missing API, any secret).
+function Compat:InboxCod(index)
+  local env = self.env
+  if not (env.GetInboxHeaderInfo and env.GetInboxItemLink and env.GetInboxItem) then return nil end
+  local _, _, rawSender, _, _, rawCod = env.GetInboxHeaderInfo(index)
+  local sender, cod = self:Safe(rawSender), self:Safe(rawCod)
+  if type(sender) ~= "string" or sender == "" or type(cod) ~= "number" or cod <= 0 then return nil end
+  local items = {}
+  for i = 1, env.ATTACHMENTS_MAX_RECEIVE or 16 do
+    local rawLink = env.GetInboxItemLink(index, i)
+    if self:Safe(rawLink) == nil and self:_isSecret(rawLink) then return nil end
+    local link = self:Safe(rawLink)
+    if link ~= nil then
+      local _, _, _, n = env.GetInboxItem(index, i)
+      n = self:Safe(n)
+      if n == nil then return nil end
+      local id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
+      if id and type(n) == "number" and n > 0 then items[#items + 1] = { id = id, n = n } end
+    end
+  end
+  if #items == 0 then return nil end
+  return { sender = sender, cod = cod, items = items }
+end
+
 -- The trade partner's full name, or nil (no trade, API missing or secret).
 function Compat:TradePartner()
   local env = self.env
