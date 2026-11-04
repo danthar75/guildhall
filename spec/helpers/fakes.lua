@@ -39,4 +39,33 @@ function M.compat(overrides)
   return ns.Compat.new(env), env
 end
 
+-- bus(clock, timers, commOpts?): a fake guild channel. bus:join("Name-Realm") returns that member's
+-- real Comm (own ns, own Compat). Every line a member sends is delivered synchronously, in order,
+-- to every other member's comm:Receive(prefix, line, "GUILD", senderFullName). Deterministic.
+-- commOpts are merged into each Comm's options (e.g. a larger burst for multi-chunk traffic).
+function M.bus(clock, timers, commOpts)
+  local bus = { members = {}, order = {} }
+  function bus:join(name)
+    local ns = {}
+    loadAddonFile(ns, "Guildhall/Core/Util.lua")
+    loadAddonFile(ns, "Guildhall/Core/Serialize.lua")
+    loadAddonFile(ns, "Guildhall/Core/Comm.lua")
+    local compat = M.compat({
+      C_ChatInfo = { SendAddonMessage = function(prefix, line, channel)
+        for _, other in ipairs(bus.order) do
+          if other ~= name then bus.members[other]:Receive(prefix, line, channel, name) end
+        end
+        return 0
+      end },
+    })
+    local opts = { compat = compat, now = clock.now, after = timers.after, playerName = name, burst = 100 }
+    for k, v in pairs(commOpts or {}) do opts[k] = v end
+    local comm = ns.Comm.new(opts)
+    bus.members[name] = comm
+    bus.order[#bus.order + 1] = name
+    return comm
+  end
+  return bus
+end
+
 return M
