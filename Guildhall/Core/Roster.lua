@@ -13,10 +13,11 @@ local DEFAULT_OFFICERS = 2
 function Roster.ParseTag(text)
   local out = {}
   if type(text) ~= "string" then return out end
-  local body = text:match("%[Guildhall%s+([^%]]*)%]")
-  if not body then return out end
-  for k, v in body:gmatch("([%w_]+)=(%S+)") do
-    out[k] = tonumber(v) or v
+  -- Every [Guildhall ...] tag counts; keys merge (a later tag wins a repeated key).
+  for body in text:gmatch("%[Guildhall%s+([^%]]*)%]") do
+    for k, v in body:gmatch("([%w_]+)=(%S+)") do
+      out[k] = tonumber(v) or v
+    end
   end
   return out
 end
@@ -76,6 +77,21 @@ end
 function Roster:OfficerThreshold()
   local n = self.cache.guildConfig and self.cache.guildConfig.officers
   return type(n) == "number" and n or DEFAULT_OFFICERS
+end
+
+-- A tag value as an array of integers: "3,4" -> {3, 4}, 3 -> {3}, missing -> {}.
+function Roster:ConfigList(key)
+  local v = self.cache.guildConfig and self.cache.guildConfig[key]
+  local out = {}
+  if type(v) == "number" then
+    out[1] = v
+  elseif type(v) == "string" then
+    for n in v:gmatch("[^,]+") do
+      local x = tonumber(n)
+      if x and x == math.floor(x) then out[#out + 1] = x end
+    end
+  end
+  return out
 end
 
 function Roster:IsOfficer(fullName)

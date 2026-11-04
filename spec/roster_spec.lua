@@ -41,6 +41,21 @@ describe("Roster", function()
     assert.same({}, ns.Roster.ParseTag(42))
   end)
 
+  it("ParseTag merges two tags; ConfigList parses lists", function()
+    local ns = {}
+    loadAddonFile(ns, "Guildhall/Core/Roster.lua")
+    local text = "[Guildhall officers=3] notes [Guildhall donations=3,4 bankexclude=0]"
+    local t = ns.Roster.ParseTag(text)
+    assert.equal(3, t.officers)
+    assert.equal("3,4", t.donations)
+    local r = make({}, { C_GuildInfo = { GetInfoText = function() return text end, GuildRoster = function() end } })
+    r:Refresh()
+    assert.same({ 3, 4 }, r:ConfigList("donations"))
+    assert.same({ 0 }, r:ConfigList("bankexclude"))
+    assert.same({ 3 }, r:ConfigList("officers"))
+    assert.same({}, r:ConfigList("nope"))
+  end)
+
   it("IsOfficer uses threshold rank < N", function()
     local r = make({
       { name = "Boss-Realm", rank = 0, online = true },

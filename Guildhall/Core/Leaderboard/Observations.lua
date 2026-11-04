@@ -71,9 +71,13 @@ function Obs.New(ctx)
   self.profile, self.log, self.now = ctx.profile, ctx.log, ctx.now
   self.playerChar = ctx.playerChar
   self.store = ctx.db
+  self.changes = 0   -- bumps on every accepted change; the Ledger cache keys off it
   self.set = ns.ReplicatedSet.new(SET_NAME, self.store, {
     now = ctx.now, maxFuture = DAY,
-    onChange = function() if ns.Events then ns.Events:Fire("ObservationsChanged") end end,
+    onChange = function()
+      self.changes = self.changes + 1
+      if ns.Events then ns.Events:Fire("ObservationsChanged") end
+    end,
   })
 
   local function logApplied(rec, status, old, sender, reason)
