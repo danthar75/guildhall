@@ -3,6 +3,7 @@
 Manual checks for the WoW-facing parts (frames, events, slash commands). Tags:
 **[Era]** can be tested on Classic Era with the dev TOC. **[Forever]** needs the WoW Forever client.
 Keep `/console scriptErrors 1` on (or BugSack installed) for every session.
+For Forever launch day, the short list split into solo and needs-another-tester is in `forever-launch.md`.
 
 ## How to install
 
