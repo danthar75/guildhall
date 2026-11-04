@@ -214,5 +214,9 @@ function P:Validate(rec)
   if rank == nil then return false, "roster unknown" end
   if rank ~= 0 then return false, "author not the guild master" end
   if type(rec.d) ~= "table" then return false, "not a table" end
+  -- Publish writes only `grants`; anything else is refused so the record stays small and exact.
+  for field in pairs(rec.d) do
+    if field ~= "grants" then return false, "unknown perms field" end
+  end
   return Permissions.ValidGrants(rec.d.grants)
 end

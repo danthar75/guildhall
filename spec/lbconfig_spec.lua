@@ -197,7 +197,7 @@ describe("Leaderboard Config", function()
     -- a peer accepts the retake over the original
     local peer = build("Boss-Realm")
     clock.advance(0)
-    assert.equal("accepted", peer.sync:_applyOne({ id = r.id, v = 1, t = r.t - 10, exp = r.exp, by = r.by, char = r.char,
+    assert.equal("accepted", peer.sync:_applyOne({ id = r.id, v = 1, t = r.d.to, exp = r.exp, by = r.by, char = r.char,
       d = { month = "2026-10", from = r.d.from, to = r.d.to, tz = 0, goldKept = 0, overall = {}, boards = {},
         weights = {}, savedBy = "Boss-Realm", savedAt = 1 } }, "S"))
     assert.equal("accepted", peer.sync:_applyOne(r, "S"))
@@ -251,7 +251,9 @@ describe("Leaderboard Config", function()
     for i = 1, 16 do b["board.number" .. i] = t5() end
     local w = {}
     for i = 1, 32 do w["weight.type.number" .. i] = 0.15 end
-    return ym, { month = ym, from = 1000 * m, to = 1000 * m + 999, tz = 0, goldKept = 1234567,
+    -- the month ends now, so a v1 record stamped now is an honest save time (t <= to + grace)
+    local to = clock.now() + m
+    return ym, { month = ym, from = to - 999, to = to, tz = 0, goldKept = 1234567,
       overall = t5(), boards = b, weights = w, savedBy = "Officer-Realm", savedAt = 1 }
   end
 

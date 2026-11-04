@@ -56,13 +56,21 @@ function PermissionsView.Build(parent)
   local top = -20
   local gridTop = top - HEAD_H
   view.labels = {}
-  for i, def in ipairs(keys()) do
-    local label = UI.Text(parent, "GameFontHighlight", def.label)
+  -- A key's row (label and checkbox list), made the first time it is needed, so a key added
+  -- with Permissions.AddKey after Build still gets one on the next refresh.
+  local function ensureRow(i, def)
+    if not view.cells[def.key] then
+      local label = UI.Text(parent, "GameFontHighlight", def.label)
+      label:SetWidth(LABEL_W - 8)
+      view.labels[def.key] = label
+      view.cells[def.key] = {}
+    end
+    local label = view.labels[def.key]
+    label:ClearAllPoints()
     label:SetPoint("TOPLEFT", 4, gridTop - (i - 1) * ROW_H - 5)
-    label:SetWidth(LABEL_W - 8)
-    view.labels[i] = label
-    view.cells[def.key] = {}
+    return view.cells[def.key]
   end
+  for i, def in ipairs(keys()) do ensureRow(i, def) end
 
   local function markDirty() view.dirty = true end
 
@@ -89,44 +97,56 @@ function PermissionsView.Build(parent)
     return row[c]
   end
 
-  local y = gridTop - #keys() * ROW_H - 8
   view.reset = UI.Button(parent, "Reset to guild master only", 190, function()
     local p = perms()
     if not (p and p:Editable()) then return end
-    for _, def in ipairs(keys()) do
-      for c, cb in pairs(view.cells[def.key]) do cb:SetChecked(c == 1) end
+    for i, def in ipairs(keys()) do
+      for c, cb in pairs(ensureRow(i, def)) do cb:SetChecked(c == 1) end
       if view.raid[def.key] then view.raid[def.key]:SetChecked(false) end
     end
     view.dirty = true
     view.status:SetText("Press Save to apply.")
   end)
-  view.reset:SetPoint("TOPLEFT", 4, y)
   view.save = UI.Button(parent, "Save", 80, function() view.doSave() end)
-  view.save:SetPoint("TOPLEFT", 204, y)
   view.status = UI.Text(parent, "GameFontDisableSmall", "")
-  view.status:SetPoint("TOPLEFT", 4, y - 28)
-
-  y = y - 52
   view.historyHead = UI.Text(parent, "GameFontNormal", "Recent changes")
-  view.historyHead:SetPoint("TOPLEFT", 4, y)
   view.historyNote = UI.Text(parent, "GameFontDisableSmall", "(full list under Change history)")
   view.historyNote:SetPoint("LEFT", view.historyHead, "RIGHT", 8, 0)
   view.historyRows = {}
   for i = 1, HISTORY_LINES do
     local line = UI.Text(parent, "GameFontHighlightSmall", "")
-    line:SetPoint("TOPLEFT", 4, y - 20 - (i - 1) * 16)
     line:SetWidth(WIDTH)
     view.historyRows[i] = line
   end
-  parent:SetHeight(-(y - 20 - HISTORY_LINES * 16) + 8)
 
-  -- The map Publish takes, from the ticked boxes.
+  -- Everything below the grid moves down as rows are added; sets the parent's height.
+  local function layoutBelow()
+    local y = gridTop - #keys() * ROW_H - 8
+    view.reset:ClearAllPoints(); view.reset:SetPoint("TOPLEFT", 4, y)
+    view.save:ClearAllPoints(); view.save:SetPoint("TOPLEFT", 204, y)
+    view.status:ClearAllPoints(); view.status:SetPoint("TOPLEFT", 4, y - 28)
+    y = y - 52
+    view.historyHead:ClearAllPoints(); view.historyHead:SetPoint("TOPLEFT", 4, y)
+    for i, line in ipairs(view.historyRows) do
+      line:ClearAllPoints(); line:SetPoint("TOPLEFT", 4, y - 20 - (i - 1) * 16)
+    end
+    parent:SetHeight(-(y - 20 - HISTORY_LINES * 16) + 8)
+  end
+
+  -- The map Publish takes, from the ticked boxes. Stored ranks that have no column (a rank the
+  -- game no longer lists, or one past the shown names) are kept as they are.
   function view.collect()
     local map = {}
-    for _, def in ipairs(keys()) do
+    local p = perms()
+    local shown = #rankNames()
+    for i, def in ipairs(keys()) do
       local ranks = {}
-      for c, cb in pairs(view.cells[def.key]) do
-        if cb:IsShown() and cb:GetChecked() then ranks[c - 1] = true end
+      for c, cb in pairs(ensureRow(i, def)) do
+        if c <= shown and cb:IsShown() and cb:GetChecked() then ranks[c - 1] = true end
+      end
+      local stored = p and p:Grants(def.key) or defaultGrant()
+      for r in pairs(stored.ranks) do
+        if r >= shown then ranks[r] = true end
       end
       ranks[0] = true
       local raid = view.raid[def.key]
@@ -207,6 +227,7 @@ function PermissionsView.Build(parent)
     end
 
     for i, def in ipairs(keys()) do
+      ensureRow(i, def)
       local g = p and p:Grants(def.key) or defaultGrant()
       local ry = gridTop - (i - 1) * ROW_H
       for c = 1, math.max(#names, MAX_COLS) do
@@ -242,6 +263,7 @@ function PermissionsView.Build(parent)
 
     if editable then view.reset:Show(); view.save:Show() else view.reset:Hide(); view.save:Hide() end
     if not editable then view.dirty = false end
+    layoutBelow()
     refreshHistory()
   end
 

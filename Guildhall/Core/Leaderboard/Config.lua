@@ -199,9 +199,18 @@ local function validateRecord(self, rec)
     local ok, err = validMonth(ym, rec.d)
     if not ok then return false, err end
     local old = self.set:Get(id)
-    if old and rec.v > old.v and rec.d.retake ~= true then
+    if rec.d.retake == true then
+      -- A retake replaces a saved month, so it is never the first version.
+      if rec.v < 2 then return false, "bad retake version" end
+      return true
+    end
+    -- An automatic save is always version 1, and never replaces a retake.
+    if rec.v ~= 1 or (old and type(old.d) == "table" and old.d.retake == true) then
       return false, "month already saved"
     end
+    -- MaybeSaveMonth stamps t = 2 * anchor - now with now >= anchor (anchor = d.to + GRACE, and
+    -- d.to is the month end it computed from the same tz), so an honest save has t <= anchor.
+    if rec.t > rec.d.to + GRACE then return false, "bad save time" end
     return true
   end
   return false, "unknown record kind"

@@ -200,7 +200,7 @@ describe("Permissions", function()
     local cfg = build("Off-Realm")
     local function month(v, char, retake, t)
       return { id = "month:2026-10", v = v, t = t, exp = t + 1000000, by = "pX", char = char,
-        d = { month = "2026-10", from = 1, to = 2, tz = 0, goldKept = 0, overall = {}, boards = {}, weights = {},
+        d = { month = "2026-10", from = t - 10, to = t, tz = 0, goldKept = 0, overall = {}, boards = {}, weights = {},
           savedBy = char, savedAt = 1, retake = retake } }
     end
     assert.equal("accepted", apply(cfg, month(1, "Off-Realm", nil, clock.now())))
@@ -216,6 +216,67 @@ describe("Permissions", function()
     assert.equal("accepted", apply(cfg, prec(1, "Gm-Realm", { retake = grant({ 0, 1 }) })))
     assert.is_true((cfg:RetakeMonth("2026-10", ledger)))
     assert.is_true(cfg:HistoryAuthorPermitted(cfg:History()[1]))
+  end)
+
+  describe("month records cannot replace a retake or skip the save-time rules", function()
+    local GRACE = 259200
+    local TO = NOW - GRACE - 100 -- the month ended more than 3 days ago
+    local function month(v, char, retake, t, tag)
+      return { id = "month:2026-10", v = v, t = t, exp = t + 1000000, by = "pX", char = char,
+        d = { month = "2026-10", from = TO - 1000, to = TO, tz = 0, goldKept = 0, overall = {}, boards = {},
+          weights = {}, savedBy = tag, savedAt = 1, retake = retake } }
+    end
+
+    it("an officer's same-version record without retake doesn't replace a GM retake", function()
+      local cfg = build("Member-Realm")
+      assert.equal("accepted", apply(cfg, month(1, "Off-Realm", nil, TO + GRACE - 50, "auto")))
+      assert.equal("accepted", apply(cfg, month(2, "Gm-Realm", true, clock.now(), "retake")))
+      assert.equal("invalid", apply(cfg, month(2, "Off-Realm", nil, clock.now() + 60, "forged")))
+      assert.equal("month already saved", lastReason(cfg))
+      assert.equal("invalid", apply(cfg, month(3, "Off-Realm", nil, clock.now() + 60, "forged3")))
+      assert.equal("invalid", apply(cfg, month(1, "Off-Realm", nil, TO + GRACE, "forged1")))
+      assert.equal("retake", cfg.set:Get("month:2026-10").d.savedBy)
+    end)
+
+    it("a v1 auto save must carry an honest save time; the earliest honest save still wins", function()
+      local cfg = build("Member-Realm")
+      -- saves at anchor + 100 and anchor + 50: t = 2 * anchor - now
+      local anchor = TO + GRACE
+      assert.equal("accepted", apply(cfg, month(1, "Off-Realm", nil, anchor - 100, "later")))
+      assert.equal("accepted", apply(cfg, month(1, "Gm-Realm", nil, anchor - 50, "earlier")))
+      assert.equal("earlier", cfg.set:Get("month:2026-10").d.savedBy)
+      -- a t past the anchor can't come from MaybeSaveMonth
+      assert.equal("invalid", apply(cfg, month(1, "Off-Realm", nil, anchor + 1, "forged")))
+      assert.equal("bad save time", lastReason(cfg))
+      assert.equal("earlier", cfg.set:Get("month:2026-10").d.savedBy)
+      -- and a retake is never version 1
+      assert.equal("invalid", apply(cfg, month(1, "Gm-Realm", true, anchor + 5000, "retake1")))
+      assert.equal("bad retake version", lastReason(cfg))
+    end)
+
+    it("MaybeSaveMonth's own records pass, including a backfill of two months", function()
+      local gm = build("Gm-Realm")
+      local ledger = { Query = function() return { byProfile = { p1 = { sales = 3 } }, guild = {}, goldKept = 0 } end }
+      clock.advance(40 * 86400)
+      assert.is_true(gm:MaybeSaveMonth(ledger, clock.now()))
+      local peer = build("Member-Realm")
+      local n = 0
+      for _, ym in ipairs(gm:Months()) do
+        n = n + 1
+        assert.equal("accepted", apply(peer, gm.set:Get("month:" .. ym)))
+      end
+      assert.is_true(n >= 2) -- every month back to the retention window
+    end)
+  end)
+
+  it("a perms record with fields other than grants is rejected", function()
+    local cfg = build("Member-Realm")
+    local r = prec(1, "Gm-Realm", { weights = grant({ 0, 1 }) })
+    r.d.junk = string.rep("x", 100)
+    assert.equal("invalid", apply(cfg, r))
+    assert.equal("unknown perms field", lastReason(cfg))
+    r.d.junk = nil
+    assert.equal("accepted", apply(cfg, r))
   end)
 
   it("MaybeRefreshTz runs only with 'weights'", function()
@@ -440,6 +501,31 @@ describe("PermissionsView", function()
     view.doSave()
     assert.is_true(cfg.set:Get("perms").d.grants.flex.raidlead)
     assert.is_false(cfg.set:Get("perms").d.grants.weights.raidlead)
+  end)
+
+  it("Save keeps stored ranks that have no column", function()
+    build("Gm-Realm")
+    local p = ns.leaderboard.permissions
+    assert.is_true((p:Publish({ weights = { ranks = { 1, 7 } } })))
+    view.refresh()
+    view.cells.retake[3]:SetChecked(true)
+    view.doSave()
+    local g = cfg.set:Get("perms").d.grants
+    assert.same({ 0, 1, 7 }, g.weights.ranks)
+    assert.same({ 0, 2 }, g.retake.ranks)
+  end)
+
+  it("a key added after Build gets its row on the next refresh", function()
+    build("Gm-Realm")
+    ns.Permissions.AddKey({ key = "checklists", label = "Edit checklists" })
+    view.refresh()
+    assert.is_truthy(view.cells.checklists)
+    assert.equal(4, #view.cells.checklists)
+    assert.is_true(has("Edit checklists"))
+    view.cells.checklists[2]:SetChecked(true)
+    view.doSave()
+    assert.same({ 0, 1 }, cfg.set:Get("perms").d.grants.checklists.ranks)
+    assert.same({}, errors)
   end)
 
   it("demo permissions keep the grid read-only", function()
