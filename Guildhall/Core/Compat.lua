@@ -384,4 +384,126 @@ function Compat:BankMoneyLog()
   return out
 end
 
+-- A unit's name and realm as Name-Realm, or nil when the name is missing or secret.
+function Compat:_fullName(name, realm)
+  name, realm = self:Safe(name), self:Safe(realm)
+  if type(name) ~= "string" or name == "" then return nil end
+  local home = self.env.GetNormalizedRealmName and self:Safe(self.env.GetNormalizedRealmName()) or nil
+  return ns.Util.FullName(name, type(realm) == "string" and realm or nil, type(home) == "string" and home or nil)
+end
+
+-- The current group: { members = {fullName...}, leader = fullName|nil, assists = {fullName...}, size },
+-- or nil when not grouped, the size is unreadable, or fewer than 2 names can be read. Secret or nil
+-- names are left out; a secret rank or leader flag makes that member neither leader nor assist.
+-- In a raid the rank comes from GetRaidRosterInfo (2 leader, 1 assistant); in a party, from
+-- UnitIsGroupLeader (a party has no assistants).
+function Compat:GroupSnapshot()
+  local env = self.env
+  if not (env.GetNumGroupMembers and env.UnitName) then return nil end
+  local n = self:Safe((env.GetNumGroupMembers()))
+  if type(n) ~= "number" or n < 2 then return nil end
+  local members, assists, leader = {}, {}, nil
+  local inRaid = env.IsInRaid and self:Safe((env.IsInRaid())) == true
+  if inRaid and env.GetRaidRosterInfo then
+    for i = 1, math.min(n, 40) do
+      local rawName, rawRank = env.GetRaidRosterInfo(i)
+      local name = self:_fullName(rawName)
+      if name then
+        members[#members + 1] = name
+        local rank = self:Safe(rawRank)
+        if rank == 2 then
+          leader = name
+        elseif rank == 1 then
+          assists[#assists + 1] = name
+        end
+      end
+    end
+  else
+    for i = 0, math.min(n, 5) - 1 do
+      local unit = i == 0 and "player" or ("party" .. i)
+      local name = self:_fullName(env.UnitName(unit))
+      if name then
+        members[#members + 1] = name
+        if env.UnitIsGroupLeader and self:Safe((env.UnitIsGroupLeader(unit))) == true then leader = name end
+      end
+    end
+  end
+  if #members < 2 then return nil end
+  return { members = members, leader = leader, assists = assists, size = n }
+end
+
+-- The current instance's id (GetInstanceInfo return 8, the Map ID), or nil when missing or secret.
+function Compat:InstanceKey()
+  local env = self.env
+  if not env.GetInstanceInfo then return nil end
+  local id = self:Safe((select(8, env.GetInstanceInfo())))
+  return type(id) == "number" and id or nil
+end
+
+-- The active talent group (1 or 2), or nil when there is no dual spec (API missing, one group) or
+-- the value is secret.
+function Compat:ActiveSpecGroup()
+  local env = self.env
+  if env.GetNumTalentGroups then
+    local groups = self:Safe((env.GetNumTalentGroups()))
+    if type(groups) == "number" and groups < 2 then return nil end
+  end
+  local g
+  if env.GetActiveTalentGroup then
+    g = self:Safe((env.GetActiveTalentGroup()))
+  elseif env.C_SpecializationInfo and env.C_SpecializationInfo.GetActiveSpecGroup then
+    g = self:Safe((env.C_SpecializationInfo.GetActiveSpecGroup()))
+  end
+  if g == 1 or g == 2 then return g end
+  return nil
+end
+
+-- How many of an item the player carries, or nil when the API is missing or the count is secret.
+function Compat:ItemCount(itemId)
+  local env = self.env
+  local f = env.C_Item and env.C_Item.GetItemCount or env.GetItemCount
+  if not f then return nil end
+  local n = self:Safe((f(itemId)))
+  return type(n) == "number" and n or nil
+end
+
+-- Enchantable slots, in scan order. The off hand counts only for a weapon or shield.
+local ENCHANT_SLOTS = {
+  { 1, "Head" }, { 3, "Shoulder" }, { 5, "Chest" }, { 7, "Legs" }, { 8, "Feet" }, { 9, "Wrist" },
+  { 10, "Hands" }, { 15, "Back" }, { 16, "Main hand" }, { 17, "Off hand" },
+}
+local OFF_HAND = 17
+local CLASS_WEAPON, CLASS_ARMOR, SUBCLASS_SHIELD = 2, 4, 6
+
+-- Names of the equipped enchantable slots without an enchant, or nil when the API is missing or
+-- any link is secret (a partial answer could wrongly say "all enchanted"). Empty slots are
+-- skipped. The enchant id is the third ':' field of the item string; 0 or empty is unenchanted.
+function Compat:UnenchantedSlots()
+  local env = self.env
+  if not env.GetInventoryItemLink then return nil end
+  local out = {}
+  for _, s in ipairs(ENCHANT_SLOTS) do
+    local slot, label = s[1], s[2]
+    local raw = env.GetInventoryItemLink("player", slot)
+    if raw ~= nil and self:_isSecret(raw) then return nil end
+    local link = self:Safe(raw)
+    if type(link) == "string" then
+      local enchant = link:match("item:[^:|]*:([^:|]*)")
+      local counts = true
+      if slot == OFF_HAND then
+        local classId, subclassId
+        if env.GetItemInfoInstant then
+          local _, _, _, _, _, c, sc = env.GetItemInfoInstant(link)
+          classId, subclassId = self:Safe(c), self:Safe(sc)
+        end
+        counts = classId == CLASS_WEAPON or (classId == CLASS_ARMOR and subclassId == SUBCLASS_SHIELD)
+      end
+      if counts and enchant ~= nil and (enchant == "" or tonumber(enchant) == 0) then
+        out[#out + 1] = label
+      end
+    end
+  end
+  return out
+end
+
 ns.compat = Compat.new(_G)

@@ -227,4 +227,143 @@ describe("Compat", function()
       assert.is_nil(Compat.new(tradeEnv({ issecretvalue = function(v) return v == "Bob" end })):TradePartner())
     end)
   end)
+
+  describe("group reads", function()
+    local function secretIf(set)
+      return function(v) return set[v] == true end
+    end
+
+    local function raidEnv(rows, extra)
+      local e = {
+        IsInRaid = function() return true end,
+        GetNumGroupMembers = function() return #rows end,
+        UnitName = function() return "Me" end,
+        GetNormalizedRealmName = function() return "Realm" end,
+        GetRaidRosterInfo = function(i) return rows[i][1], rows[i][2] end,
+      }
+      for k, v in pairs(extra or {}) do e[k] = v end
+      return e
+    end
+
+    it("a snapshot with secret names publishes only readable members, or nothing", function()
+      local rows = { { "Me", 2 }, { "Bob", 0 }, { "Hidden", 1 }, { nil, 0 } }
+      local snap = Compat.new(raidEnv(rows, { issecretvalue = secretIf({ Hidden = true }) })):GroupSnapshot()
+      assert.same({ "Me-Realm", "Bob-Realm" }, snap.members)
+      assert.equal("Me-Realm", snap.leader)
+      assert.same({}, snap.assists)
+      assert.equal(4, snap.size)
+      -- only one readable name: nothing is published
+      assert.is_nil(Compat.new(raidEnv(rows, { issecretvalue = secretIf({ Hidden = true, Bob = true }) })):GroupSnapshot())
+      -- a secret member count: nothing
+      assert.is_nil(Compat.new(raidEnv(rows, { issecretvalue = secretIf({ [4] = true }) })):GroupSnapshot())
+      -- solo, or no group API (Classic fallbacks missing)
+      assert.is_nil(Compat.new(raidEnv({ { "Me", 2 } })):GroupSnapshot())
+      assert.is_nil(Compat.new({}):GroupSnapshot())
+    end)
+
+    it("leader and assists read from raid rank", function()
+      local rows = { { "Me", 1 }, { "Bob-Other", 2 }, { "Cat", 1 }, { "Dan", 0 } }
+      local snap = Compat.new(raidEnv(rows)):GroupSnapshot()
+      assert.same({ "Me-Realm", "Bob-Other", "Cat-Realm", "Dan-Realm" }, snap.members)
+      assert.equal("Bob-Other", snap.leader)
+      assert.same({ "Me-Realm", "Cat-Realm" }, snap.assists)
+      -- a secret rank: still a member, but neither leader nor assist
+      snap = Compat.new(raidEnv(rows, { issecretvalue = secretIf({ [2] = true }) })):GroupSnapshot()
+      assert.is_nil(snap.leader)
+      assert.equal(4, #snap.members)
+    end)
+
+    it("a party snapshot reads unit names and UnitIsGroupLeader", function()
+      local names = { player = { "Me" }, party1 = { "Bob", "Other Realm" }, party2 = { "Hidden" } }
+      local e = {
+        IsInRaid = function() return false end,
+        GetNumGroupMembers = function() return 3 end,
+        GetNormalizedRealmName = function() return "Realm" end,
+        UnitName = function(u) local n = names[u]; if n then return n[1], n[2] end end,
+        UnitIsGroupLeader = function(u) return u == "party1" end,
+        issecretvalue = secretIf({ Hidden = true }),
+      }
+      local snap = Compat.new(e):GroupSnapshot()
+      assert.same({ "Me-Realm", "Bob-OtherRealm" }, snap.members)
+      assert.equal("Bob-OtherRealm", snap.leader)
+      assert.same({}, snap.assists)
+      assert.equal(3, snap.size)
+      e.UnitIsGroupLeader = nil -- missing API: no leader, still a snapshot
+      assert.is_nil(Compat.new(e):GroupSnapshot().leader)
+    end)
+
+    it("InstanceKey is GetInstanceInfo return 8, nil when missing or secret", function()
+      local id = 409
+      local e = { GetInstanceInfo = function() return "Molten Core", "raid", 9, "40 Player", 40, 0, false, id end }
+      assert.equal(409, Compat.new(e):InstanceKey())
+      e.issecretvalue = secretIf({ [409] = true })
+      assert.is_nil(Compat.new(e):InstanceKey())
+      assert.is_nil(Compat.new({}):InstanceKey())
+    end)
+
+    it("ActiveSpecGroup is nil without dual spec", function()
+      assert.is_nil(Compat.new({}):ActiveSpecGroup())
+      assert.is_nil(Compat.new({ GetActiveTalentGroup = function() return 1 end,
+        GetNumTalentGroups = function() return 1 end }):ActiveSpecGroup())
+      assert.equal(2, Compat.new({ GetActiveTalentGroup = function() return 2 end }):ActiveSpecGroup())
+      assert.equal(1, Compat.new({ C_SpecializationInfo = { GetActiveSpecGroup = function() return 1 end } }):ActiveSpecGroup())
+      assert.is_nil(Compat.new({ GetActiveTalentGroup = function() return 2 end,
+        issecretvalue = function() return true end }):ActiveSpecGroup())
+      assert.is_nil(Compat.new({ GetActiveTalentGroup = function() return 3 end }):ActiveSpecGroup())
+    end)
+
+    it("ItemCount reads GetItemCount or C_Item, nil when missing or secret", function()
+      assert.is_nil(Compat.new({}):ItemCount(13444))
+      assert.equal(5, Compat.new({ GetItemCount = function(id) return id == 13444 and 5 or 0 end }):ItemCount(13444))
+      assert.equal(7, Compat.new({ C_Item = { GetItemCount = function() return 7 end } }):ItemCount(13444))
+      assert.is_nil(Compat.new({ GetItemCount = function() return 5 end,
+        issecretvalue = function(v) return v == 5 end }):ItemCount(13444))
+    end)
+
+    describe("UnenchantedSlots", function()
+      local function gearEnv(links, info, extra)
+        local e = {
+          GetInventoryItemLink = function(unit, slot) assert.equal("player", unit); return links[slot] end,
+          GetItemInfoInstant = function(link)
+            local c = info[link]
+            if c then return 1, "t", "s", "loc", 0, c[1], c[2] end
+          end,
+        }
+        for k, v in pairs(extra or {}) do e[k] = v end
+        return e
+      end
+
+      it("UnenchantedSlots finds 'Legs' for item:123:0 and skips an empty off hand", function()
+        local links = {
+          [1] = "|cff|Hitem:100:1503:0:0|h[Helm]|h|r",
+          [7] = "|cff|Hitem:123:0:0:0|h[Legs]|h|r",
+          [16] = "|cff|Hitem:200:2564|h[Sword]|h|r",
+        }
+        assert.same({ "Legs" }, Compat.new(gearEnv(links, {})):UnenchantedSlots())
+      end)
+
+      it("treats an empty enchant field as unenchanted, and counts the off hand only for a weapon or shield", function()
+        local links = {
+          [5] = "item:300::0",
+          [17] = "item:400:0",
+        }
+        local env = gearEnv(links, { ["item:400:0"] = { 4, 0 } }) -- an off-hand frill (armor, misc)
+        assert.same({ "Chest" }, Compat.new(env):UnenchantedSlots())
+        env = gearEnv(links, { ["item:400:0"] = { 4, 6 } }) -- a shield
+        assert.same({ "Chest", "Off hand" }, Compat.new(env):UnenchantedSlots())
+        env = gearEnv(links, { ["item:400:0"] = { 2, 7 } }) -- a weapon
+        assert.same({ "Chest", "Off hand" }, Compat.new(env):UnenchantedSlots())
+        env = gearEnv(links, {})
+        env.GetItemInfoInstant = nil -- no way to tell: off hand skipped
+        assert.same({ "Chest" }, Compat.new(env):UnenchantedSlots())
+      end)
+
+      it("is nil when the API is missing or any link is secret", function()
+        assert.is_nil(Compat.new({}):UnenchantedSlots())
+        local links = { [7] = "item:123:0" }
+        assert.is_nil(Compat.new(gearEnv(links, {}, { issecretvalue = secretIf({ ["item:123:0"] = true }) })):UnenchantedSlots())
+        assert.same({}, Compat.new(gearEnv({}, {})):UnenchantedSlots())
+      end)
+    end)
+  end)
 end)

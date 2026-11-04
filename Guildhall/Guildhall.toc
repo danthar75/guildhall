@@ -53,4 +53,5 @@ Core/UI/PermissionsView.lua
 Core/Leaderboard/Demo.lua
 Core/Leaderboard/Module.lua
 Modules/Groups/Perms.lua
+Modules/Groups/Instances.lua
 Core/Boot.lua
