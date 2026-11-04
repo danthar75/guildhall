@@ -49,6 +49,9 @@ end
 -- verified kills; one that arrived before its kill was verified was rejected. A newly verified kill
 -- offers them again by restarting the config sync.
 
+-- The ids are the cluster seed ids (Credit.Clusters): a late report older than the seed becomes the
+-- new seed and changes the id, which looks like a new kill. That only causes a spurious config sync
+-- restart, rate-limited like the rest, so it is harmless.
 local function verifiedIds(observations)
   local ids = {}
   for _, k in ipairs(ns.Groups.Credit.Verified(observations:List("kill"))) do
@@ -86,6 +89,46 @@ ns.Events:On("ObservationsChanged", function()
   local g = ns.groups
   if g then coalesce(g, "kills", 1, function() checkKills(g) end) end
 end)
+
+-- The active run -----------------------------------------------------------------------------
+-- The checklist of the instance named by the active post or calendar event, else of the zone. A
+-- pick is { d = { instance } } (the shape Checklist's pickInstance and Active accept).
+
+local PICK_WINDOW = 7200 -- a post or event counts as active within 2 h of its start
+
+local function activePick(g)
+  local now = g.now()
+  local best, bestDist
+  local function consider(instance, start)
+    if type(instance) ~= "string" or type(start) ~= "number" or not ns.Instances.Get(instance) then return end
+    local dist = math.abs(start - now)
+    if dist <= PICK_WINDOW and (bestDist == nil or dist < bestDist) then best, bestDist = instance, dist end
+  end
+  local svc = g.svc
+  local me = svc.profile and svc.profile:Id()
+  if me ~= nil then
+    for _, post in ipairs(svc:Posts()) do
+      local d = post.d
+      if type(d.start) == "number" then
+        local mine = post.by == me
+        if not mine then
+          for _, su in ipairs(svc:Signups(post.id)) do -- live, not withdrawn
+            if su.profile == me then mine = true; break end
+          end
+        end
+        if mine then consider(d.instance, d.start) end
+      end
+    end
+  end
+  for _, ev in ipairs(g.calendar.events or {}) do
+    if ev.myStatus == "accepted" or ev.myStatus == "signedup" then
+      local entry = ns.Instances.Get(ev.instance)
+      if entry and entry.kind == "raid" then consider(ev.instance, ev.start) end
+    end
+  end
+  if best == nil then return nil end
+  return { d = { instance = best } }
+end
 
 -- Login -------------------------------------------------------------------------------------
 
@@ -171,7 +214,7 @@ events.PLAYER_ENTERING_WORLD = function(n)
   local g = n.groups
   if not g then return end
   g.kills:OnZone()
-  g.checklist:OnZone()
+  g.checklist:OnZone(activePick(g))
   local key = n.services.compat:InstanceKey()
   local was = g.instance
   g.instance = key
@@ -179,7 +222,8 @@ events.PLAYER_ENTERING_WORLD = function(n)
 end
 
 events.READY_CHECK = function(n)
-  if n.groups then n.groups.checklist:OnReadyCheck() end
+  local g = n.groups
+  if g then g.checklist:OnReadyCheck(activePick(g)) end
 end
 
 -- Both are registered (Boot tolerates one missing on a client). One switch can fire both; Flex

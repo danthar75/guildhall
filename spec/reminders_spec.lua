@@ -30,6 +30,9 @@ describe("Reminders", function()
 
   local function step(s) clock.advance(s); timers.run(clock) end
 
+  local realTime, realDate = _G.time, _G.date
+  after_each(function() _G.time, _G.date = realTime, realDate end)
+
   before_each(function()
     ns = {}
     loadAddonFile(ns, "Guildhall/Core/Util.lua")
@@ -54,6 +57,9 @@ describe("Reminders", function()
 
   it("a post at 20:00 server time reminds at 19:45 server time with a local offset of +3 h", function()
     -- the local clock reads server + 3 h; the reminder follows server time (ctx.now) only
+    local LOCAL = 10800
+    _G.time = function(t) if t ~= nil then return os.time(t) end return clock.now() + LOCAL end
+    _G.date = function(fmt, t) return os.date(fmt, t or (clock.now() + LOCAL)) end
     local r = build()
     r:Start()
     step(2 * 3600 + 45 * 60) -- 18:45 server, 21:45 local: well past "19:45 local"
@@ -62,6 +68,8 @@ describe("Reminders", function()
     assert.equal(0, #printed)
     while clock.now() < START - 900 do step(30) end
     assert.equal(1, #printed)
+    assert.equal(START - 900, clock.now())          -- 19:45 server time
+    assert.equal(START + LOCAL - 900, _G.time())    -- 22:45 on the local clock
     assert.equal("Guildhall: Molten Core starts in 15 min (3 of 40 signed up, 2 online).", printed[1])
     assert.equal(1, sounds)
     for _ = 1, 40 do step(30) end

@@ -191,6 +191,52 @@ describe("Boot", function()
     assert.same({ "start663", "end663:1", "boss663", "ready", "spec", "spec" }, got)
   end)
 
+  describe("the checklist pick", function()
+    local checked
+    local function setup()
+      checked = {}
+      ns.groups.checklist.RunCheck = function(_, instance) checked[#checked + 1] = instance; return true end
+    end
+    local function post(start)
+      local ok, rec = ns.groups.svc:Post({ instance = "mc", role = "t", need = { t = 0, h = 1, d = 3 }, start = start })
+      assert.is_true(ok, tostring(rec))
+    end
+
+    it("a ready check in a city with an active post picks the post's instance", function()
+      setup()
+      post(ns.services.now() + 1800)
+      fire("READY_CHECK", "Leader", 30)
+      assert.same({ "mc" }, checked)
+    end)
+
+    it("with no post a ready check in a city still finds no instance", function()
+      setup()
+      fire("READY_CHECK", "Leader", 30)
+      assert.same({}, checked)
+      local ok, why = ns.groups.checklist:OnReadyCheck(nil)
+      assert.is_false(ok)
+      assert.equal("no instance", why)
+    end)
+
+    it("a post 3 h away is ignored", function()
+      setup()
+      post(ns.services.now() + 3 * 3600)
+      fire("READY_CHECK", "Leader", 30)
+      assert.same({}, checked)
+    end)
+
+    it("a signed-up calendar raid within 2 h is picked; a declined one is not", function()
+      setup()
+      local now = ns.services.now()
+      ns.groups.calendar.events = { { title = "BWL", start = now - 600, instance = "bwl", myStatus = "declined" } }
+      fire("READY_CHECK", "Leader", 30)
+      assert.same({}, checked)
+      ns.groups.calendar.events[1].myStatus = "accepted"
+      fire("READY_CHECK", "Leader", 30)
+      assert.same({ "bwl" }, checked)
+    end)
+  end)
+
   it("one spec switch firing both events answers an ask once", function()
     local flex, published = ns.groups.flex, 0
     local group = 1
