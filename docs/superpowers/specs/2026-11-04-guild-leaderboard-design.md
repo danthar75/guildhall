@@ -220,7 +220,15 @@ Top of the tab:
 **Board.** Rows of rank, player name and value; the Overall board shows points. Players are shown by their currently online character, otherwise their most recently seen character, using the same rule as the Exchange board.
 - Your own row is always visible: pinned at the bottom if you're outside the top rows.
 
-**Hover a row** for that player's breakdown per activity.
+**What each viewer sees (user):**
+- **Everyone:** totals only. That means the guild headline, and each player's rank and total on every board. No individual deals or bank entries, and no per-activity split of anyone else's score.
+- **The player, for their own row:** the full breakdown. That covers each activity's value, its weight and the points it adds, plus the deals and deposits behind each number.
+- **Officers:** the full breakdown for every player. Officers are the ranks the guild already marks with `[Guildhall officers=N]`, so there's no new setting (my call).
+
+**Click a row** that you're allowed to see, meaning your own row, or any row if you're an officer, to open its breakdown. It shows:
+- per activity: value × weight = points
+- under each activity, the counted deals and deposits: date, item, the other party, gold
+- items that were excluded, and why, for example "unpaired" or "rank excluded" (my call: this helps officers settle disputes)
 
 **Settings:**
 - "Show me on the leaderboard" (default on).
@@ -234,8 +242,9 @@ Top of the tab:
 
 - The trust model is the parent design's: guildmates are trusted not to modify their clients. Pairing and netting stop casual gaming, not determined tampering.
 - Opting out hides a player's name and row. Their verified activity still adds to the guild total.
-- Observations reveal who traded what with whom, and for how much, to every guild member running Guildhall. This is new information flow.
-- **Open:** the user needs to OK this. See "Open questions for the user".
+- **Visibility is a display rule, not secrecy.** Observations must sync to every client so deals can be paired and totals verified. The UI enforces "totals only", own breakdown and officer breakdown. A member who digs through their SavedVariables file could still read raw records. The Settings privacy note says this plainly (my call: honest about the limit).
+- **Log tab:** it must not print observation contents. For non-officers, observation lines show only the type and count, for example "received 12 observations". Officers see full lines.
+- **Bank tab permissions:** syncing bank entries could reveal deposits a member can't see in game. Under "totals only" they appear only inside totals. Only officers and the depositor see the individual entries.
 
 ## Storage and sync budget
 
@@ -256,10 +265,7 @@ Notes:
 
 ## Open questions for the user (to settle before planning)
 
-1. **What the UI may show.** Records must sync to verify deals and bank entries. The question is what the UI shows:
-   - Individual deals, with item, partner and gold.
-   - Individual bank entries. Note that the game can restrict who sees a tab's log, and syncing could show members entries they can't see in game.
-   - Or totals only. "Totals only" also means the Log tab must summarise observations instead of printing their contents.
+1. ~~What the UI may show~~. Decided: totals for everyone, your own breakdown for you, and everyone's breakdown for officers. See UI, and Privacy and trust.
 2. **Testing.** Classic Era has no guild bank, so the bank half and two-player pairing can only be tested on Forever. That needs:
    - a guild with a bank
    - log access
