@@ -11,7 +11,8 @@ local ADDON, ns = ...
 -- ctx: { compat, observations, profile, roster?, now, after, moduleDb }.
 -- Observation: { kind = "bank", type = "dep"|"wd", player, tab?, item?, count?|copper?, at }.
 -- Items entries carry tab, item and count; money entries carry copper and no tab.
--- db.bankSeen (ctx.moduleDb) holds the local keys already published: key -> time published.
+-- db.bankSeen (ctx.moduleDb) holds what this client already published:
+-- base key "tab|type|player|item|amount" -> list of { b = hour bucket, t = publish time }.
 ns.Bank = ns.Bank or {}
 local Bank = ns.Bank
 
@@ -41,7 +42,7 @@ end
 
 function B:_tick(gen)
   self.ctx.after(TICK, function()
-    if gen ~= self.gen or not self.open then return end
+    if gen ~= self.gen or not self.open or not self.ctx.compat:BankOpen() then return end
     self:_queryAll()
     self:_tick(gen)
   end)
@@ -49,8 +50,19 @@ end
 
 function B:OnOpen()
   local now = self.ctx.now()
-  for key, at in pairs(self.db.bankSeen) do
-    if type(at) ~= "number" or now - at > RETENTION then self.db.bankSeen[key] = nil end
+  local seen = self.db.bankSeen
+  for base, list in pairs(seen) do
+    if type(list) ~= "table" then
+      seen[base] = nil   -- pre-bucket flat keys (never shipped)
+    else
+      local keep = {}
+      for _, s in ipairs(list) do
+        if type(s) == "table" and type(s.b) == "number" and type(s.t) == "number" and now - s.t <= RETENTION then
+          keep[#keep + 1] = s
+        end
+      end
+      seen[base] = #keep > 0 and keep or nil
+    end
   end
   self.open = true
   self.gen = self.gen + 1
@@ -63,35 +75,65 @@ function B:OnClose()
   self.gen = self.gen + 1
 end
 
--- Reads every tab and the money log; publishes entries not yet published by this client.
+-- Reads every tab and the money log; publishes entries this client hasn't published yet.
+-- The same log entry can be read in a neighbouring hour bucket later ("N hours ago" rolls over), so
+-- seen entries are kept per base key (tab, type, player, item, amount) as { b = bucket, t = time }
+-- and each current entry is matched one-to-one, in one greedy pass in ascending bucket order, to the
+-- smallest unused seen bucket within +-1. Only unmatched entries are published.
 function B:OnLogUpdate()
   local ctx = self.ctx
   local compat, now = ctx.compat, ctx.now()
-  local ordinals = {}
+  local groups, order = {}, {}
 
-  local function handle(e, tab)
+  local function collect(e, tab)
     local t = TYPES[e.type]
     if not t then return end
     local amount = tab and e.count or e.copper
     if type(amount) ~= "number" or amount <= 0 then return end
     local player = ctx.roster and ctx.roster.Norm and ctx.roster:Norm(e.name) or e.name
     if type(player) ~= "string" then return end
-    local bucket = math.floor((now - e.ago) / HOUR)
-    local base = table.concat({ tab or "m", t, player, tab and e.item or "", amount, bucket }, "|")
-    local ordinal = (ordinals[base] or 0) + 1
-    ordinals[base] = ordinal
-    local key = base .. "|" .. ordinal
-    if self.db.bankSeen[key] then return end
-    local d = { kind = "bank", type = t, player = player, at = bucket * HOUR }
-    if tab then d.tab, d.item, d.count = tab, e.item, amount else d.copper = amount end
-    local status = ctx.observations:Publish(d)
-    if status == "accepted" then self.db.bankSeen[key] = now end
+    local base = table.concat({ tab or "m", t, player, tab and e.item or "", amount }, "|")
+    if not groups[base] then groups[base] = {}; order[#order + 1] = base end
+    table.insert(groups[base], { bucket = math.floor((now - e.ago) / HOUR), tab = tab, t = t,
+      player = player, item = e.item, amount = amount })
   end
 
   for tab = 1, compat:BankTabCount() do
-    for _, e in ipairs(compat:BankLog(tab) or {}) do handle(e, tab) end
+    for _, e in ipairs(compat:BankLog(tab) or {}) do collect(e, tab) end
   end
-  for _, e in ipairs(compat:BankMoneyLog() or {}) do handle(e, nil) end
+  for _, e in ipairs(compat:BankMoneyLog() or {}) do collect(e, nil) end
+
+  for _, base in ipairs(order) do
+    local cur = groups[base]
+    table.sort(cur, function(a, b) return a.bucket < b.bucket end)
+    local seen = self.db.bankSeen[base]
+    if type(seen) ~= "table" then seen = {}; self.db.bankSeen[base] = seen end
+    local sorted = {}
+    for i, s in ipairs(seen) do sorted[i] = s end
+    table.sort(sorted, function(a, b) return a.b < b.b end)
+    local used = {}
+    for _, e in ipairs(cur) do
+      local hit
+      for j, s in ipairs(sorted) do
+        if not used[j] and math.abs(s.b - e.bucket) <= 1 then hit = j; break end
+      end
+      if hit then
+        used[hit] = true
+      else
+        local d = { kind = "bank", type = e.t, player = e.player, at = e.bucket * HOUR }
+        if e.tab then d.tab, d.item, d.count = e.tab, e.item, e.amount else d.copper = e.amount end
+        local status, err = ctx.observations:Publish(d)
+        if status == "accepted" or status == "invalid" then
+          -- invalid will never become valid: remember it so it isn't retried every tick
+          seen[#seen + 1] = { b = e.bucket, t = now }
+          if status == "invalid" and ns.OnError then
+            ns.OnError("Bank log entry not published: " .. tostring(err))
+          end
+        end
+      end
+    end
+    if #seen == 0 then self.db.bankSeen[base] = nil end
+  end
 end
 
 -- Deriver. Clusters readings of the same log entry across clients (one per profile, equal fields,

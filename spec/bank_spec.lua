@@ -183,6 +183,8 @@ describe("Bank log reader", function()
   end)
 
   it("OnOpen queries every tab and the money log, ticks each 60 s, and stops on close", function()
+    env.Enum = nil
+    bank.ctx.compat:SetBankOpen(true)
     bank:OnOpen()
     assert.same({ 1, 2, 7 }, queried)
     assert.equal(1, #timers)
@@ -198,11 +200,13 @@ describe("Bank log reader", function()
   end)
 
   it("OnOpen prunes seen keys older than 400 days", function()
-    db.bankSeen.old = now - 34560001
-    db.bankSeen.new = now - 100
+    db.bankSeen.old = { { b = 1, t = now - 34560001 } }
+    db.bankSeen.new = { { b = 1, t = now - 100 }, { b = 2, t = now - 34560001 } }
+    db.bankSeen.flat = now
     bank:OnOpen()
     assert.is_nil(db.bankSeen.old)
-    assert.is_not_nil(db.bankSeen.new)
+    assert.is_nil(db.bankSeen.flat)
+    assert.equal(1, #db.bankSeen.new)
   end)
 
   it("compat bank open flag follows events", function()
@@ -219,5 +223,148 @@ describe("Bank log reader", function()
     assert.is_true(c:BankOpen())
     c:HandleBankEvent("GUILDBANKFRAME_CLOSED")
     assert.is_false(c:BankOpen())
+  end)
+  describe("hour-edge re-reads", function()
+    -- an entry made at absolute time t0, as the game reports it at the current clock
+    local function entryAt(t0, name, count)
+      return item("deposit", name or "Ann", count or 20, math.floor((now - t0) / H))
+    end
+
+    it("one deposit read at 10:55 and again at 11:05 by the same client publishes once", function()
+      now = 10 * H + 55 * 60
+      logs[1] = { item("deposit", "Ann", 20, 0) }
+      bank:OnLogUpdate()
+      now = 11 * H + 5 * 60
+      logs[1] = { item("deposit", "Ann", 20, 0) }   -- still "0 hours ago" on its own clock edge
+      bank:OnLogUpdate()
+      logs[1] = { item("deposit", "Ann", 20, 1) }
+      bank:OnLogUpdate()
+      assert.equal(1, #published)
+    end)
+
+    it("bank open for 2 h with 60 s ticks publishes each entry once", function()
+      local start = 9 * H + 30 * 60
+      now = start
+      local times = { start - 100, start - 50 * 60, start + 20 * 60, start + 70 * 60 }
+      for _ = 1, 120 do
+        logs[1], money = {}, {}
+        for i, t0 in ipairs(times) do
+          if t0 <= now then logs[1][#logs[1] + 1] = entryAt(t0, "P" .. i, 5) end
+        end
+        money = { { "deposit", "Ann", 900, 0, 0, 0, math.floor((now - (start - 10)) / H) } }
+        bank:OnLogUpdate()
+        now = now + 60
+      end
+      assert.equal(5, #published)
+    end)
+
+    it("two identical deposits stay 2 across an hour edge", function()
+      now = 10 * H + 50 * 60
+      logs[1] = { item("deposit", "Ann", 20, 0), item("deposit", "Ann", 20, 0) }
+      bank:OnLogUpdate()
+      now = 11 * H + 10 * 60
+      logs[1] = { item("deposit", "Ann", 20, 0), item("deposit", "Ann", 20, 1) }
+      bank:OnLogUpdate()
+      now = 11 * H + 30 * 60
+      logs[1] = { item("deposit", "Ann", 20, 1), item("deposit", "Ann", 20, 1) }
+      bank:OnLogUpdate()
+      assert.equal(2, #published)
+    end)
+
+    it("a third identical deposit after an edge is still published", function()
+      now = 10 * H + 50 * 60
+      logs[1] = { item("deposit", "Ann", 20, 0), item("deposit", "Ann", 20, 0) }
+      bank:OnLogUpdate()
+      now = 11 * H + 10 * 60
+      logs[1] = { item("deposit", "Ann", 20, 0), item("deposit", "Ann", 20, 1), item("deposit", "Ann", 20, 1) }
+      bank:OnLogUpdate()
+      assert.equal(3, #published)
+    end)
+
+    it("an invalid publish is remembered, logged once, not retried", function()
+      local errs = {}
+      ns.OnError = function(m) errs[#errs + 1] = m end
+      status = "invalid"
+      logs[1] = { item("deposit", "Ann", 20, 0) }
+      bank:OnLogUpdate()
+      bank:OnLogUpdate()
+      assert.equal(1, #published)
+      assert.equal(1, #errs)
+    end)
+
+    it("two clients reading either side of the edge merge through the deriver", function()
+      local function reader(at)
+        local out = {}
+        local b = ns.Bank.new({
+          compat = mk(), observations = { Publish = function(_, d) out[#out + 1] = d; return "accepted" end },
+          profile = {}, now = function() return at end, after = function() end, moduleDb = {},
+        })
+        logs[1] = { item("deposit", "Ann-R", 20, 0) }
+        b:OnLogUpdate()
+        return out[1]
+      end
+      local a, b = reader(10 * H + 20 * 60), reader(11 * H + 5 * 60)
+      assert.not_equal(a.at, b.at)
+      local out = ns.Activity.Deriver("bank")({ { id = "a", by = "bob", d = a }, { id = "b", by = "cy", d = b } },
+        { profile = { OwnerOf = function() end } })
+      assert.equal(1, #out)
+      assert.is_true(out[1].counted)
+    end)
+  end)
+
+  it("a repeated OnOpen with no close keeps exactly one ticker", function()
+    bank.ctx.compat:SetBankOpen(true)
+    bank:OnOpen()
+    bank:OnOpen()
+    queried = {}
+    local pending = timers
+    timers = {}
+    for _, t in ipairs(pending) do t.fn() end
+    assert.equal(3, #queried)
+    assert.equal(1, #timers)
+  end)
+
+  it("the ticker stops once the bank is no longer open", function()
+    bank.ctx.compat:SetBankOpen(true)
+    bank:OnOpen()
+    bank.ctx.compat:SetBankOpen(false)
+    queried = {}
+    table.remove(timers).fn()
+    assert.equal(0, #queried)
+    assert.equal(0, #timers)
+  end)
+
+  describe("Observations.Validate for bank", function()
+    local V
+    before_each(function()
+      local n = {}
+      loadAddonFile(n, "Guildhall/Core/Util.lua")
+      loadAddonFile(n, "Guildhall/Core/Leaderboard/Observations.lua")
+      V = n.Observations.Validate
+    end)
+    local function it_(o) local d = { kind = "bank", type = "dep", player = "Ann", tab = 1, item = 2589, count = 20, at = 3600 }
+      for k, v in pairs(o) do if v == "nil" then d[k] = nil else d[k] = v end end
+      return d end
+    local function m(o) local d = { kind = "bank", type = "dep", player = "Ann", copper = 500, at = 3600 }
+      for k, v in pairs(o) do if v == "nil" then d[k] = nil else d[k] = v end end
+      return d end
+    it("accepts good entries and enforces bounds", function()
+      assert.is_true(V(it_({})))
+      assert.is_true(V(m({})))
+      assert.is_false(V(it_({ tab = 0 })))
+      assert.is_false(V(it_({ tab = 9 })))
+      assert.is_false(V(it_({ item = 0 })))
+      assert.is_false(V(it_({ item = 10000001 })))
+      assert.is_false(V(it_({ count = 0 })))
+      assert.is_false(V(it_({ count = 10001 })))
+      assert.is_true(V(it_({ count = 10000, item = 10000000, tab = 8 })))
+      assert.is_false(V(it_({ copper = 5 })))
+      assert.is_false(V(m({ copper = 0 })))
+      assert.is_false(V(m({ copper = 100000000001 })))
+      assert.is_true(V(m({ copper = 100000000000 })))
+      assert.is_false(V(m({ count = 1 })))
+      assert.is_false(V(m({ item = 1 })))
+      assert.is_false(V(it_({ type = "move" })))
+    end)
   end)
 end)

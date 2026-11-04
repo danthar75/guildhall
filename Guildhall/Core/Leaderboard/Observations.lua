@@ -50,12 +50,18 @@ function Obs.Validate(d)
     end
   end
   if d.kind == "bank" then
+    local function inRange(v, lo, hi) return isInt(v) and v >= lo and v <= hi end
     if d.type ~= "dep" and d.type ~= "wd" then return false, "bad bank type" end
     if type(d.player) ~= "string" or d.player == "" then return false, "bad bank player" end
-    local amount = d.tab ~= nil and d.count or d.copper
-    if not isInt(amount) or amount <= 0 then return false, "bad bank amount" end
-    if d.tab ~= nil and (not isInt(d.tab) or d.tab < 1 or not isInt(d.item)) then return false, "bad bank tab" end
-    if d.tab == nil and (d.count ~= nil or d.item ~= nil) then return false, "bad bank money entry" end
+    if d.tab ~= nil then
+      if not inRange(d.tab, 1, 8) then return false, "bad bank tab" end
+      if not inRange(d.item, 1, 10000000) then return false, "bad bank item" end
+      if not inRange(d.count, 1, 10000) then return false, "bad bank count" end
+      if d.copper ~= nil then return false, "bad bank item entry" end
+    else
+      if not inRange(d.copper, 1, 100000000000) then return false, "bad bank copper" end
+      if d.count ~= nil or d.item ~= nil then return false, "bad bank money entry" end
+    end
   end
   return true
 end
