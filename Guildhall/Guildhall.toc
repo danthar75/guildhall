@@ -64,5 +64,7 @@ Modules/Groups/Calendar.lua
 Modules/Groups/Reminders.lua
 Modules/Groups/UI/Details.lua
 Modules/Groups/UI/View.lua
+Modules/Groups/UI/Form.lua
+Modules/Groups/UI/ChecklistEditor.lua
 Modules/Groups/Module.lua
 Core/Boot.lua

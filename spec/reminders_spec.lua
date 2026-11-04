@@ -133,6 +133,18 @@ describe("Reminders", function()
     assert.equal(0, #printed)
   end)
 
+  it("a post whose poster turned its reminder off reminds nobody", function()
+    local p = post({ by = "me" })
+    p.d.remind = false
+    posts = { p }
+    clock.advance((START - 600) - clock.now())
+    build():Start()
+    assert.equal(0, #printed)
+    p.d.remind = true
+    build():Start()
+    assert.equal(1, #printed)
+  end)
+
   it("stops ticking when Stop is called", function()
     local r = build()
     r:Start()

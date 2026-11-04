@@ -6,6 +6,7 @@ local ADDON, ns = ...
 -- Times are server time (ctx.now, GetServerTime), the same clock a post's start is stored in, so the
 -- player's local clock offset plays no part. A tick every 30 s checks the posts; a reminder fires once
 -- per post (and start), immediately when the client logs in between start - 900 and start.
+-- A post with d.remind = false (the poster unticked "Remind signups 15 min before") reminds nobody.
 -- Fired reminders are remembered in ctx.db.reminded (post id -> start, the per-guild Groups table),
 -- so a /reload inside the window does not repeat one.
 --
@@ -83,7 +84,7 @@ function R:Check()
   for _, post in ipairs(ctx.groups:Posts() or {}) do
     local d = type(post) == "table" and post.d
     local start = type(d) == "table" and d.start
-    if type(start) == "number" and now >= start - LEAD and now < start and self.reminded[post.id] ~= start then
+    if type(start) == "number" and d.remind ~= false and now >= start - LEAD and now < start and self.reminded[post.id] ~= start then
       if self:_remind(post, me, now) then fired = fired + 1 end
     end
   end

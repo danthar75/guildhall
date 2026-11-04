@@ -135,9 +135,9 @@ end
 function G:Post(d)
   local err = self:_gate()
   if err then return false, err end
-  local ok, verr = ns.Groups.Post.Validate(d)
-  if not ok then return false, verr end
   local now = self.now()
+  local ok, verr = ns.Groups.Post.CheckNew(d, now)
+  if not ok then return false, verr end
   local rec = ns.Groups.Post.New(d, self.profile:Id(), self.playerChar, now, ns.Groups.Post.NextN(now))
   return publish(self.postSync, rec, self.checkPost)
 end

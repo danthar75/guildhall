@@ -51,8 +51,9 @@ local function checkRoleSet(roles)
   return n >= 1
 end
 
+-- remind = false turns the 15-minute reminder off for everyone on the post (absent means on).
 local POST_KEYS = { instance = true, role = true, need = true, start = true, note = true, want = true,
-  assign = true, created = true }
+  assign = true, created = true, remind = true }
 
 -- Returns ok, err. Never raises on malformed input.
 function Post.Validate(d)
@@ -78,6 +79,7 @@ function Post.Validate(d)
     local okw = (isInt(w) and w >= 1 and w <= 10000000) or (type(w) == "string" and #w >= 1 and #w <= 64)
     if not okw then return false, "bad want" end
   end
+  if d.remind ~= nil and type(d.remind) ~= "boolean" then return false, "bad remind" end
   if d.assign ~= nil then
     if type(d.assign) ~= "table" then return false, "bad assign" end
     local n = 0
@@ -89,6 +91,18 @@ function Post.Validate(d)
   if d.created ~= nil and not (isInt(d.created) and d.created >= 0) then return false, "bad created" end
   if d.start ~= nil and d.created ~= nil and d.start > d.created + MAX_START_AHEAD then
     return false, "start too far"
+  end
+  return true
+end
+
+-- A new post made now: Validate, plus a start that is in the future and at most 14 days out.
+-- (Not part of Validate: a peer's scheduled post stays valid after its start passes.)
+function Post.CheckNew(d, now)
+  local ok, err = Post.Validate(d)
+  if not ok then return false, err end
+  if d.start ~= nil then
+    if d.start <= now then return false, "start in past" end
+    if d.start > now + MAX_START_AHEAD then return false, "start too far" end
   end
   return true
 end
