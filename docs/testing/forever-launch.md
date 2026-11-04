@@ -92,6 +92,7 @@ Needs Forever. Account A and account B are your two accounts, both in the guild 
 - [ ] **Secret values.** Open a trade window, the mailbox and the guild bank inside an instance (or with `/console addonChatRestrictionsForced 1` and `/console addonMapRestrictionsForced 1`). Expected: no Lua errors and no half-recorded entries. A skipped read is simply not recorded.
 - [ ] **Glyph check.** Open the Leaderboard tab, its settings and the Past months list. Expected: every label, button and number renders as real text, with no empty boxes or question marks.
 - [ ] **Demo mode.** Type `/gh lbdemo`. Expected: the tab shows an orange "Demo data, not real. /gh lbdemo off" banner, 12 made-up players, and data under Week, Month, All time and Past months. Type `/gh lbdemo off`, or `/reload`: real data returns, and nothing was sent (the other account sees nothing).
+- [ ] **Change history box.** As an officer, change a weight in Leaderboard settings and save. Expected: the "Recent changes" box shows the line with a server-time date, and scrolling the wheel over that box scrolls only the box, not the settings page behind it.
 - [ ] **Guild Info tags.** In Guild Info, write `[Guildhall donations=3,4]` (and `[Guildhall bankexclude=0,1]`). Expected after `/reload`: tabs 3 and 4 count, and ranks 0 and 1 never count. A space after a comma (`donations=3, 4`) is also read correctly, but write tags without spaces to be safe. No tag means all tabs count.
 
 ### Needs a second client (your second account)
