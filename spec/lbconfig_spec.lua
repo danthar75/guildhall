@@ -184,24 +184,128 @@ describe("Leaderboard Config", function()
 
   it("MaybeRefreshTz republishes only when the offset moves >= 15 min", function()
     offset = 3600
-    cfg:MaybeRefreshTz()
-    assert.equal(1, cfg.set:Get("weights").v)
-    assert.equal(3600, cfg:Tz())
+    -- no record yet (an unsynced client): never publishes, so custom weights cannot be wiped
+    assert.is_false(cfg:MaybeRefreshTz())
+    assert.is_nil(cfg.set:Get("weights"))
     assert.is_true((cfg:PublishWeights({ sales = 8 })))
-    assert.equal(2, cfg.set:Get("weights").v)
+    assert.equal(1, cfg.set:Get("weights").v)
     offset = 3600 + 899
     cfg:MaybeRefreshTz()
-    assert.equal(2, cfg.set:Get("weights").v)
+    assert.equal(1, cfg.set:Get("weights").v)
     offset = 3600 + 900
     clock.advance(1)
     cfg:MaybeRefreshTz()
     local r = cfg.set:Get("weights")
-    assert.equal(3, r.v)
+    assert.equal(2, r.v)
     assert.equal(4500, cfg:Tz())
     assert.equal(8, cfg:Weights().sales)
     offset = nil
     cfg:MaybeRefreshTz()
-    assert.equal(3, cfg.set:Get("weights").v)
+    assert.equal(2, cfg.set:Get("weights").v)
+  end)
+
+  local function drain() for _ = 1, 20 do clock.advance(10); timers.run(clock) end end
+  local function bigMonth(m)
+    local function t5()
+      local o = {}
+      for i = 1, 5 do
+        o[i] = { profile = string.format("%016x", 0xabcdef000000 + i), name = string.rep("N", 40) .. i,
+          value = 123456789.123, rank = i }
+      end
+      return o
+    end
+    local ym = string.format("2026-%02d", m)
+    local b = {}
+    for i = 1, 16 do b["board.number" .. i] = t5() end
+    local w = {}
+    for i = 1, 32 do w["weight.type.number" .. i] = 0.15 end
+    return ym, { month = ym, from = 1000 * m, to = 1000 * m + 999, tz = 0, goldKept = 1234567,
+      overall = t5(), boards = b, weights = w, savedBy = "Officer-Realm", savedAt = 1 }
+  end
+
+  it("a fresh client receives all 7 saved months", function()
+    bus = fakes.bus(clock, timers, { burst = 100000 })   -- pacing is Comm's concern, not this spec's
+    local a = build("Boss-Realm")
+    for m = 4, 10 do
+      local ym, d = bigMonth(m)
+      assert.is_true(a.set:Apply(rec("month:" .. ym, 1, "Boss-Realm", d)) == "accepted")
+    end
+    local d = build("Grunt-Realm")
+    d.sync:Start()
+    drain()
+    assert.equal(7, #d:Months())
+    assert.equal(7, #a:Months())
+  end)
+
+  it("a payload at the bounds is valid and one past them is not", function()
+    local ym, d = bigMonth(5)
+    assert.equal("accepted", apply(rec("month:" .. ym, 1, "Boss-Realm", d)))
+    local _, d2 = bigMonth(6)
+    d2.boards["one.too.many"] = d2.boards["board.number1"]
+    assert.equal("invalid", apply(rec("month:2026-06", 1, "Boss-Realm", d2)))
+    local _, d3 = bigMonth(7)
+    d3.weights["extra"] = 1
+    assert.equal("invalid", apply(rec("month:2026-07", 1, "Boss-Realm", d3)))
+    local _, d4 = bigMonth(8)
+    d4.overall[1].profile = string.rep("x", 17)
+    assert.equal("invalid", apply(rec("month:2026-08", 1, "Boss-Realm", d4)))
+    local _, d5 = bigMonth(9)
+    d5.overall[1].rank = 6
+    assert.equal("invalid", apply(rec("month:2026-09", 1, "Boss-Realm", d5)))
+    local _, d6 = bigMonth(10)
+    d6.overall[1].value = 1e13
+    assert.equal("invalid", apply(rec("month:2026-10", 1, "Boss-Realm", d6)))
+    local _, d7 = bigMonth(11)
+    d7.overall[1].rank = 1.5
+    assert.equal("invalid", apply(rec("month:2026-11", 1, "Boss-Realm", d7)))
+    assert.equal("invalid", apply(rec("weights", 1, "Boss-Realm", { weights = (function()
+      local w = {}
+      for i = 1, 33 do w["t" .. i] = 1 end
+      return w
+    end)() })))
+  end)
+
+  it("two officers save the same month concurrently and all clients converge on the earliest, with no rejected-log spam", function()
+    officers["Other-Realm"] = true
+    local a = build("Boss-Realm")
+    local b = build("Other-Realm")
+    local c = build("Grunt-Realm")
+    clock.advance(utc(2026, 11, 10) - clock.now())
+    a:MaybeSaveMonth(ledger({ pA = { sales = 3 } }), clock.now())
+    clock.advance(100)
+    b:MaybeSaveMonth(ledger({ pB = { sales = 3 } }), clock.now())
+    for _ = 1, 3 do
+      for _, x in ipairs({ a, b, c }) do x.sync:Start(); drain(); clock.advance(400) end
+    end
+    for _, x in ipairs({ a, b, c }) do
+      assert.equal("pA", x:Month("2026-10").overall[1].profile)
+      for _, e in ipairs(x.ctx.log.store) do assert.not_equal("rejected", e.result) end
+    end
+  end)
+
+  it("first login on 2026-12-10 saves October and November", function()
+    local _, sept = bigMonth(9)
+    assert.equal("accepted", apply(rec("month:2026-09", 1, "Boss-Realm", sept)))
+    clock.advance(utc(2026, 12, 10) - clock.now())
+    cfg:MaybeSaveMonth(ledger({ p1 = { sales = 3 } }), clock.now())
+    assert.same({ "2026-11", "2026-10", "2026-09" }, cfg:Months())
+    assert.equal(15, cfg:Month("2026-11").overall[1].value)
+  end)
+
+  it("catch-up stops at months older than the retention window", function()
+    clock.advance(utc(2028, 12, 10) - clock.now())
+    cfg:MaybeSaveMonth(ledger({ p1 = { sales = 3 } }), clock.now())
+    local months = cfg:Months()
+    assert.is_true(#months >= 10 and #months <= 13)
+    assert.equal("2028-11", months[1])
+    for _, ym in ipairs(months) do assert.is_true(cfg:Month(ym).from >= clock.now() - 34560000) end
+  end)
+
+  it("Month returns a copy", function()
+    clock.advance(utc(2026, 11, 10) - clock.now())
+    cfg:MaybeSaveMonth(ledger({ p1 = { sales = 3 } }), clock.now())
+    cfg:Month("2026-10").overall[1].value = 999
+    assert.equal(15, cfg:Month("2026-10").overall[1].value)
   end)
 
   it("rejects unknown id prefixes and malformed month payloads", function()

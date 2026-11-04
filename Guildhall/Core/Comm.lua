@@ -40,6 +40,12 @@ function Comm:On(module, kind, handler)
   m[kind] = handler
 end
 
+-- True when Send would accept this message (all chunks of one envelope within MAX_CHUNKS).
+function Comm:Fits(module, kind, payload)
+  local body = ns.Serialize.Encode({ pv = 1, m = module, k = kind, p = payload })
+  return #body <= (self.maxBytes - HEADER_RESERVE) * MAX_CHUNKS
+end
+
 function Comm:Pending() return self.tail - self.head + 1 end
 
 -- Stops this Comm for good (guild changed mid-session): queued lines are dropped and

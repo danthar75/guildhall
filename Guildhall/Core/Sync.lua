@@ -336,15 +336,31 @@ function Sync:_flush()
   local ids = {}
   for id in pairs(pending) do ids[#ids + 1] = id end
   table.sort(ids)
+  -- Each REC must fit Comm's per-message limit once encoded, so batches are also split by size.
+  local function fits(rs)
+    if not self.comm.Fits then return true end
+    return self.comm:Fits(self.module, "REC", { rs = rs })
+  end
   local batch = {}
+  local function send()
+    if #batch > 0 then self.comm:Send(self.module, "REC", { rs = batch }) end
+    batch = {}
+  end
   for _, id in ipairs(ids) do
-    batch[#batch + 1] = pending[id]
-    if #batch == BATCH then
-      self.comm:Send(self.module, "REC", { rs = batch })
-      batch = {}
+    local r = pending[id]
+    if not fits({ r }) then
+      if ns.OnError then ns.OnError("Sync " .. tostring(self.module) .. ": record too large to send: " .. id) end
+    else
+      batch[#batch + 1] = r
+      if #batch > 1 and not fits(batch) then
+        batch[#batch] = nil
+        send()
+        batch[1] = r
+      end
+      if #batch == BATCH then send() end
     end
   end
-  if #batch > 0 then self.comm:Send(self.module, "REC", { rs = batch }) end
+  send()
 end
 
 -- Drop our pending copy only if the peer's is Greater or identical on the full (v, t, del, char) tuple.

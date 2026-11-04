@@ -17,7 +17,10 @@ local GRACE = 259200          -- a month is saved 3 days after it ends
 local TZ_STEP = 900           -- republish tz when the local offset moves this much
 local MAX_WEIGHT = 1000
 local TOP_N = 5
-local MAX_NAME, MAX_BOARDS = 64, 64
+local MAX_CATCHUP = 13
+local MAX_ID, MAX_NAME, MAX_BOARDS, MAX_WEIGHTS = 16, 48, 16, 32
+local MAX_VALUE = 1e12
+local RETENTION = 34560000
 
 local C = {}
 C.__index = C
@@ -35,7 +38,10 @@ end
 
 local function validWeights(w)
   if type(w) ~= "table" then return false, "bad weights" end
+  local n = 0
   for id, v in pairs(w) do
+    n = n + 1
+    if n > MAX_WEIGHTS then return false, "too many weights" end
     if type(id) ~= "string" or #id > MAX_NAME then return false, "bad weight id" end
     if not finite(v) or v < 0 or v > MAX_WEIGHT then return false, "bad weight value" end
   end
@@ -52,9 +58,10 @@ local function validTop5(list)
   for _ in pairs(list) do n = n + 1 end
   if n ~= #list then return false end
   for _, e in ipairs(list) do
-    if type(e) ~= "table" or type(e.profile) ~= "string" or #e.profile > MAX_NAME
+    if type(e) ~= "table" or type(e.profile) ~= "string" or #e.profile > MAX_ID
       or type(e.name) ~= "string" or #e.name > MAX_NAME
-      or not finite(e.value) or e.value < 0 or not finite(e.rank) or e.rank < 1 then
+      or not finite(e.value) or e.value < 0 or e.value > MAX_VALUE
+      or not finite(e.rank) or e.rank ~= math.floor(e.rank) or e.rank < 1 or e.rank > TOP_N then
       return false
     end
   end
@@ -72,7 +79,7 @@ local function validMonth(ym, d)
   local n = 0
   for id, list in pairs(d.boards) do
     n = n + 1
-    if type(id) ~= "string" or #id > MAX_NAME or n > MAX_BOARDS or not validTop5(list) then
+    if type(id) ~= "string" or #id > MAX_ID * 2 or n > MAX_BOARDS or not validTop5(list) then
       return false, "bad board"
     end
   end
@@ -102,7 +109,7 @@ local function validateRecord(self, rec)
     local ok, err = validMonth(ym, rec.d)
     if not ok then return false, err end
     local old = self.set:Get(id)
-    if old and ns.ReplicatedSet.Greater(rec, old) and rec.d.retake ~= true then
+    if old and rec.v > old.v and rec.d.retake ~= true then
       return false, "month already saved"
     end
     return true
@@ -154,8 +161,8 @@ end
 
 function C:_isOfficer() return canAdminister(self.roster, self.playerChar) end
 
-function C:_publish(id, d, exp)
-  local t = self.now()
+function C:_publish(id, d, exp, t)
+  t = t or self.now()
   local rec = { id = id, v = self.set:NextVersion(id), t = t, exp = exp or (t + MONTH_RETENTION),
     by = self.profile:Id(), char = self.playerChar, d = d }
   return self.sync:Publish(rec) == "accepted", rec
@@ -199,21 +206,24 @@ function C:MaybeRefreshTz()
   if not self:_isOfficer() then return false end
   local offset = self.compat:ServerOffset()
   if offset == nil then return false end
+  -- Only an existing record is refreshed. A client that has not synced yet must not publish
+  -- one: it would hold defaults only and win by version over the guild's real weights.
   local d = liveData(self, "weights")
-  if d and finite(d.tz) and math.abs(offset - d.tz) < TZ_STEP then return false end
-  local weights = d and type(d.weights) == "table" and copy(d.weights) or {}
+  if not d then return false end
+  if finite(d.tz) and math.abs(offset - d.tz) < TZ_STEP then return false end
+  local weights = type(d.weights) == "table" and copy(d.weights) or {}
   return (self:_publish("weights", { weights = weights, tz = offset }))
 end
 
 function C:Month(ym)
-  return liveData(self, "month:" .. tostring(ym))
+  return copy(liveData(self, "month:" .. tostring(ym)))
 end
 
 function C:Months()
   local out = {}
-  for id, rec in pairs(self.set.store) do
-    local ym = id:match("^month:(%d%d%d%d%-%d%d)$")
-    if ym and not rec.del then out[#out + 1] = ym end
+  for _, rec in ipairs(self.set:List(false)) do
+    local ym = rec.id:match("^month:(%d%d%d%d%-%d%d)$")
+    if ym then out[#out + 1] = ym end
   end
   table.sort(out, function(a, b) return a > b end)
   return out
@@ -255,19 +265,34 @@ function C:_monthData(ym, ledger, now)
     weights = weights, savedBy = self.playerChar, savedAt = now }
 end
 
--- Saves the newest finished month once its grace has passed and nothing is stored for it.
+-- Saves every unsaved finished month (oldest first, at most MAX_CATCHUP per call) whose grace
+-- has passed and whose whole range is still inside the observation retention.
+--
+-- Concurrent first saves: the earliest save must win on every client, but the set keeps the
+-- Greater (v, t). So a v1 record is stamped with an inverted time, t = 2 * (monthEnd + GRACE)
+-- - savedAt: an earlier save has a larger t. Retakes (v >= 2) carry the real t, so the newest
+-- retake wins. Nothing may read a month record's rec.t as a time; use d.savedAt. Two saves in
+-- the same second with the same char tie on (v, t, char) and can still diverge briefly.
 function C:MaybeSaveMonth(ledger, now)
   if not self:_isOfficer() then return false end
   local tz = self:Tz() or self.compat:ServerOffset() or 0
   local y, m = ns.Scoring.MonthKey(now, tz):match("^(%d+)-(%d+)$")
-  y, m = tonumber(y), tonumber(m) - 1
-  if m < 1 then y, m = y - 1, 12 end
-  local ym = string.format("%04d-%02d", y, m)
-  if self.set:Get("month:" .. ym) then return false end
-  local _, monthEnd = ns.Scoring.MonthRange(ym, tz)
-  if now < monthEnd + GRACE then return false end
-  local d = self:_monthData(ym, ledger, now)
-  return (self:_publish("month:" .. ym, d))
+  y, m = tonumber(y), tonumber(m)
+  local due = {}
+  for _ = 1, MAX_CATCHUP do
+    m = m - 1
+    if m < 1 then y, m = y - 1, 12 end
+    local ym = string.format("%04d-%02d", y, m)
+    local from, monthEnd = ns.Scoring.MonthRange(ym, tz)
+    if from < now - RETENTION or self.set:Get("month:" .. ym) then break end
+    if now >= monthEnd + GRACE then table.insert(due, 1, { ym = ym, anchor = monthEnd + GRACE }) end
+  end
+  local saved = false
+  for _, e in ipairs(due) do
+    local d = self:_monthData(e.ym, ledger, now)
+    if self:_publish("month:" .. e.ym, d, nil, 2 * e.anchor - now) then saved = true end
+  end
+  return saved
 end
 
 -- Deliberate re-save of a stored month; the caller confirms with the officer first.
