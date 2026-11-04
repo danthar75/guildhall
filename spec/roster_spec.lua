@@ -41,6 +41,18 @@ describe("Roster", function()
     assert.equal(2, r.officers)
   end)
 
+  it("ParseTag keeps settings separated by a comma", function()
+    local ns = {}
+    loadAddonFile(ns, "Guildhall/Core/Roster.lua")
+    local r = ns.Roster.ParseTag("[Guildhall donations=3,4, officers=2]")
+    assert.equal("3,4", r.donations)
+    assert.equal(2, r.officers)
+    local r2 = ns.Roster.ParseTag("[Guildhall officers=2, mode=fast]")
+    assert.equal(2, r2.officers)
+    assert.equal("fast", r2.mode)
+    assert.equal("3,4", ns.Roster.ParseTag("[Guildhall donations=3, 4]").donations)
+  end)
+
   it("ParseTag ignores text without tag", function()
     local ns = {}
     loadAddonFile(ns, "Guildhall/Core/Roster.lua")

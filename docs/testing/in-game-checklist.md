@@ -71,7 +71,7 @@ Era has no Forever bank or trade events, so these checks use `/gh lbdemo` fake d
 - [ ] [Era] `/gh lbdemo` prints a chat line. The Leaderboard tab shows the orange "Demo data, not real. /gh lbdemo off" banner and 12 made-up players (Thalwyn, Brakka, Mireth and so on), never your real guildmates.
 - [ ] [Era] Demo data shows under Week, Month, All time and Past months (one saved month). Your own demo row shows a full breakdown; picking another player shows totals only (unless you are an officer).
 - [ ] [Era] Filters: the Board picker lists Overall and every activity, and each board re-ranks. Selecting a row updates the right-hand panel. With more than 11 rows the list scrolls and your own row is pinned.
-- [ ] [Era] Settings: the Leaderboard settings page opens with no Lua error. Changing a weight while demo is on is refused with a message ("Demo data is only on your screen..."), and nothing is published. "Show me on the leaderboard" shows your real setting.
+- [ ] [Era] Settings: the Leaderboard settings page opens with no Lua error. Changing a weight while demo is on is refused with a message ("Demo data is only on your screen..."), and nothing is published. The opt-out checkbox ("Show me on the leaderboard") changes your real setting even in demo mode.
 - [ ] [Era] While demo is on, the other client sees nothing new, and `/reload` clears the banner and the fake data (SavedVariables hold none of it).
 - [ ] [Era] `/gh lbdemo off` removes the banner and the real tab returns.
 - [ ] [Era] Log tab as a non-officer (put your character below the officer rank): observation entries are one line of counts like "received 6 (trade 2, bank 4)", with no names or amounts. Export gives the same lines. As an officer, the full entries show.
