@@ -114,7 +114,7 @@ function Boot.ShowConsent()
   ns.UI.Consent:Show(s.profile:PendingChars(), function(excluded) onConsentDone(excluded) end, nil, s.guildKey)
 end
 
--- Re-asks for every known character in this guild (Settings "Change…").
+-- Re-asks for every known character in this guild (Settings "Change...").
 function Boot.ChangeConsent()
   local s, p = ns.services, ns.UI.Personal()
   if not (s and p and p.profile and type(p.profile.chars) == "table") then return end
