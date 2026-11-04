@@ -28,7 +28,7 @@ Category.CATS = {
   { key = "crafted", label = "Crafted (all professions)", short = "Crafted" },
   { key = "materials", label = "Materials" },
   { key = "recipes", label = "Recipes" },
-  { key = "gear", label = "Gear" },
+  { key = "gear", label = "Gear (BoE)" },
   { key = "other", label = "Other" },
 }
 

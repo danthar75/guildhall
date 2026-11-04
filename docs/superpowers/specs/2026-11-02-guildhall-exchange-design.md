@@ -201,7 +201,7 @@ Branding can then be added later as configuration or a small theme file, without
   3. The poster's choice in an optional Profession picker on the form. The picker is pre-filled from 1 or 2 and can be changed.
 
   Stored as optional `d.prof`. The profession list and names come from the game where possible, so it holds for Forever.
-- **Categories from item class:** trade goods and reagents → Materials; recipes → Recipes; weapons and armour without a profession → Gear; anything with a profession (other than recipes) → Crafted / that profession; hand-typed names and everything else → Other. The game has no "crafted" flag, so Crafted means "tagged with a profession".
+- **Categories from item class:** trade goods and reagents → Materials; recipes → Recipes; weapons and armour without a profession → Gear (BoE), since soulbound items cannot be traded; anything with a profession (other than recipes) → Crafted / that profession; hand-typed names and everything else → Other. The game has no "crafted" flag, so Crafted means "tagged with a profession".
 
 ### Deal tracking and leaderboard (planned; design in progress 2026-11-04)
 The motivation for the Exchange is keeping gold in the guild. The user wants a guild total of gold kept in the guild, plus a fun leaderboard to promote use: listings posted, purchases, gold earned from guildmates, gold paid to guildmates.
