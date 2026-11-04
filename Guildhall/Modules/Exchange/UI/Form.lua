@@ -11,7 +11,7 @@ local Util = ns.Util
 local Form = {}
 ns.Exchange.Form = Form
 
-local WIDTH, HEIGHT = 400, 390
+local WIDTH, HEIGHT = 400, 420
 local NOTE_MAX = 200
 local EMPTY_ICON = "Interface\\PaperDoll\\UI-Backpack-EmptySlot"
 local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
@@ -125,7 +125,41 @@ local function lockName(locked)
   end
 end
 
+-- Profession picker ----------------------------------------------------------------
+
+local function profLabel(key)
+  return key and ns.Exchange.Category.ProfName(key) or "None"
+end
+
+-- fromUser marks a hand-made choice, which auto-fill then leaves alone for the same item.
+local function setProf(key, fromUser)
+  f.prof = key
+  if f.profBtn then f.profBtn:SetText(profLabel(key)) end
+  if fromUser then f.profManualFor = f.link or Util.Trim(f.name:GetText() or "") end
+end
+
+local function openProfPicker()
+  local items = { { label = "None", value = false } }
+  for _, p in ipairs(ns.Exchange.Category.PROFS) do
+    items[#items + 1] = { label = ns.Exchange.Category.ProfName(p.key), value = p.key }
+  end
+  -- A key outside the canonical set (set by a newer client) stays selectable.
+  if f.prof and not ns.Exchange.Category.PROFS_BY_KEY[f.prof] then
+    items[#items + 1] = { label = profLabel(f.prof), value = f.prof }
+  end
+  UI.PickList(f.profBtn, items, function(v) setProf(v or nil, true) end, f.prof or false)
+end
+
+-- Open profession window first, then what the item type implies, else keep the choice.
+local function autoFillProf(link)
+  if f.profManualFor ~= nil and f.profManualFor == link then return end
+  local C = ns.Exchange.Category
+  local key = C.WindowProf() or C.ImpliedProf(link)
+  if key then setProf(key) end
+end
+
 function Form.SetLink(link)
+  if f.link ~= link then f.profManualFor = nil end
   f.link = link
   f.settingName = true
   f.name:SetText(Util.ItemName(link))
@@ -133,6 +167,7 @@ function Form.SetLink(link)
   lockName(true)
   showSlot()
   setError(nil)
+  UI.Try(autoFillProf, link)
 end
 
 local function setTypedName(name)
@@ -219,6 +254,7 @@ local function payload()
     mats = f.mats:GetChecked() and true or false,
     cod = f.cod:GetChecked() and true or false,
     note = note ~= "" and note or nil,
+    prof = f.prof,
   }
 end
 
@@ -230,7 +266,7 @@ local function submit()
   if f.editing then
     ok, res = ex:Edit(f.editing, {
       kind = d.kind, item = d.item, qty = d.qty or false, mats = d.mats, cod = d.cod,
-      note = d.note or false,
+      note = d.note or false, prof = d.prof or false,
     })
   else
     ok, res = ex:Post(d)
@@ -335,19 +371,26 @@ local function build()
   f.mats = check(frame, "I will provide materials", 16, -182)
   f.cod = check(frame, "I am open to COD", 16, -208)
 
+  local profLabelText = UI.Text(frame, "GameFontNormal", "Profession:")
+  profLabelText:SetPoint("TOPLEFT", 20, -242)
+  f.profBtn = UI.Button(frame, "None", 160, openProfPicker)
+  f.profBtn:SetPoint("TOPLEFT", 92, -238)
+  local profHint = UI.Text(frame, "GameFontDisableSmall", "optional")
+  profHint:SetPoint("LEFT", f.profBtn, "RIGHT", 8, 0)
+
   local noteLabel = UI.Text(frame, "GameFontNormal", "Note (optional):")
-  noteLabel:SetPoint("TOPLEFT", 20, -244)
+  noteLabel:SetPoint("TOPLEFT", 20, -274)
   f.count = UI.Text(frame, "GameFontDisableSmall")
-  f.count:SetPoint("TOPRIGHT", -20, -246)
+  f.count:SetPoint("TOPRIGHT", -20, -276)
   f.note = input(frame, 356)
   f.note:SetMaxBytes(NOTE_MAX + 1) -- bytes + terminator, matching Validate and the counter
-  f.note:SetPoint("TOPLEFT", 24, -262)
+  f.note:SetPoint("TOPLEFT", 24, -292)
   on(f.note, "OnTextChanged", function(self)
     f.count:SetText(string.format("%d/%d", #(self:GetText() or ""), NOTE_MAX))
   end)
 
   f.error = UI.Text(frame, "GameFontNormalSmall")
-  f.error:SetPoint("TOPLEFT", 20, -292)
+  f.error:SetPoint("TOPLEFT", 20, -322)
   f.error:SetWidth(360)
   f.error:SetTextColor(1, 0.35, 0.35)
 
@@ -357,6 +400,7 @@ local function build()
   cancel:SetPoint("RIGHT", f.submit, "LEFT", -8, 0)
 
   on(frame, "OnHide", function()
+    if UI.ClosePickList then UI.ClosePickList() end
     for _, e in ipairs({ f.name, f.qty, f.note }) do e:ClearFocus() end
   end)
 end
@@ -371,11 +415,13 @@ function Form.Open(rec, defaultKind)
   frame.title:SetText(d and "Edit listing" or "New listing")
   f.submit:SetText(d and "Save" or "Post")
   setKind(d and d.kind or defaultKind or "LF")
+  f.prof, f.profManualFor = nil, nil
   if d and Util.IsItemLink(d.item) then
     Form.SetLink(d.item)
   else
     setTypedName(d and d.item or "")
   end
+  setProf(d and d.prof or nil) -- after SetLink: an edited listing shows its own choice
   f.qty:SetText(d and d.qty and tostring(d.qty) or "")
   f.mats:SetChecked(d and d.mats == true or false)
   f.cod:SetChecked(d and d.cod == true or false)

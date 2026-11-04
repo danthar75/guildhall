@@ -88,6 +88,104 @@ function UI.Button(parent, text, width, onClick)
   return b
 end
 
+-- Small custom popup list (no UIDropDownMenu / Menu API: they differ between clients).
+-- UI.PickList(anchor, items, onPick, current): items = { {label=, value=, indent=?}, ... };
+-- onPick(value, item) runs after the popup closes. Closed by a choice, a click elsewhere
+-- (a full-screen catcher behind it) or Esc (the catcher takes the key). Long lists scroll
+-- with the mouse wheel. One shared, unnamed popup; opening it again re-fills it.
+local PICK_ROW, PICK_MAX = 18, 16
+local pick -- { catcher, frame, rows }
+
+local function pickClose()
+  if pick then pick.frame:Hide(); pick.catcher:Hide() end
+end
+
+local function pickRender()
+  local p = pick
+  local items = p.items
+  p.offset = math.max(0, math.min(p.offset, #items - PICK_MAX))
+  for i, row in ipairs(p.rows) do
+    local item = items[p.offset + i]
+    row.item = item
+    if item then
+      row.text:SetText(item.label)
+      row.text:ClearAllPoints()
+      row.text:SetPoint("LEFT", 8 + (item.indent or 0), 0)
+      if item.value == p.current then row.text:SetTextColor(1, 0.82, 0) else row.text:SetTextColor(1, 1, 1) end
+      row:Show()
+    else
+      row:Hide()
+    end
+  end
+end
+
+local function pickBuild()
+  local catcher = CreateFrame("Button", nil, UIParent)
+  catcher:SetAllPoints(UIParent)
+  catcher:SetFrameStrata("FULLSCREEN")
+  catcher:RegisterForClicks("AnyUp")
+  catcher:EnableKeyboard(true)
+  catcher:Hide()
+  local frame = CreateFrame("Frame", nil, UIParent, BACKDROP_TEMPLATE)
+  frame:SetFrameStrata("FULLSCREEN_DIALOG")
+  frame:SetClampedToScreen(true)
+  frame:EnableMouse(true)
+  frame:EnableMouseWheel(true)
+  UI.ApplyBackdrop(frame, 1)
+  frame:Hide()
+  pick = { catcher = catcher, frame = frame, rows = {}, items = {}, offset = 0 }
+  catcher:SetScript("OnClick", function() UI.Try(pickClose) end)
+  catcher:SetScript("OnKeyDown", function(self, key)
+    UI.Try(function()
+      -- Esc closes the popup only; every other key still reaches the game.
+      local esc = key == "ESCAPE"
+      if self.SetPropagateKeyboardInput then pcall(self.SetPropagateKeyboardInput, self, not esc) end
+      if esc then pickClose() end
+    end)
+  end)
+  frame:SetScript("OnMouseWheel", function(_, delta)
+    UI.Try(function() pick.offset = pick.offset - delta; pickRender() end)
+  end)
+  for i = 1, PICK_MAX do
+    local row = CreateFrame("Button", nil, frame)
+    row:SetHeight(PICK_ROW)
+    row:SetPoint("TOPLEFT", 6, -6 - (i - 1) * PICK_ROW)
+    row:SetPoint("TOPRIGHT", -6, -6 - (i - 1) * PICK_ROW)
+    row:RegisterForClicks("LeftButtonUp")
+    local hl = row:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(row)
+    hl:SetColorTexture(1, 1, 1, 0.12)
+    row.text = UI.Text(row, "GameFontHighlight")
+    row:SetScript("OnClick", function(self)
+      UI.Try(function()
+        local item, cb = self.item, pick.onPick
+        pickClose()
+        if item and cb then cb(item.value, item) end
+      end)
+    end)
+    pick.rows[i] = row
+  end
+end
+
+function UI.PickList(anchor, items, onPick, current)
+  if not pick then pickBuild() end
+  local p = pick
+  p.items, p.onPick, p.current, p.offset = items, onPick, current, 0
+  local n = math.min(#items, PICK_MAX)
+  local width = 150
+  for _, it in ipairs(items) do
+    width = math.max(width, 24 + (it.indent or 0) + 7 * #(it.label or ""))
+  end
+  p.frame:SetSize(math.min(width, 260), 12 + n * PICK_ROW)
+  p.frame:ClearAllPoints()
+  p.frame:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+  pickRender()
+  p.catcher:Show()
+  p.frame:Show()
+end
+
+function UI.ClosePickList() pickClose() end
+
 -- Guild tabard (background, emblem, border), drawn with the same textures and Blizzard helper
 -- the game's own guild frames use. `size` is the background's edge in pixels (Blizzard: 62).
 function UI.Tabard(parent, size)

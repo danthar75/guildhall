@@ -21,6 +21,7 @@ local PROFS = {
 local BY_KEY, BY_ID = {}, {}
 for _, p in ipairs(PROFS) do BY_KEY[p.key] = p; BY_ID[p.id] = p end
 Category.PROFS = PROFS
+Category.PROFS_BY_KEY = BY_KEY
 
 -- Board categories in display order (after "all"), with their labels.
 Category.CATS = {
