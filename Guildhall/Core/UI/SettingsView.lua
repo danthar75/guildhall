@@ -33,7 +33,7 @@ local function coreLines()
   for _, name in ipairs(names) do
     local inc = chars[name].included
     local state = inc == true and "|cff40ff40linked|r" or inc == false and "|cffaaaaaanot shared|r" or "|cffffd200undecided|r"
-    charLines[#charLines + 1] = "  " .. name .. "  " .. state
+    charLines[#charLines + 1] = "  " .. ns.Util.DisplayName(name) .. "  " .. state
   end
   if #charLines == 0 then charLines[1] = "  (none yet)" end
   return table.concat(lines, "\n"), "Characters:\n" .. table.concat(charLines, "\n")

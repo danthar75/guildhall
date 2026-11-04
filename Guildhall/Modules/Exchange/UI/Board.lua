@@ -34,7 +34,7 @@ local function on(w, event, fn)
 end
 
 local function escape(s) return (tostring(s or ""):gsub("|", "||")) end
-local function bare(name) return type(name) == "string" and (name:match("^([^%-]+)") or name) or nil end
+local function bare(name) return type(name) == "string" and ns.Util.DisplayName(name) or nil end
 
 local function services() return ns.services end
 

@@ -24,6 +24,13 @@ function Util.FullName(name, realm, defaultRealm)
   return name .. "-" .. r
 end
 
+-- WoW Forever is realmless: names are stored as "Name-Realm" for reliable matching,
+-- but shown to players without the realm part.
+function Util.DisplayName(name)
+  if type(name) ~= "string" then return name end
+  return name:match("^([^%-]+)%-") or name
+end
+
 function Util.IsItemLink(s)
   return type(s) == "string" and s:find("|Hitem:", 1, true) ~= nil
 end

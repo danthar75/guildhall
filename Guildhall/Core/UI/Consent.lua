@@ -66,7 +66,7 @@ function Consent:Show(chars, done, initiallyExcluded)
   local ex = type(initiallyExcluded) == "table" and initiallyExcluded or {}
   for i, name in ipairs(names) do
     local r = row(i)
-    r.label:SetText(name)
+    r.label:SetText(ns.Util.DisplayName(name))
     r.check:SetChecked(not ex[name])
     r.check:Show()
     r.label:Show()

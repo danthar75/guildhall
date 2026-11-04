@@ -80,18 +80,18 @@ function Details.Show(rec)
   local whoName = char or (not imported and rec.char) or nil
   if whoName then
     setDot(det.dot, det.q, status)
-    det.who:SetText(escape(whoName) .. " |cff8a7d62(" .. status .. ")|r")
+    det.who:SetText(escape(ns.Util.DisplayName(whoName)) .. " |cff8a7d62(" .. status .. ")|r")
   else
     -- Imported listing with no in-game character: only the Discord poster is known.
     det.dot:Hide(); det.q:Hide()
     det.who:SetText("")
   end
   if imported then
-    det.alts:SetText("Posted on Discord by " .. escape(d.poster or rec.char or "?"))
+    det.alts:SetText("Posted on Discord by " .. escape(ns.Util.DisplayName(d.poster or rec.char or "?")))
   else
     local others = {}
     for _, c in ipairs(s.profile:CharsOf(rec.by)) do
-      if c ~= whoName then others[#others + 1] = escape(c) end
+      if c ~= whoName then others[#others + 1] = escape(ns.Util.DisplayName(c)) end
     end
     det.alts:SetText(#others > 0 and ("Also: " .. table.concat(others, ", ")) or "")
   end
