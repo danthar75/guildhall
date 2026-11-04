@@ -132,6 +132,19 @@ Keep `/console scriptErrors 1` on (or BugSack installed) for every session.
 - [ ] [Forever] The slot icon comes from `C_Item.GetItemIconByID`. Drag-and-drop from bags works (`GetCursorInfo` returns "item", id, link).
 - [ ] [Forever] The Remove and Remove (officer) confirmation popups appear and work.
 
+## Board filters and listing profession
+
+- [ ] [Era] Search row shows "Category: All" and "Member: Anyone" buttons right of the search box; nothing overlaps the details pane.
+- [ ] [Era] Category popup lists All, Crafted, Materials, Recipes, Gear, Other. Professions appear indented under Crafted only when a listing has them. Choosing one filters the list and the button reads e.g. "Category: Tailoring".
+- [ ] [Era] Category and Member combine with the All / Buying / Selling / Mine tabs and with Search. The selection survives a refresh (new listing, sync).
+- [ ] [Era] Member popup lists each poster once (alts together under one name), sorted. An imported Discord listing appears as "<poster> (Discord)". If the chosen member's last listing is removed, the button returns to "Member: Anyone".
+- [ ] [Era] Popups close on a choice, on a click elsewhere, and on Esc (Esc closes the popup but not the form behind it). With many members the list scrolls with the mouse wheel.
+- [ ] [Era] Listing form: the Profession picker shows None by default, opens the list, and the choice shows on the button. The Note box and error line moved down without overlap.
+- [ ] [Era] Open the Tailoring (or any) window, shift-click a crafted item or recipe into the form: the picker fills with that profession. Open Enchanting (the craft window): it fills Enchanting. A potion with no window open fills Alchemy; food fills Cooking; a bandage fills First Aid.
+- [ ] [Era] Pick a profession by hand, then shift-click the same item again: your choice stays. A different item auto-fills again.
+- [ ] [Era] Editing a listing shows its profession; setting None and saving removes it. The details pane shows "Profession: <name>" above Posted.
+- [ ] [Forever] The profession window (`ProfessionsFrame`) fills the picker via `C_TradeSkillUI.GetBaseProfessionInfo()`; names follow the client language; no Lua errors or taint warnings.
+
 ## Forever restrictions
 
 - [ ] [Forever] `/console addonChatRestrictionsForced 1`, then post. The status line reads "Listing posted. It will reach guildmates when chat restrictions lift." The message stays queued (no error). `/console addonChatRestrictionsForced 0`. It sends within a few seconds.

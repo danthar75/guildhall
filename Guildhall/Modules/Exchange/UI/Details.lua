@@ -38,6 +38,10 @@ local function detailBody(rec, now)
     lines[#lines + 1] = "|cffc8b98aNote:|r " .. escape(d.note)
   end
   lines[#lines + 1] = ""
+  local _, prof = ns.Exchange.Category.Of(d)
+  if prof then
+    lines[#lines + 1] = "|cffc8b98aProfession:|r " .. escape(ns.Exchange.Category.ProfName(prof))
+  end
   -- Listings from before d.created existed fall back to t.
   local posted = type(d.created) == "number" and d.created or rec.t
   lines[#lines + 1] = "|cff8a7d62Posted " .. when(posted) .. "|r"

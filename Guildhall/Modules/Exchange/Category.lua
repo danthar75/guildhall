@@ -25,7 +25,7 @@ Category.PROFS_BY_KEY = BY_KEY
 
 -- Board categories in display order (after "all"), with their labels.
 Category.CATS = {
-  { key = "crafted", label = "Crafted (all professions)" },
+  { key = "crafted", label = "Crafted (all professions)", short = "Crafted" },
   { key = "materials", label = "Materials" },
   { key = "recipes", label = "Recipes" },
   { key = "gear", label = "Gear" },

@@ -89,7 +89,15 @@ Board.H = {
 
 -- Data ---------------------------------------------------------------------------------
 
-local function matches(rec, needle)
+-- Member filter key: the poster's profile, or the Discord poster's name for imported
+-- listings (they have no profile).
+function Board.MemberKey(rec)
+  local d = rec.d
+  if type(d) == "table" and d.src == "discord" then return "discord:" .. tostring(d.poster or rec.char or "?") end
+  return rec.by
+end
+
+local function textMatches(rec, needle)
   if needle == "" then return true end
   local d = rec.d
   for _, v in ipairs({ Util.ItemName(d.item or ""), rec.char, d.poster }) do
@@ -98,12 +106,131 @@ local function matches(rec, needle)
   return false
 end
 
+-- filters: { needle = lowercase search text, cat = "all"|"crafted"|"prof:<key>"|<category>,
+-- member = Board.MemberKey value or nil }. All conditions must hold.
+function Board.Matches(rec, filters)
+  if type(rec) ~= "table" or type(rec.d) ~= "table" then return false end
+  local f = filters or {}
+  if f.member ~= nil and Board.MemberKey(rec) ~= f.member then return false end
+  local cat = f.cat
+  if cat ~= nil and cat ~= "all" then
+    local c, prof = ns.Exchange.Category.Of(rec.d)
+    local want = cat:match("^prof:(.+)$")
+    if want then
+      if c ~= "crafted" or prof ~= want then return false end
+    elseif c ~= cat then
+      return false
+    end
+  end
+  return textMatches(rec, f.needle or "")
+end
+
+-- Popup entries for the Category button, from the current listings: only professions that
+-- appear on a Crafted listing are offered.
+function Board.CategoryItems(recs)
+  local C = ns.Exchange.Category
+  local seen = {}
+  for _, rec in ipairs(recs) do
+    local c, prof = C.Of(rec.d)
+    if c == "crafted" and prof then seen[prof] = true end
+  end
+  local items = { { label = "All", value = "all" } }
+  for _, cat in ipairs(C.CATS) do
+    items[#items + 1] = { label = cat.label, value = cat.key, short = cat.short }
+    if cat.key == "crafted" then
+      local keys = {}
+      for _, p in ipairs(C.PROFS) do
+        if seen[p.key] then keys[#keys + 1] = p.key; seen[p.key] = nil end
+      end
+      local extra = {}
+      for k in pairs(seen) do extra[#extra + 1] = k end
+      table.sort(extra)
+      for _, k in ipairs(extra) do keys[#keys + 1] = k end
+      for _, k in ipairs(keys) do
+        items[#items + 1] = { label = C.ProfName(k), value = "prof:" .. k, indent = 14 }
+      end
+    end
+  end
+  return items
+end
+
+-- Popup entries for the Member button: one per profile (or Discord poster) among recs,
+-- sorted by name. labelOf(rec) names the member from that member's newest listing.
+function Board.MemberItems(recs, labelOf)
+  local newest = {}
+  for _, rec in ipairs(recs) do
+    local k = Board.MemberKey(rec)
+    if k ~= nil then
+      local cur = newest[k]
+      if not cur or (rec.t or 0) > (cur.t or 0) then newest[k] = rec end
+    end
+  end
+  local items = {}
+  for k, rec in pairs(newest) do
+    local label
+    if type(rec.d) == "table" and rec.d.src == "discord" then
+      label = tostring(rec.d.poster or rec.char or "?") .. " (Discord)"
+    else
+      label = labelOf(rec)
+    end
+    items[#items + 1] = { label = tostring(label or "?"), value = k }
+  end
+  table.sort(items, function(a, b)
+    local la, lb = a.label:lower(), b.label:lower()
+    if la ~= lb then return la < lb end
+    return tostring(a.value) < tostring(b.value)
+  end)
+  table.insert(items, 1, { label = "Anyone", value = false })
+  return items
+end
+
+local function memberLabel(rec)
+  local status, char = ns.exchange:Status(rec)
+  return escape(ns.Util.DisplayName((status == "online" and char) or rec.char or "?"))
+end
+
+-- Every listing regardless of tab: the filter popups offer choices from these.
+local function allRecs()
+  local out = {}
+  if not ns.exchange then return out end
+  for _, rec in ipairs(ns.exchange:List("all")) do
+    if type(rec.d) == "table" then out[#out + 1] = rec end
+  end
+  return out
+end
+
+local function updateFilterButtons()
+  if not view.catBtn then return end
+  local label = "All"
+  for _, it in ipairs(Board.CategoryItems(view.all or {})) do
+    if it.value == view.cat then label = it.short or it.label end
+  end
+  if view.cat ~= "all" and label == "All" then -- chosen profession no longer on any listing
+    local k = tostring(view.cat):match("^prof:(.+)$")
+    label = k and ns.Exchange.Category.ProfName(k) or tostring(view.cat)
+  end
+  view.catBtn:SetText("Category: " .. label)
+  view.memberBtn:SetText("Member: " .. (view.member and view.memberText or "Anyone"))
+end
+
 local function load()
   local out = {}
   if not ns.exchange then return out end
-  local needle = string.lower(Util.Trim(view.search:GetText() or ""))
+  view.all = allRecs()
+  if view.member ~= nil then
+    local present = false
+    for _, rec in ipairs(view.all) do
+      if Board.MemberKey(rec) == view.member then present = true; break end
+    end
+    if not present then view.member, view.memberText = nil, nil end
+  end
+  updateFilterButtons()
+  local f = {
+    needle = string.lower(Util.Trim(view.search:GetText() or "")),
+    cat = view.cat, member = view.member,
+  }
   for _, rec in ipairs(ns.exchange:List(view.filter)) do
-    if type(rec.d) == "table" and matches(rec, needle) then out[#out + 1] = rec end
+    if Board.Matches(rec, f) then out[#out + 1] = rec end
   end
   return out
 end
@@ -237,7 +364,7 @@ end
 
 function Board.Build(parent)
   Details = ns.Exchange.BoardDetails
-  view = { filter = "all", tabs = {}, rows = {}, list = {}, parent = parent }
+  view = { filter = "all", cat = "all", tabs = {}, rows = {}, list = {}, parent = parent }
 
   local x = 0
   for _, flt in ipairs(FILTERS) do
@@ -257,12 +384,31 @@ function Board.Build(parent)
   local label = UI.Text(parent, "GameFontNormalSmall", "Search:")
   label:SetPoint("TOPLEFT", 2, -TOP - 5)
   view.search = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-  view.search:SetSize(LIST_W - 64, 20)
+  view.search:SetSize(LIST_W - 64, 20) -- ends at x = 334, before the Category button
   view.search:SetAutoFocus(false)
   view.search:SetPoint("TOPLEFT", 58, -TOP)
   on(view.search, "OnTextChanged", function() Board.Refresh() end)
   on(view.search, "OnEscapePressed", function(self) self:ClearFocus() end)
   on(view.search, "OnEnterPressed", function(self) self:ClearFocus() end)
+
+  -- Category and Member filters, to the right of the search box.
+  view.catBtn = UI.Button(parent, "Category: All", 140, function()
+    view.all = allRecs()
+    UI.PickList(view.catBtn, Board.CategoryItems(view.all), function(v)
+      view.cat = v
+      Board.Refresh()
+    end, view.cat)
+  end)
+  view.catBtn:SetPoint("TOPLEFT", LIST_W, -TOP)
+  view.memberBtn = UI.Button(parent, "Member: Anyone", 140, function()
+    view.all = allRecs()
+    UI.PickList(view.memberBtn, Board.MemberItems(view.all, memberLabel), function(v, item)
+      view.member = v or nil
+      view.memberText = v and item.label or nil
+      Board.Refresh()
+    end, view.member or false)
+  end)
+  view.memberBtn:SetPoint("LEFT", view.catBtn, "RIGHT", 4, 0)
 
   -- List panel with pooled rows.
   local listPanel = CreateFrame("Frame", nil, parent, UI.BACKDROP_TEMPLATE)
@@ -297,7 +443,7 @@ function Board.Build(parent)
 
   -- Details pane (UI/Details.lua).
   local det = CreateFrame("Frame", nil, parent, UI.BACKDROP_TEMPLATE)
-  det:SetPoint("TOPLEFT", DETAIL_X, -TOP)
+  det:SetPoint("TOPLEFT", DETAIL_X, -LIST_TOP) -- below the filter row
   det:SetPoint("BOTTOMRIGHT", 0, BOTTOM)
   UI.ApplyBackdrop(det, 0.6)
   view.detail = det
