@@ -40,8 +40,21 @@ rm -f "$out"
 (cd "$stage" && TZ=UTC find Guildhall -exec touch -t 202601010000 {} + && find Guildhall -type f | LC_ALL=C sort | zip -X -q "$OLDPWD/$out" -@)
 
 (cd dist && sha256sum "$(basename "$out")" > "$(basename "$out").sha256")
+sha="$(cut -d' ' -f1 "$out.sha256")"
+
+# Fill in the release-page notes and the Discord announcement.
+release_url="https://github.com/danthar75/guildhall/releases/tag/v${version}"
+render() {
+  sed -e "s|{{VERSION}}|${version}|g" -e "s|{{SHA256}}|${sha}|g" -e "s|{{RELEASE_URL}}|${release_url}|g" "$1" > "$2"
+}
+render docs/release/release-notes.template.md "dist/Guildhall-${version}-release-notes.md"
+render docs/release/discord-post.template.md "dist/Guildhall-${version}-discord-post.md"
+
 echo
 echo "Built $out"
 unzip -l "$out" | tail -n +1
 echo
 cat "$out.sha256"
+echo
+echo "Release notes: dist/Guildhall-${version}-release-notes.md"
+echo "Discord post:  dist/Guildhall-${version}-discord-post.md"
