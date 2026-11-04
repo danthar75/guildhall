@@ -316,6 +316,21 @@ describe("Leaderboard.SettingsView", function()
       assert.is_false(buttons["Bank review"].shown)
     end)
 
+    it("describes checklist changes in plain words with ASCII arrows", function()
+      local D = ns.Leaderboard.SettingsView.Describe
+      local saved = _G.GetItemInfo
+      _G.GetItemInfo = function(id) if id == 13457 then return "Fire Protection Potion" end end
+      local out = D({ what = "checklist", key = "mc", before = { name = "Molten Core", lines = { { kind = "item", item = 13457, count = 3 } } },
+        after = { lines = { { kind = "item", item = 13457, count = 5 } } } })
+      assert.same({ "Changed checklist Molten Core: Fire Protection Potion 3 -> 5" }, out)
+      assert.same({ "Changed checklist Molten Core: item 999 none -> 2" },
+        D({ what = "checklist", key = "mc", before = { name = "Molten Core" }, after = { lines = { { kind = "item", item = 999, count = 2 } } } }))
+      assert.same({ "Renamed checklist Old -> New" }, D({ what = "checklist", key = "mc", before = { name = "Old" }, after = { name = "New" } }))
+      assert.same({ "Deleted checklist Molten Core" }, D({ what = "checklist", key = "mc", before = { name = "Molten Core" }, after = { deleted = true } }))
+      for _, l in ipairs(out) do assert.is_nil(l:find("[\128-\255]")) end
+      _G.GetItemInfo = saved
+    end)
+
     it("describes bank changes in plain words, naming the entry when the ledger still has it", function()
       local D = ns.Leaderboard.SettingsView.Describe
       local contribs = {

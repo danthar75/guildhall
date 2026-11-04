@@ -42,7 +42,7 @@ local MAX_VALUE = 1e12
 local RETENTION = 34560000
 local HISTORY_RETENTION = 63072000 -- 2 years
 -- What a history record may describe.
-local HISTORY_WHAT = { weights = true, month = true, perms = true, bank = true }
+local HISTORY_WHAT = { weights = true, month = true, perms = true, bank = true, checklist = true }
 local MAX_REF, MAX_REASON = 48, 80
 local EXCLUDE_FIELDS = { ref = true, excluded = true, reason = true, by = true, at = true }
 local REFUSED = "no permission"
@@ -71,6 +71,7 @@ local function canWriteHistory(self, char, what)
   if what == "month" then return self.perms:Can(char, "retake") end
   if what == "perms" then return self.perms:IsGuildMaster(char) end
   if what == "bank" then return self.perms:Can(char, "bankreview") end
+  if what == "checklist" then return self.perms:Can(char, "checklists") end
   return canAdminister(self.roster, char)
 end
 
@@ -163,6 +164,45 @@ local function validSummary(x)
     and finite(x.savedAt))
 end
 
+-- One side of a checklist history entry (changed keys only; each field may be absent):
+-- name (string <= 32 bytes), lines (<= 12 of item/enchants/manual), deleted (boolean).
+local CHECKLIST_FIELDS = { name = true, lines = true, deleted = true }
+local MAX_CL_NAME, MAX_CL_LINES, MAX_CL_TEXT, MAX_CL_COUNT = 32, 12, 64, 200
+
+local function validChecklistLine(l)
+  if type(l) ~= "table" then return false end
+  if l.kind == "item" then
+    for k in pairs(l) do if k ~= "kind" and k ~= "item" and k ~= "count" then return false end end
+    return type(l.item) == "number" and l.item == math.floor(l.item) and l.item >= 1 and l.item <= 2147483647
+      and type(l.count) == "number" and l.count == math.floor(l.count) and l.count >= 1 and l.count <= MAX_CL_COUNT
+  end
+  if l.kind == "enchants" then
+    for k in pairs(l) do if k ~= "kind" then return false end end
+    return true
+  end
+  if l.kind == "manual" then
+    for k in pairs(l) do if k ~= "kind" and k ~= "text" then return false end end
+    return type(l.text) == "string" and #l.text <= MAX_CL_TEXT
+  end
+  return false
+end
+
+local function validChecklistSide(x)
+  if x == nil then return true end
+  if type(x) ~= "table" then return false end
+  for k in pairs(x) do if not CHECKLIST_FIELDS[k] then return false end end
+  if x.name ~= nil and (type(x.name) ~= "string" or #x.name > MAX_CL_NAME) then return false end
+  if x.deleted ~= nil and type(x.deleted) ~= "boolean" then return false end
+  if x.lines ~= nil then
+    if type(x.lines) ~= "table" then return false end
+    local n = 0
+    for _ in pairs(x.lines) do n = n + 1 end
+    if n ~= #x.lines or n > MAX_CL_LINES then return false end
+    for _, l in ipairs(x.lines) do if not validChecklistLine(l) then return false end end
+  end
+  return true
+end
+
 -- "bank:" plus an observation id ("<profile hex>:o<time>_<n>", Observations _nextId).
 local function validRef(ref)
   return type(ref) == "string" and #ref <= MAX_REF and ref:match("^bank:[%w:_]+$") ~= nil
@@ -243,6 +283,10 @@ local function validHistory(self, rec)
   if d.what == "bank" then
     if not validRef(d.key) then return false, "bad key" end
     if not validBankState(d.before) or not validBankState(d.after) then return false, "bad bank change" end
+    return true
+  end
+  if d.what == "checklist" then
+    if not validChecklistSide(d.before) or not validChecklistSide(d.after) then return false, "bad checklist change" end
     return true
   end
   if not validSummary(d.before) or not validSummary(d.after) then return false, "bad summary" end

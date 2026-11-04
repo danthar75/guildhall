@@ -353,6 +353,93 @@ describe("Permissions", function()
     assert.equal("invalid", apply(cfg, h(nil, {})))
     assert.equal("accepted", apply(cfg, h({ weights = grant({ 0 }) }, { weights = grant({ 0, 1 }) })))
   end)
+
+  describe("group keys", function()
+    it("the three groups keys appear after the leaderboard keys and default to the guild master only", function()
+      local _, perms = build("Gm-Realm")
+      loadAddonFile(ns, "Guildhall/Modules/Groups/Perms.lua")
+      local got = {}
+      for _, k in ipairs(ns.Permissions.KEYS) do got[#got + 1] = { k.key, k.label, k.raidlead } end
+      assert.same({ { "weights", "Edit leaderboard weights", false }, { "retake", "Retake a month", false },
+        { "bankreview", "Review bank contributions", false }, { "checklists", "Edit raid checklists", true },
+        { "prepared", "Confirm prepared", true }, { "flex", "Ask for spec switches", true } }, got)
+      for _, key in ipairs({ "checklists", "prepared", "flex" }) do
+        assert.same({ ranks = { [0] = true }, raidlead = false }, perms:Grants(key))
+        assert.is_true(perms:Can("Gm-Realm", key))
+        assert.is_false(perms:Can("Off-Realm", key))
+      end
+      assert.is_true(ns.Permissions.AnyRaidLead())
+    end)
+
+    it("a raidlead grant needs a matching raidLeaders set", function()
+      local _, perms = build("Gm-Realm")
+      loadAddonFile(ns, "Guildhall/Modules/Groups/Perms.lua")
+      assert.is_true((perms:Publish({ checklists = { ranks = { 0 }, raidlead = true } })))
+      assert.is_false(perms:Can("Member-Realm", "checklists"))
+      assert.is_false(perms:Can("Member-Realm", "checklists", { raidLeaders = { ["Vet-Realm"] = true } }))
+      assert.is_true(perms:Can("Member-Realm", "checklists", { raidLeaders = { ["Member-Realm"] = true } }))
+    end)
+
+    it("history records carry exp = at + 63072000", function()
+      local cfg = build("Gm-Realm")
+      cfg:PublishWeights({ sales = 9 })
+      local h = cfg:History()
+      assert.is_true(#h >= 1)
+      local rec = cfg.set:Get(h[1].id)
+      assert.equal(rec.t + TWO_YEARS, rec.exp)
+    end)
+  end)
+
+  describe("checklist history", function()
+    local function hist(cfg, before, after, char)
+      local t = clock.now()
+      return { id = "history:pX:" .. t .. ":1", v = 1, t = t, exp = t + TWO_YEARS, by = "pX", char = char or "Gm-Realm",
+        d = { what = "checklist", key = "mc", before = before, after = after, by = char or "Gm-Realm", at = t } }
+    end
+    local function item(id, count) return { kind = "item", item = id, count = count } end
+
+    it("accepts name, lines and deleted, each optional on either side", function()
+      local cfg = build("Gm-Realm")
+      assert.equal("accepted", apply(cfg, hist(cfg, { name = "MC", lines = { item(13457, 3) } },
+        { lines = { item(13457, 5), { kind = "enchants" }, { kind = "manual", text = "Bring water" } }, deleted = true })))
+    end)
+
+    it("accepts empty sides", function()
+      local cfg = build("Gm-Realm")
+      assert.equal("accepted", apply(cfg, hist(cfg, nil, {})))
+    end)
+
+    it("rejects malformed payloads", function()
+      local function bad(before, after)
+        local cfg = build("Gm-Realm")
+        assert.equal("invalid", apply(cfg, hist(cfg, before, after)))
+      end
+      bad(nil, { name = string.rep("a", 33) })
+      bad(nil, { name = 5 })
+      bad(nil, { deleted = "yes" })
+      bad(nil, { extra = true })
+      bad(nil, { lines = "x" })
+      bad(nil, { lines = { item(1, 0) } })
+      bad(nil, { lines = { item(1, 201) } })
+      bad(nil, { lines = { item(1.5, 3) } })
+      bad(nil, { lines = { { kind = "item", item = 1 } } })
+      bad(nil, { lines = { { kind = "other" } } })
+      bad(nil, { lines = { { kind = "manual", text = string.rep("a", 65) } } })
+      bad(nil, { lines = { { kind = "manual" } } })
+      bad(nil, { lines = { { kind = "enchants", extra = 1 } } })
+      local many = {}
+      for i = 1, 13 do many[i] = item(i, 1) end
+      bad(nil, { lines = many })
+      bad({ name = 7 }, {})
+    end)
+
+    it("follows the checklists permission for the no-permission-now mark", function()
+      local cfg = build("Gm-Realm")
+      loadAddonFile(ns, "Guildhall/Modules/Groups/Perms.lua")
+      assert.is_true(cfg:HistoryAuthorPermitted({ what = "checklist", by = "Gm-Realm" }))
+      assert.is_false(cfg:HistoryAuthorPermitted({ what = "checklist", by = "Off-Realm" }))
+    end)
+  end)
 end)
 
 describe("PermissionsView", function()

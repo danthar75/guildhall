@@ -126,6 +126,63 @@ local function bankEntryText(ref)
     .. (c.value < 0 and " withdrawal" or " deposit")
 end
 
+local function itemText(id)
+  local name = type(GetItemInfo) == "function" and GetItemInfo(id) or nil
+  if type(name) == "string" and name ~= "" then return Util.Escape(name) end
+  return "item " .. tostring(id)
+end
+
+-- Item counts of a checklist side by item id, plus the other lines as "enchants" / "manual: text".
+local function checklistLines(side)
+  local items, others = {}, {}
+  for _, l in ipairs(type(side) == "table" and type(side.lines) == "table" and side.lines or {}) do
+    if l.kind == "item" then items[l.item] = l.count
+    elseif l.kind == "enchants" then others["enchants"] = true
+    elseif l.kind == "manual" then others["note: " .. tostring(l.text)] = true end
+  end
+  return items, others
+end
+
+local function describeChecklist(e, out)
+  local b = type(e.before) == "table" and e.before or {}
+  local a = type(e.after) == "table" and e.after or {}
+  local name = Util.Escape(tostring(a.name or b.name or e.key or "?"))
+  if a.deleted == true and b.deleted ~= true then
+    out[#out + 1] = "Deleted checklist " .. name
+  elseif b.deleted == true and a.deleted == false then
+    out[#out + 1] = "Restored checklist " .. name
+  end
+  if a.name ~= nil and b.name ~= nil and a.name ~= b.name then
+    out[#out + 1] = "Renamed checklist " .. Util.Escape(b.name) .. " -> " .. Util.Escape(a.name)
+  end
+  if a.lines ~= nil or b.lines ~= nil then
+    local bi, bo = checklistLines(b)
+    local ai, ao = checklistLines(a)
+    local ids, seen = {}, {}
+    for _, map in ipairs({ bi, ai }) do
+      for id in pairs(map) do if not seen[id] then seen[id] = true; ids[#ids + 1] = id end end
+    end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+      if bi[id] ~= ai[id] then
+        out[#out + 1] = "Changed checklist " .. name .. ": " .. itemText(id) .. " "
+          .. (bi[id] and tostring(bi[id]) or "none") .. " -> " .. (ai[id] and tostring(ai[id]) or "none")
+      end
+    end
+    local texts, tseen = {}, {}
+    for _, map in ipairs({ bo, ao }) do
+      for t in pairs(map) do if not tseen[t] then tseen[t] = true; texts[#texts + 1] = t end end
+    end
+    table.sort(texts)
+    for _, t in ipairs(texts) do
+      if bo[t] ~= ao[t] then
+        out[#out + 1] = "Changed checklist " .. name .. ": " .. Util.Escape(t) .. " " .. (bo[t] and "present" or "none")
+          .. " -> " .. (ao[t] and "present" or "none")
+      end
+    end
+  end
+end
+
 -- Plain-language lines for one history entry (ASCII only): one per changed weight, one for a
 -- month retake, or one per changed permission. Nothing for a kind this version doesn't know.
 local function describe(e)
@@ -161,6 +218,8 @@ local function describe(e)
       out[#out + 1] = "Changed " .. Util.Escape(permLabel(key)) .. ": "
         .. grantText((e.before or {})[key]) .. " -> " .. grantText((e.after or {})[key])
     end
+  elseif e.what == "checklist" then
+    describeChecklist(e, out)
   elseif e.what == "bank" then
     local a = type(e.after) == "table" and e.after or {}
     local where = " (" .. (bankEntryText(e.key) or Util.Escape(tostring(e.key))) .. ")"
