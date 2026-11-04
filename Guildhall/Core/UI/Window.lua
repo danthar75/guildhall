@@ -296,8 +296,9 @@ local function applyTitle()
 end
 
 function Window:Refresh()
-  if not (frame and frame:IsShown() and current) then return end
-  applyTitle()
+  if not (frame and frame:IsShown()) then return end
+  applyTitle() -- before the current-tab guard so the first Show (OnShow fires pre-select) has a title
+  if not current then return end
   -- A tab that was waiting for guild data can build now.
   if current.waitingForGuild and ns.services then buildTab(current) end
   -- Hidden tabs refresh when selected, so only the visible one needs it now.
