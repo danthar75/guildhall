@@ -1,5 +1,5 @@
 # Dev only. Check the value with /dump select(4, GetBuildInfo()) on Classic Era.
-## Interface: 11507
+## Interface: 11509, 11508, 11507
 ## Title: Guildhall
 ## SavedVariables: GuildhallDB
 ## Version: 0.1.0

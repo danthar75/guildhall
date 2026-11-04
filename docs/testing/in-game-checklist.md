@@ -7,7 +7,7 @@ Keep `/console scriptErrors 1` on (or BugSack installed) for every session.
 ## How to install
 
 - [ ] Classic Era: copy or symlink the `Guildhall/` folder into `World of Warcraft/_classic_era_/Interface/AddOns/`. The game loads `Guildhall_Vanilla.toc`.
-- [ ] Forever: copy or symlink `Guildhall/` into the Forever client's `Interface/AddOns/` folder (`_retail_/Interface/AddOns/` or the Forever equivalent).
+- [ ] Forever: copy or symlink `Guildhall/` into `World of Warcraft/_forever_/Interface/AddOns/`.
 - [ ] Release zip: contains `Guildhall/Guildhall.toc` and all Lua files, and does NOT contain `Guildhall_Vanilla.toc`.
 - [ ] Symlink example (WSL/Linux): `ln -s ~/projects/guildhall/Guildhall "<WoW>/_classic_era_/Interface/AddOns/Guildhall"`. On Windows use `mklink /D`.
 

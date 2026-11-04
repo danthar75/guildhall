@@ -19,7 +19,7 @@ If WowUp doesn't list your Forever install, use the manual steps below; they alw
 2. Optional: check the download against the SHA-256 on the release page.
    - Windows PowerShell: `Get-FileHash .\Guildhall-<version>.zip`
    - macOS / Linux: `shasum -a 256 Guildhall-<version>.zip`
-3. Unzip it into your Forever client's `Interface\AddOns\` folder. You should end up with `Interface\AddOns\Guildhall\Guildhall.toc`.
+3. Unzip it into `World of Warcraft\_forever_\Interface\AddOns\` (usually under `C:\Program Files (x86)\`). You should end up with `_forever_\Interface\AddOns\Guildhall\Guildhall.toc`.
 4. Restart the game, or `/reload` if it's already open.
 
 Open it with `/gh` (or `/guildhall`) or the minimap button. `/gh help` lists the commands.

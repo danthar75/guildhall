@@ -8,10 +8,11 @@ An in-game LF / WTS board for your guild on WoW Forever. Post what you're buying
 2. **Close WoW Forever** if it's running.
 3. **Open your Forever AddOns folder:**
    - In the Battle.net app, select **WoW Forever**. Click the **gear icon** next to Play, then **Show in Explorer** (Finder on Mac).
-   - Open the Forever game folder, then **Interface**, then **AddOns**. If `Interface` or `AddOns` doesn't exist yet, create it. Spelling matters.
+   - Open the **`_forever_`** folder, then **Interface**, then **AddOns**. If `AddOns` doesn't exist yet, create it. Spelling matters.
+   - Usually this is `C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns`.
 4. **Unzip the download into `AddOns`.** You should end up with:
    ```
-   ...\Interface\AddOns\Guildhall\Guildhall.toc
+   ...\_forever_\Interface\AddOns\Guildhall\Guildhall.toc
    ```
    - If you see `AddOns\Guildhall\Guildhall\Guildhall.toc` (one folder too deep), move the inner `Guildhall` folder up one level.
 5. **Start the game.** On the character screen, click **AddOns** (bottom left) and make sure **Guildhall** is ticked.
