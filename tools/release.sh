@@ -20,6 +20,8 @@ bash tools/check.sh
 version="$(sed -n 's/^## Version:[[:space:]]*//p' Guildhall/Guildhall.toc | tr -d '\r')"
 [ -n "$version" ] || { echo "error: no ## Version in Guildhall/Guildhall.toc" >&2; exit 1; }
 
+bash tools/check-release.sh "$version"
+
 mkdir -p dist
 out="dist/Guildhall-${version}.zip"
 stage="$(mktemp -d)"

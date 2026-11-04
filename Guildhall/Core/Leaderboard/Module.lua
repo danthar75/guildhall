@@ -118,6 +118,9 @@ end
 ns.RegisterModule("Leaderboard", {
   OnLogin = onLogin,
   events = events,
+  about = { title = "Leaderboard", order = 30, lines = {
+    "The gold your guild kept, plus who's contributing, from verified Exchange deals and guild bank donations.",
+  } },
   tab = { title = "Leaderboard", build = lazyBuild("View") },
   settings = { title = "Leaderboard", build = lazyBuild("SettingsView") },
 })

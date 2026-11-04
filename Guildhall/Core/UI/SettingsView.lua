@@ -51,6 +51,9 @@ function SettingsView.Build(parent)
   local header = UI.Text(content, "GameFontNormalLarge", "Guildhall")
   header:SetPoint("TOPLEFT", 4, -4)
 
+  local welcome = UI.Button(content, "Show welcome screen", 160, function() UI.Welcome:Show() end)
+  welcome:SetPoint("TOPRIGHT", content, "TOPRIGHT", -4, -4)
+
   view.info = UI.Text(content, "GameFontHighlight")
   view.info:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -8)
   view.info:SetWidth(WIDTH - 10)

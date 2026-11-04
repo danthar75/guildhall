@@ -470,6 +470,9 @@ if ns.RegisterModule then
       n.exchange = n.Exchange.Create(n.services)
       n.exchange:Start()
     end,
+    about = { title = "Exchange", order = 10, lines = {
+      "Post what you're looking for or selling. Guildmates see it right away, and you can whisper, mail or copy it for Discord.",
+    } },
     tab = { title = "Exchange", build = function(parent) return ns.Exchange.Board.Build(parent) end },
     settings = { title = "Exchange", build = function(parent) return ns.Exchange.Board.BuildSettings(parent) end },
   })

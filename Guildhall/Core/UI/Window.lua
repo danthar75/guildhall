@@ -301,6 +301,7 @@ local function collectTabs()
   end
   list[#list + 1] = { key = "Log", title = "Log", build = function(p) return UI.LogView.Build(p) end }
   list[#list + 1] = { key = "Settings", title = "Settings", build = function(p) return UI.SettingsView.Build(p) end }
+  list[#list + 1] = { key = "About", title = "About", build = function(p) return UI.Welcome.BuildAbout(p) end }
   return list
 end
 
@@ -342,7 +343,7 @@ end
 local function buildTab(tab)
   if tab.built then return end
   -- Module tabs (and the Log) need a guild; show a hint until services exist.
-  if tab.key ~= "Settings" and not ns.services then
+  if tab.key ~= "Settings" and tab.key ~= "About" and not ns.services then
     tab.waitingForGuild = true
     setMessage(tab, UI.NO_GUILD_TEXT)
     return
@@ -450,8 +451,11 @@ end
 
 function Window:Show(tabName)
   build()
+  local wasShown = frame:IsShown()
   frame:Show()
   selectTab(tabName or (current and current.key) or tabs[1].key)
+  -- First open on the account, or news since the last one: the welcome screen opens on top.
+  if not wasShown and UI.Welcome then UI.Try(UI.Welcome.MaybeShow, UI.Welcome) end
 end
 
 function Window:Toggle()

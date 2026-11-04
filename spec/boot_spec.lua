@@ -136,13 +136,13 @@ describe("Boot", function()
     assert.equal("Leaderboard", ns.GetModule("Leaderboard").settings.title)
   end)
 
-  it("the window's tabs read Exchange, Leaderboard, Log, Settings", function()
+  it("the window's tabs read Exchange, Leaderboard, Log, Settings, About", function()
     local real = ns.UI
     ns.UI = nil
     loadAddonFile(ns, "Guildhall/Core/UI/Window.lua")
     local keys = ns.UI.Window:TabKeys()
     ns.UI = real
-    assert.same({ "Exchange", "Leaderboard", "Log", "Settings" }, keys)
+    assert.same({ "Exchange", "Leaderboard", "Log", "Settings", "About" }, keys)
   end)
 
   it("a profile change invalidates the ledger", function()

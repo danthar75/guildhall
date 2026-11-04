@@ -13,6 +13,7 @@ local function help()
   print("  /gh  - open or close the Guildhall window")
   print("  /gh log  - open the Log tab")
   print("  /gh names  - show how the game reports character names (for troubleshooting)")
+  print("  /gh welcome  - show the welcome screen again")
   print("  /gh lbdemo - show fake leaderboard data (only on your screen)")
   print("  /gh help  - show this list")
 end
@@ -38,6 +39,8 @@ SlashCmdList.GUILDHALL = function(msg)
       UI.Window:Toggle()
     elseif cmd == "log" then
       UI.Window:Show("Log")
+    elseif cmd == "welcome" then
+      UI.Welcome:Show()
     elseif cmd == "names" then
       Launcher.PrintNames()
     elseif cmd == "lbdemo" or cmd == "lbdemo off" then

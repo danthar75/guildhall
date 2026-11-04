@@ -26,6 +26,11 @@ New files (like the logo) need a full game restart, not just `/reload`.
 - [ ] Not in a guild yet: one friendly chat line, and the header shows the Guildhall logo instead of a tabard.
 - [ ] Popups (form, pick lists, consent, copy box) are solid, not see-through.
 
+### Welcome screen and About tab
+- [ ] First open of the window on the account shows the welcome screen on top; closing it and reopening the window does not. Esc closes it.
+- [ ] `/gh welcome`, the Settings button and the About tab button reopen it. "Show this next time" brings it back on the next open.
+- [ ] The About tab shows the header, feature list, the gnome line ("no more than 10 or 20") and the credit line, and all text renders (no boxes).
+
 ### Consent and your own alts
 - [ ] Consent dialog on first login in the guild. OK links the character.
 - [ ] A second character of yours in the same guild: consent appears for that one only. Details show "Also: <your other character>" on your listings.

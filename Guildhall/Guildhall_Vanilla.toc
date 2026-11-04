@@ -9,6 +9,7 @@
 
 Core/Init.lua
 Core/Util.lua
+Core/WhatsNew.lua
 Core/Serialize.lua
 Core/Compat.lua
 Core/DB.lua
@@ -27,6 +28,7 @@ Core/Leaderboard/Bank.lua
 Core/Leaderboard/Config.lua
 Core/UI/Window.lua
 Core/UI/CopyBox.lua
+Core/UI/Welcome.lua
 Core/UI/Launcher.lua
 Core/UI/LogView.lua
 Core/UI/SettingsView.lua

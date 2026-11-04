@@ -18,6 +18,18 @@ function ns.Modules()
   return out
 end
 
+-- About text for the welcome screen and About tab that no module owns. Modules supply their own
+-- as def.about = { title, lines, order }; order places a section (Exchange 10, these 20 and 40,
+-- Leaderboard 30). Plain ASCII only.
+ns.CoreAbout = {
+  { title = "Linked characters", order = 20, lines = {
+    "Guildmates reach you on whichever character you're on. Only the characters you choose are shared.",
+  } },
+  { title = "Log and Settings", order = 40, lines = {
+    "See every change in the Log, and adjust your message templates in Settings.",
+  } },
+}
+
 -- Event bus ----------------------------------------------------------------
 function ns.OnError(err) print(err) end
 
