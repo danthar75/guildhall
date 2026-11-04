@@ -1,0 +1,212 @@
+describe("Leaderboard Config", function()
+  local fakes = require("spec.helpers.fakes")
+  local clock, timers, bus, officers, offset, cfg, ns, ctx, store
+
+  local function utc(y, m, d, h)
+    local a = math.floor((14 - m) / 12)
+    y, m = y + 4800 - a, m + 12 * a - 3
+    local jdn = d + math.floor((153 * m + 2) / 5) + 365 * y + math.floor(y / 4) - math.floor(y / 100) + math.floor(y / 400) - 32045
+    return (jdn - 2440588) * 86400 + (h or 0) * 3600
+  end
+
+  local function build(char)
+    ns = {}
+    for _, f in ipairs({ "Util", "DB", "ReplicatedSet", "Sync", "Log" }) do
+      loadAddonFile(ns, "Guildhall/Core/" .. f .. ".lua")
+    end
+    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Scoring.lua")
+    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Config.lua")
+    ns.Activity.Register({ id = "sales", label = "Sales", unit = "count", verify = "paired", weight = 5, order = 1 })
+    ns.Activity.Register({ id = "gold.earned", label = "Gold earned", unit = "gold", verify = "paired", weight = 0.1, order = 2 })
+    store = {}
+    ctx = {
+      comm = bus:join(char), now = clock.now, after = timers.after, random = function(lo) return lo end,
+      log = ns.Log.new({}, clock.now, function() return "" end),
+      roster = { IsOfficer = function(_, name) return officers[name] end },
+      profile = {
+        Id = function() return "pMe" end,
+        OnlineChar = function() return nil end,
+        CharsOf = function(_, id) return { id .. "-Realm" } end,
+        set = { Get = function() return nil end },
+      },
+      compat = { ServerOffset = function() return offset end },
+      playerChar = char, db = store,
+    }
+    cfg = ns.LbConfig.new(ctx)
+    return cfg
+  end
+
+  before_each(function()
+    clock = fakes.clock(utc(2026, 11, 4, 12))
+    timers = fakes.timers(clock)
+    bus = fakes.bus(clock, timers)
+    officers = { ["Boss-Realm"] = true, ["Grunt-Realm"] = false }
+    offset = 0
+    build("Boss-Realm")
+  end)
+
+  local function rec(id, v, char, d)
+    return { id = id, v = v, t = clock.now(), exp = clock.now() + 1000000, by = "pX", char = char, d = d }
+  end
+  local function apply(r) return cfg.sync:_applyOne(r, "Sender") end
+
+  local function ledger(byProfile, kept)
+    local l = { queries = {} }
+    function l:Query(q)
+      self.queries[#self.queries + 1] = q
+      return { byProfile = byProfile, guild = {}, goldKept = kept or 0 }
+    end
+    return l
+  end
+
+  it("a weights record from a non-officer is rejected", function()
+    assert.equal("invalid", apply(rec("weights", 1, "Grunt-Realm", { weights = { sales = 9 } })))
+    assert.equal(5, cfg:Weights().sales)
+  end)
+
+  it("an unknown roster rejects now and accepts on a later sync", function()
+    officers["Boss-Realm"] = nil
+    local r = rec("weights", 1, "Boss-Realm", { weights = { sales = 9 } })
+    assert.equal("invalid", apply(r))
+    assert.is_nil(cfg.set:Get("weights"))
+    officers["Boss-Realm"] = true
+    assert.equal("accepted", apply(r))
+  end)
+
+  it("from an officer it is accepted, and Weights merges defaults", function()
+    assert.equal("accepted", apply(rec("weights", 1, "Boss-Realm", { weights = { sales = 9 } })))
+    local w = cfg:Weights()
+    assert.equal(9, w.sales)
+    assert.equal(0.1, w["gold.earned"])
+  end)
+
+  it("a demoted officer's earlier record stays in effect (Review Focus 5)", function()
+    apply(rec("weights", 1, "Boss-Realm", { weights = { sales = 9 } }))
+    officers["Boss-Realm"] = false
+    assert.equal(9, cfg:Weights().sales)
+    assert.equal("invalid", apply(rec("weights", 2, "Boss-Realm", { weights = { sales = 1 } })))
+    assert.equal(9, cfg:Weights().sales)
+  end)
+
+  it("a negative or NaN weight is invalid", function()
+    for _, bad in ipairs({ -1, 0 / 0, math.huge, 1001, "5" }) do
+      assert.equal("invalid", apply(rec("weights", 1, "Boss-Realm", { weights = { sales = bad } })))
+      local ok = cfg:PublishWeights({ sales = bad })
+      assert.is_false(ok)
+    end
+    assert.is_nil(cfg.set:Get("weights"))
+    assert.is_true((cfg:PublishWeights({ sales = 0 })))
+    assert.equal(0, cfg:Weights().sales)
+  end)
+
+  it("PublishWeights is officers only and stamps tz", function()
+    offset = 3600
+    assert.is_true((cfg:PublishWeights({ sales = 7 })))
+    assert.equal(3600, cfg:Tz())
+    local g = build("Grunt-Realm")
+    local ok, err = g:PublishWeights({ sales = 7 })
+    assert.is_false(ok)
+    assert.is_string(err)
+  end)
+
+  it("MaybeSaveMonth waits for the 3-day grace", function()
+    local l = ledger({ p1 = { sales = 3 } })
+    clock.advance(utc(2026, 11, 4, 0) - 1 - clock.now())
+    cfg:MaybeSaveMonth(l, clock.now())
+    assert.is_nil(cfg:Month("2026-10"))
+    clock.advance(1)
+    cfg:MaybeSaveMonth(l, clock.now())
+    local m = cfg:Month("2026-10")
+    assert.is_table(m)
+    assert.equal(utc(2026, 10, 1), m.from)
+    assert.equal(utc(2026, 11, 1), m.to)
+    assert.equal("Boss-Realm", m.savedBy)
+    assert.equal("p1", m.overall[1].profile)
+    assert.equal("p1", m.overall[1].name)
+    assert.equal(15, m.overall[1].value)
+    assert.equal(1, m.overall[1].rank)
+    assert.equal(3, m.boards.sales[1].value)
+    assert.equal(5, m.weights.sales)
+    assert.same({ ["2026-10"] = true }, { [cfg:Months()[1]] = true })
+  end)
+
+  it("non-officers do not save months", function()
+    local g = build("Grunt-Realm")
+    clock.advance(utc(2026, 11, 10) - clock.now())
+    g:MaybeSaveMonth(ledger({ p1 = { sales = 3 } }), clock.now())
+    assert.is_nil(g:Month("2026-10"))
+  end)
+
+  it("a second save for the same month is ignored", function()
+    clock.advance(utc(2026, 11, 10) - clock.now())
+    local l = ledger({ p1 = { sales = 3 } })
+    cfg:MaybeSaveMonth(l, clock.now())
+    cfg:MaybeSaveMonth(ledger({ p2 = { sales = 99 } }), clock.now())
+    assert.equal(1, cfg.set:Get("month:2026-10").v)
+    assert.equal("p1", cfg:Month("2026-10").overall[1].profile)
+    -- a later version without retake is refused too
+    local r = rec("month:2026-10", 2, "Boss-Realm", cfg:Month("2026-10"))
+    assert.equal("invalid", apply(r))
+    -- an identical redelivery is just stale
+    assert.equal("stale", apply(cfg.set:Get("month:2026-10")))
+  end)
+
+  it("a retake replaces it", function()
+    clock.advance(utc(2026, 11, 10) - clock.now())
+    cfg:MaybeSaveMonth(ledger({ p1 = { sales = 3 } }), clock.now())
+    clock.advance(10)
+    assert.is_true(cfg:RetakeMonth("2026-10", ledger({ p2 = { sales = 4 } })))
+    local r = cfg.set:Get("month:2026-10")
+    assert.equal(2, r.v)
+    assert.is_true(r.d.retake)
+    assert.equal("p2", cfg:Month("2026-10").overall[1].profile)
+    assert.is_false((build("Grunt-Realm"):RetakeMonth("2026-10", ledger({}))))
+    -- a peer accepts the retake over the original
+    local peer = build("Boss-Realm")
+    clock.advance(0)
+    assert.equal("accepted", peer.sync:_applyOne({ id = r.id, v = 1, t = r.t - 10, exp = r.exp, by = r.by, char = r.char,
+      d = { month = "2026-10", from = r.d.from, to = r.d.to, tz = 0, goldKept = 0, overall = {}, boards = {},
+        weights = {}, savedBy = "Boss-Realm", savedAt = 1 } }, "S"))
+    assert.equal("accepted", peer.sync:_applyOne(r, "S"))
+  end)
+
+  it("a month record keeps its numbers after weights change", function()
+    clock.advance(utc(2026, 11, 10) - clock.now())
+    local l = ledger({ p1 = { sales = 3 } })
+    cfg:MaybeSaveMonth(l, clock.now())
+    assert.is_true((cfg:PublishWeights({ sales = 100 })))
+    local m = cfg:Month("2026-10")
+    assert.equal(15, m.overall[1].value)
+    assert.equal(5, m.weights.sales)
+    assert.equal(100, cfg:Weights().sales)
+  end)
+
+  it("MaybeRefreshTz republishes only when the offset moves >= 15 min", function()
+    offset = 3600
+    cfg:MaybeRefreshTz()
+    assert.equal(1, cfg.set:Get("weights").v)
+    assert.equal(3600, cfg:Tz())
+    assert.is_true((cfg:PublishWeights({ sales = 8 })))
+    assert.equal(2, cfg.set:Get("weights").v)
+    offset = 3600 + 899
+    cfg:MaybeRefreshTz()
+    assert.equal(2, cfg.set:Get("weights").v)
+    offset = 3600 + 900
+    clock.advance(1)
+    cfg:MaybeRefreshTz()
+    local r = cfg.set:Get("weights")
+    assert.equal(3, r.v)
+    assert.equal(4500, cfg:Tz())
+    assert.equal(8, cfg:Weights().sales)
+    offset = nil
+    cfg:MaybeRefreshTz()
+    assert.equal(3, cfg.set:Get("weights").v)
+  end)
+
+  it("rejects unknown id prefixes and malformed month payloads", function()
+    assert.equal("invalid", apply(rec("bogus", 1, "Boss-Realm", {})))
+    assert.equal("invalid", apply(rec("month:2026-10", 1, "Boss-Realm", { month = "2026-09" })))
+    assert.equal("invalid", apply(rec("month:2026-10", 1, "Boss-Realm", "x")))
+  end)
+end)
