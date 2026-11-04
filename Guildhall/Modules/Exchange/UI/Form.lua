@@ -113,11 +113,24 @@ local function showSlot()
   end
 end
 
+-- While an item is loaded the Name box shows its name and is locked; X unlocks it.
+local function lockName(locked)
+  if locked then
+    f.name:ClearFocus()
+    f.name:Disable()
+    f.name:SetTextColor(0.6, 0.6, 0.6)
+  else
+    f.name:Enable()
+    f.name:SetTextColor(1, 1, 1)
+  end
+end
+
 function Form.SetLink(link)
   f.link = link
   f.settingName = true
-  f.name:SetText("")
+  f.name:SetText(Util.ItemName(link))
   f.settingName = nil
+  lockName(true)
   showSlot()
   setError(nil)
 end
@@ -127,6 +140,7 @@ local function setTypedName(name)
   f.settingName = true
   f.name:SetText(name or "")
   f.settingName = nil
+  lockName(false)
   showSlot()
 end
 
@@ -160,6 +174,7 @@ local function scanInsertLink(...)
     if compat then v = compat:Safe(v) end
     if type(v) == "string" and v:find("|H", 1, true) then
       Form.LoadLink(v)
+      f.linkAt = GetTime and GetTime() or nil
       return
     end
   end
@@ -170,7 +185,19 @@ local function onInsertLink(...)
 end
 
 -- Post-hook only (never replaced), installed once. The link still also reaches an open chat box.
+-- With no chat box open, shift-clicking a bag stack also opens Blizzard's stack-split popup
+-- (InsertLink returned false). When that click just loaded an item into the form, close it.
+local splitHooked = false
+local function onSplitShow(self)
+  if not (frame and frame:IsShown() and f.linkAt and GetTime) then return end
+  if GetTime() == f.linkAt then self:Hide() end
+end
+
 local function installHook()
+  if not splitHooked and StackSplitFrame and StackSplitFrame.HookScript then
+    StackSplitFrame:HookScript("OnShow", function(self) UI.Try(onSplitShow, self) end)
+    splitHooked = true
+  end
   if hooked or not hooksecurefunc then return end
   if ChatFrameUtil and ChatFrameUtil.InsertLink then
     hooksecurefunc(ChatFrameUtil, "InsertLink", onInsertLink)

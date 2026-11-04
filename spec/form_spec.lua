@@ -1,16 +1,19 @@
 -- Exchange listing form under fake frames: input limits (M10) and the InsertLink hook (M9).
 describe("Exchange.Form", function()
   local fakes = require("spec.helpers.fakes")
-  local ns, W, hook, texts, panel, errors
+  local ns, W, hook, texts, panel, errors, buttons, split, now
   local saved = {}
-  local GLOBALS = { "CreateFrame", "hooksecurefunc", "ChatFrameUtil" }
+  local GLOBALS = { "CreateFrame", "hooksecurefunc", "ChatFrameUtil", "StackSplitFrame", "GetTime" }
   local LINK = "|cffa335ee|Hitem:14152::::::::60:::::|h[Robe of the Archmage]|h|r"
   local SECRET = "|cff1eff00|Hitem:2589::::::::60:::::|h[Linen Cloth]|h|r"
 
   before_each(function()
     for _, k in ipairs(GLOBALS) do saved[k] = _G[k] end
     W = fakes.widgets()
-    texts, errors, hook = {}, {}, nil
+    texts, errors, hook, buttons, now = {}, {}, nil, {}, 100
+    split = W.new("Frame")
+    _G.StackSplitFrame = split
+    _G.GetTime = function() return now end
     _G.CreateFrame = W.CreateFrame
     _G.hooksecurefunc = function(tbl, name, fn) hook = fn end
     _G.ChatFrameUtil = { InsertLink = function() end }
@@ -25,7 +28,9 @@ describe("Exchange.Form", function()
         return res
       end,
       Text = function() local t = W.new("FontString"); texts[#texts + 1] = t; return t end,
-      Button = function() return W.new("Button") end,
+      Button = function(_, text, _, onClick)
+        local b = W.new("Button"); b.onClick = onClick; buttons[text] = b; return b
+      end,
       CreatePanel = function()
         panel = W.new("Frame")
         panel.title, panel.close = W.new("FontString"), W.new("Button")
@@ -60,6 +65,27 @@ describe("Exchange.Form", function()
     assert.is_true(shownText(LINK))
     assert.is_false(shownText(SECRET))
     assert.equal(0, #errors)
+  end)
+
+  it("a shift-clicked item fills and locks the Name box; X unlocks it", function()
+    local name = W.ofKind("EditBox")[1]
+    hook(LINK)
+    assert.equal("Robe of the Archmage", name.text)
+    assert.is_not_nil(name.calls.Disable)
+    buttons["X"].onClick()
+    assert.equal("", name.text)
+    assert.is_not_nil(name.calls.Enable)
+    assert.is_true(shownText("|cff888888No item chosen|r"))
+  end)
+
+  it("closes the stack-split popup that the same shift-click opened", function()
+    local onShow = split.calls.HookScript and split.calls.HookScript[1]
+    assert.equal("OnShow", onShow and onShow[1])
+    split:Show(); hook(LINK); onShow[2](split)
+    assert.is_false(split.shown)
+    now = 105
+    split:Show(); onShow[2](split)
+    assert.is_true(split.shown) -- a later, unrelated split is left alone
   end)
 
   it("the InsertLink hook never lets an error escape (M9)", function()
