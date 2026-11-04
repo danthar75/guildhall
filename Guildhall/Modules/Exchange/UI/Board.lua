@@ -199,8 +199,17 @@ local function allRecs()
   return out
 end
 
+-- True when anything narrows the board: a tab other than All, search text, a category or a member.
+function Board.IsFiltered(s)
+  return s.tab ~= "all" or (s.needle or ""):match("%S") ~= nil or s.cat ~= "all" or s.member ~= nil
+end
+
 local function updateFilterButtons()
   if not view.catBtn then return end
+  if view.resetBtn then
+    local on = Board.IsFiltered({ tab = view.filter, needle = view.search:GetText(), cat = view.cat, member = view.member })
+    if on then view.resetBtn:Show() else view.resetBtn:Hide() end
+  end
   local label = "All"
   for _, it in ipairs(Board.CategoryItems(view.all or {})) do
     if it.value == view.cat then label = it.short or it.label end
@@ -409,6 +418,16 @@ function Board.Build(parent)
     end, view.member or false)
   end)
   view.memberBtn:SetPoint("LEFT", view.catBtn, "RIGHT", 4, 0)
+  -- Back to an unfiltered board; shown only while some filter is active.
+  view.resetBtn = UI.Button(parent, "Reset", 70, function()
+    UI.ClosePickList()
+    view.cat, view.member, view.memberText = "all", nil, nil
+    view.search:SetText("")
+    view.search:ClearFocus()
+    selectFilter("all")
+  end)
+  view.resetBtn:SetPoint("LEFT", view.memberBtn, "RIGHT", 4, 0)
+  view.resetBtn:Hide()
 
   -- List panel with pooled rows.
   local listPanel = CreateFrame("Frame", nil, parent, UI.BACKDROP_TEMPLATE)
