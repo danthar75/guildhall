@@ -246,7 +246,8 @@ describe("Boot", function()
     assert.equal(1, opened)
   end)
 
-  it("invalidates the ledger on observation and profile changes only (config and roster apply in Query)", function()
+  it("invalidates the ledger on observation, profile, config and roster changes", function()
+    -- the kill deriver reads guild membership (majority) and the config tz (server day and week)
     local n = 0
     ns.leaderboard.ledger.Invalidate = function() n = n + 1 end
     ns.Events:Fire("ObservationsChanged")
@@ -254,7 +255,7 @@ describe("Boot", function()
     assert.equal(2, n)
     ns.Events:Fire("LeaderboardConfigChanged")
     ns.Events:Fire("RosterRefreshed")
-    assert.equal(2, n)
+    assert.equal(4, n)
   end)
 
   it("the roster loading (no ranks -> ranks) restarts the config sync once", function()

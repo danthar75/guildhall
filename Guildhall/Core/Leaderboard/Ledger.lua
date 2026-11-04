@@ -11,8 +11,8 @@ local ADDON, ns = ...
 --
 -- Contribution: { type, profile?, char?, value (signed int), at, item?, tab?, ref, counted,
 --   why?, net? }. why: "unpaired", "waiting for confirmation", "rank excluded",
---   "tab not counted", "not linked", "excluded by an officer" (rows then carry reason and
---   excludedBy).
+--   "tab not counted", "not linked", "not verified", "excluded by an officer" (rows then carry
+--   reason and excludedBy). "rank excluded" and "tab not counted" apply to bank.* types only.
 ns.Ledger = ns.Ledger or {}
 local Ledger = ns.Ledger
 local L = {}
@@ -124,13 +124,16 @@ function L:Query(q)
       -- Every row with a character names its profile (the bank review groups by it); only a
       -- counted one is then checked against the rank exclusions and credited.
       if c.char ~= nil then profile = self:_resolve(c.char) end
-      if counted and c.char ~= nil then
+      -- The rank exclusion and the donations tab rule are bank rules: other types (group credit)
+      -- carry a char too and must not lose it for those ranks.
+      local isBank = type(c.type) == "string" and c.type:sub(1, 5) == "bank."
+      if counted and isBank and c.char ~= nil then
         local rank = ctx.roster:RankIndex(c.char)
         if rank ~= nil and excludeRanks[rank] then
           counted, why = false, "rank excluded"
         end
       end
-      if counted and c.tab ~= nil and anyTab and not tabs[c.tab] then
+      if counted and isBank and c.tab ~= nil and anyTab and not tabs[c.tab] then
         counted, why = false, "tab not counted"
       end
       -- guildOnly: excluded by an officer, so it still counts toward the guild total

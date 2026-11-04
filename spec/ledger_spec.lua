@@ -27,7 +27,7 @@ describe("Ledger", function()
       },
       now = function() return 1000 end,
     }
-    for _, id in ipairs({ "listings", "sales", "bank.gold", "bank.items", "exchange.gold.earned" }) do
+    for _, id in ipairs({ "listings", "sales", "bank.gold", "bank.items", "exchange.gold.earned", "groups.dungeon" }) do
       ns.Activity.Register({ id = id, label = id, unit = "count", verify = "paired", weight = 1, order = 1 })
     end
     owners["Ann-R"], chars.ann = "ann", { "Ann-R", "Ann2-R" }
@@ -136,6 +136,22 @@ describe("Ledger", function()
     -- explicit overrides
     local o = ledger:Query({ excludeRanks = {}, tabs = { [4] = true } })
     assert.equal(70, o.guild["bank.gold"])
+  end)
+
+  it("rank exclusion and the donations tab rule apply to bank types only", function()
+    config.bankexclude, config.donations = { 0 }, { 3 }
+    ranks["Ann-R"] = 0
+    add({ type = "bank.gold", char = "Ann-R", value = 100, net = true, tab = 3 })
+    add({ type = "groups.dungeon", char = "Ann-R", value = 1 })
+    add({ type = "groups.dungeon", char = "Ann-R", value = 1, tab = 4 })
+    local r = ledger:Query({ includeUncounted = true })
+    assert.equal(2, r.byProfile.ann["groups.dungeon"])
+    assert.is_nil(r.byProfile.ann["bank.gold"])
+    assert.is_nil(r.guild["bank.gold"])
+    local why = {}
+    for _, row in ipairs(r.rows) do why[#why + 1] = row.type .. ":" .. (row.why or "ok") end
+    table.sort(why)
+    assert.same({ "bank.gold:rank excluded", "groups.dungeon:ok", "groups.dungeon:ok" }, why)
   end)
 
   it("unlinked char counts in guild only (Review Focus 2)", function()
