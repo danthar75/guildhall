@@ -1,5 +1,5 @@
 describe("Groups KillWatch", function()
-  local ns, published, timers, now, snap, secret, instKey, w
+  local pubStatus, ns, published, timers, now, snap, secret, instKey, w
 
   local function build()
     return ns.Groups.KillWatch.new({
@@ -8,7 +8,7 @@ describe("Groups KillWatch", function()
         GroupSnapshot = function() return snap end,
         InstanceKey = function() return instKey end,
       },
-      observations = { Publish = function(_, d) published[#published + 1] = d; return "ok" end },
+      observations = { Publish = function(_, d) published[#published + 1] = d; return pubStatus end },
       now = function() return now end,
       after = function(s, fn) timers[#timers + 1] = { s = s, fn = fn } end,
     })
@@ -20,6 +20,7 @@ describe("Groups KillWatch", function()
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Observations.lua")
     loadAddonFile(ns, "Guildhall/Modules/Groups/Instances.lua")
     loadAddonFile(ns, "Guildhall/Modules/Groups/KillWatch.lua")
+    pubStatus = "accepted"
     published, timers, now, secret, instKey = {}, {}, 10000, {}, 409
     snap = { members = { "A-R", "B-R" }, leader = "A-R", assists = {}, size = 2 }
     w = build()
@@ -102,6 +103,58 @@ describe("Groups KillWatch", function()
     assert.equals(0, #published)
   end)
 
+  it("a refused publish does not block a later report", function()
+    pubStatus = "excluded"
+    w:OnEncounterEnd(672, "", 9, 40, 1)
+    pubStatus = "accepted"
+    now = 10010
+    w:OnEncounterEnd(672, "", 9, 40, 1)
+    assert.equals(2, #published)
+    w:OnEncounterEnd(672, "", 9, 40, 1)
+    assert.equals(2, #published)
+  end)
+
+  it("leaving and re-entering measures dur from re-entry", function()
+    w:OnZone()
+    now = 20000
+    instKey = nil; w:OnZone()
+    now = 30000
+    instKey = 409; w:OnZone()
+    now = 30100
+    w:OnEncounterEnd(672, "", 9, 40, 1)
+    assert.equals(100, published[1].dur)
+  end)
+
+  it("a second clear after a final kill measures from its own start", function()
+    w:OnZone()
+    now = 10100
+    w:OnEncounterEnd(672, "", 9, 40, 1)
+    assert.equals(100, published[1].dur)
+    now = 11000
+    w:OnEncounterEnd(672, "", 9, 40, 1)
+    assert.is_nil(published[2].dur)
+    now = 11700
+    w:OnEncounterStart(663)
+    now = 12200
+    w:OnEncounterEnd(672, "", 9, 40, 1)
+    assert.equals(500, published[3].dur)
+  end)
+
+  it("over six hours means no dur", function()
+    w:OnZone()
+    now = 10000 + 21601
+    w:OnEncounterEnd(672, "", 9, 40, 1)
+    assert.is_nil(published[1].dur)
+    assert.equals(1, #published)
+  end)
+
+  it("a wipe then BOSS_KILL still publishes", function()
+    w:OnEncounterEnd(672, "", 9, 40, 0)
+    w:OnBossKill(672)
+    timers[1].fn()
+    assert.equals(1, #published)
+  end)
+
   describe("validation", function()
     local function kill(over)
       local d = { kind = "kill", instance = "mc", encounter = 663, members = { "A-R", "B-R" }, at = 100 }
@@ -140,6 +193,12 @@ describe("Groups KillWatch", function()
       assert.is_false(V(kill({ encounter = 672, dur = 0 })))
       assert.is_false(V(kill({ encounter = 672, dur = 86401 })))
       assert.is_true(V(kill({ instance = "bfd", encounter = 2910, dur = 7 })))
+    end)
+    it("members and assists are rejected on kinds that do not declare them", function()
+      local V = ns.Observations.Validate
+      assert.is_false(V({ kind = "trade", at = 1, members = { "A", "B" } }))
+      assert.is_false(V({ kind = "bank", at = 1, assists = { "A" } }))
+      assert.is_false(V({ kind = "signup", at = 1, members = { "A" } }))
     end)
     it("registers the later kinds without validators", function()
       for _, k in ipairs({ "prepcheck", "prepared", "flexask", "flexdone", "flexok", "signup" }) do

@@ -13,14 +13,16 @@ local MAX_STR, MAX_ITEMS = 64, 6
 
 Obs.KINDS = { trade = true, cod = true, manual = true, witness = true, bank = true }
 
-local VALIDATORS = {}
+local VALIDATORS, FIELDS = {}, {}
 local MAX_NAMES = 40
 
 -- Registers a kind. validateFn(d) -> ok, err is an optional strict check that runs after the
--- generic ones.
-function Obs.AddKind(kind, validateFn)
+-- generic ones. opts.fields = { members = true, assists = true } declares the array fields the kind
+-- may carry; other kinds reject them.
+function Obs.AddKind(kind, validateFn, opts)
   if type(kind) == "string" and kind ~= "" then
     Obs.KINDS[kind] = true
+    FIELDS[kind] = type(opts) == "table" and type(opts.fields) == "table" and opts.fields or nil
     VALIDATORS[kind] = type(validateFn) == "function" and validateFn or nil
   end
 end
@@ -46,7 +48,7 @@ function Obs.Validate(d)
       if not isInt(v) then return false, "bad number: " .. k end
     elseif tv == "boolean" then
       -- allowed flag
-    elseif tv == "table" and (k == "members" or k == "assists") then
+    elseif tv == "table" and (k == "members" or k == "assists") and FIELDS[d.kind] and FIELDS[d.kind][k] then
       local count = 0
       for _ in pairs(v) do count = count + 1 end
       if count ~= #v or count > MAX_NAMES then return false, "bad " .. k end

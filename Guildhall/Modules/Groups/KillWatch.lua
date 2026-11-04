@@ -10,6 +10,7 @@ ns.Groups.KillWatch = KillWatch
 
 local DEDUPE = 600
 local FALLBACK = 5
+local MAX_DUR = 21600
 local MAX_STR, MAX_NAMES = 64, 40
 
 local function isInt(x)
@@ -51,7 +52,7 @@ function KillWatch.Validate(d)
 end
 
 if ns.Observations and ns.Observations.AddKind then
-  ns.Observations.AddKind("kill", KillWatch.Validate)
+  ns.Observations.AddKind("kill", KillWatch.Validate, { fields = { members = true, assists = true } })
 end
 
 local W = {}
@@ -67,7 +68,12 @@ function W:_mark(key)
 end
 
 function W:OnZone()
-  self:_mark(self.ctx.compat:InstanceKey())
+  local key = self.ctx.compat:InstanceKey()
+  if key ~= self.curKey then
+    if self.curKey ~= nil then self.started[self.curKey] = nil end
+    self.curKey = key
+  end
+  self:_mark(key)
 end
 
 function W:OnSpecChanged() end   -- Task 7
@@ -75,7 +81,12 @@ function W:OnSpecChanged() end   -- Task 7
 function W:OnEncounterStart(encounterId)
   local id = self.ctx.compat:Safe(encounterId)
   if type(id) ~= "number" then return end
-  self:_mark(self.ctx.compat:InstanceKey())
+  local key = self.ctx.compat:InstanceKey()
+  if key ~= nil and key ~= self.curKey then
+    if self.curKey ~= nil then self.started[self.curKey] = nil end
+    self.curKey = key
+  end
+  self:_mark(key)
 end
 
 function W:_publish(id, entry, isFinal)
@@ -89,10 +100,14 @@ function W:_publish(id, entry, isFinal)
     leader = snap.leader, assists = snap.assists, at = math.floor(now) }
   if isFinal then
     local t0 = self.started[entry.instanceId]
-    if t0 then d.dur = math.max(1, math.min(86400, math.floor(now - t0))) end
+    local dur = t0 and math.floor(now - t0)
+    if dur and dur >= 1 and dur <= MAX_DUR then d.dur = dur end
   end
-  self.done[id] = now
-  ctx.observations:Publish(d)
+  local status = ctx.observations:Publish(d)
+  if status == "accepted" then
+    self.done[id] = now
+    if isFinal then self.started[entry.instanceId] = nil end
+  end
 end
 
 function W:OnEncounterEnd(encounterId, name, difficulty, groupSize, success)
@@ -101,8 +116,8 @@ function W:OnEncounterEnd(encounterId, name, difficulty, groupSize, success)
   if type(id) ~= "number" then return end
   local entry, isFinal = ns.Instances.ByEncounter(id)
   if not entry then return end
-  self.ended[id] = self.ctx.now()
   if ok ~= 1 then return end
+  self.ended[id] = self.ctx.now()
   self:_publish(id, entry, isFinal)
 end
 
