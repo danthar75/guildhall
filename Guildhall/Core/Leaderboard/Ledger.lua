@@ -11,7 +11,8 @@ local ADDON, ns = ...
 --
 -- Contribution: { type, profile?, char?, value (signed int), at, item?, tab?, ref, counted,
 --   why?, net? }. why: "unpaired", "waiting for confirmation", "rank excluded",
---   "tab not counted", "not linked", "not verified", "excluded by an officer" (rows then carry
+--   "tab not counted", "not linked", "not verified", "not using Guildhall"
+--   (groups.* only), "excluded by an officer" (rows then carry
 --   reason and excludedBy). "rank excluded" and "tab not counted" apply to bank.* types only.
 ns.Ledger = ns.Ledger or {}
 local Ledger = ns.Ledger
@@ -132,6 +133,12 @@ function L:Query(q)
         if rank ~= nil and excludeRanks[rank] then
           counted, why = false, "rank excluded"
         end
+      end
+      -- Group credit is for Guildhall users only: a char that no profile links and includes earns
+      -- nothing, not even toward the guild total.
+      if counted and c.char ~= nil and profile == nil and type(c.type) == "string"
+          and c.type:sub(1, 7) == "groups." then
+        counted, why = false, "not using Guildhall"
       end
       if counted and isBank and c.tab ~= nil and anyTab and not tabs[c.tab] then
         counted, why = false, "tab not counted"

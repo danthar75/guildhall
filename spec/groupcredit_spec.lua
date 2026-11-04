@@ -213,6 +213,28 @@ describe("Groups Credit", function()
     assert.same({ ["A-R"] = true, ["B-R"] = true, ["C-R"] = true }, Credit.RaidLeaders("mc", day))
   end)
 
+  it("a guild member without Guildhall earns nothing, not even toward the guild total", function()
+    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Ledger.lua")
+    ns.Observations = { KINDS = { kill = true } }
+    local members = { "A-R", "B-R", "C-R", "X-R", "Y-R" } -- C-R is guild but has no profile
+    chars.p3 = nil
+    local list = pair({}, "rfc", RFC_FINAL, members, T0)
+    ctx.observations = { changes = 0, List = function(_, kind)
+      if kind == nil or kind == "kill" then return list end
+      return {}
+    end }
+    ctx.activity = ns.Activity
+    ctx.roster.RankIndex = function() return 5 end
+    ctx.roster.ConfigList = function() return {} end
+    local r = ns.Ledger.new(ctx):Query({ includeUncounted = true })
+    assert.equal(1, r.byProfile.p1["groups.dungeon"])
+    assert.equal(1, r.byProfile.p2["groups.dungeon"])
+    assert.equal(2, r.guild["groups.dungeon"])
+    local why = {}
+    for _, row in ipairs(r.rows) do why[row.char] = row.why or "ok" end
+    assert.same({ ["A-R"] = "ok", ["B-R"] = "ok", ["C-R"] = "not using Guildhall" }, why)
+  end)
+
   it("derives the same contributions from shuffled input", function()
     local list = {}
     pair(list, "rfc", RFC_FINAL, FIVE, T0 + HOUR)
