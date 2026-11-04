@@ -302,7 +302,7 @@ The next module after the leaderboard is **contests** (user). Officers will run 
 
 ## Addendum (2026-11-04): officer bank review (user)
 
-- **Who:** any guild rank the guild master grants the "Review bank contributions" permission (user). It defaults to the officer ranks.
+- **Who:** any guild rank the guild master grants the "Review bank contributions" permission (user). Until the guild master changes it, only the guild master has it (user).
 - **What they can do:** review every recorded guild bank deposit and withdrawal, and untick any entry that shouldn't count toward a member's contributions, with an optional reason.
 - **Effect:**
   - An unticked entry leaves the member's personal score in every live period.

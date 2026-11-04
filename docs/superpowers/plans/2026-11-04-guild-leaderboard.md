@@ -627,7 +627,7 @@ In `spec/sync_spec.lua`, a new `describe("day buckets")`, using the existing two
   - `bankreview`: "Review bank contributions"
 - `Permissions.AddKey(def)` lets modules add keys. The group finder adds `checklists`, `prepared` and `flex`, all with `raidlead = true`.
 - `Permissions.new(ctx) -> perms`. `ctx` holds `config`, `roster`, `profile`, `now` and `compat`.
-- `perms:Grants(key) -> { ranks = { [rankIndex] = true }, raidlead = bool }`. Defaults to the officer ranks (`[Guildhall officers=N]`), with `raidlead = false`. Rank 0 is always granted.
+- `perms:Grants(key) -> { ranks = { [rankIndex] = true }, raidlead = bool }`. With no perms record, every key grants **rank 0 (the guild master) only**, with `raidlead = false`, until the guild master saves a change (user). Rank 0 is always granted.
 - `perms:Can(char, key, opts) -> bool`:
   - true when the char's rank is in the grant;
   - or when the grant has `raidlead` and `opts.raidLeaders` contains the char;
@@ -637,16 +637,16 @@ In `spec/sync_spec.lua`, a new `describe("day buckets")`, using the existing two
   - accepted only if `roster:RankIndex(rec.char) == 0` when it arrives;
   - an unknown roster defers it to a later sync;
   - a newer accepted version wins.
-- **Weights and retakes:** `cfg:PublishWeights` and `cfg:RetakeMonth`, and the incoming checks for both, use `perms:Can(char, "weights" | "retake")`. With no perms record, the defaults keep today's officer rule.
+- **Weights and retakes:** `cfg:PublishWeights` and `cfg:RetakeMonth`, and the incoming checks for both, use `perms:Can(char, "weights" | "retake")`. With no perms record, only the guild master can publish weights or retake a month. The automatic month save (`MaybeSaveMonth`) is not a permission, and it stays an officer action.
 - **PermissionsView**, following the mockup board "Settings · Permissions":
   - Caption, verbatim: "Only the Guild Master can change these. Ranks come from the game, in rank order."
   - Rows are the keys' labels. Columns are `Roster:RankNames()`, plus "Raid leader & assistants" only when any key has `raidlead`.
   - The Guild Master column is always ✓ and can't be edited. Checkboxes are enabled only for rank 0.
-  - Buttons: "Reset to officer ranks" and "Save".
+  - Buttons: "Reset to guild master only" and "Save".
   - Below the grid, the 4 newest history entries, labelled "(full list under Change history)".
 
 - [ ] **Step 1: Failing tests.**
-  - "defaults grant officer ranks only"
+  - "defaults grant the guild master only; an officer can't publish weights until granted"
   - "a perms record from rank 1 is rejected; from rank 0 accepted"
   - "permissions from a former GM stay; a new GM's record replaces them; unknown roster defers"
   - "Can honours raidlead only with a matching raidLeaders set"
@@ -657,7 +657,7 @@ In `spec/sync_spec.lua`, a new `describe("day buckets")`, using the existing two
 
 ### Task 17: Bank review (added 2026-11-04, user request)
 
-**Why:** the user wants the people allowed to review guild bank log entries to be able to untick any that shouldn't count toward a member's tracked contributions. Who is allowed is a guild-rank permission (`bankreview`, Task 16) that only the guild master sets. It defaults to the officer ranks.
+**Why:** the user wants the people allowed to review guild bank log entries to be able to untick any that shouldn't count toward a member's tracked contributions. Who is allowed is a guild-rank permission (`bankreview`, Task 16) that only the guild master sets. Until the guild master changes it, only the guild master has it.
 
 **Approved behaviour:**
 - **An excluded entry** drops out of the member's personal score in every live period, the same way a weight change rescores.
