@@ -109,6 +109,39 @@ describe("Scoring", function()
     assert.equal("a", b[1].profile)
   end)
 
+  it("self-verified types are never ranked or listed in the breakdown", function()
+    local result = { byProfile = { a = { selfthing = 4, sales = 1 } } }
+    assert.same({}, S.Board(result, "selfthing", {}, {}))
+    local ledger = { Query = function()
+      return { byProfile = result.byProfile, rows = { { type = "selfthing", profile = "a", value = 4, counted = true, ref = "x" } } }
+    end }
+    local r = S.Breakdown(ledger, "a", 0, 1, {})
+    assert.equal(1, #r.lines)
+    assert.equal("sales", r.lines[1].type)
+    assert.equal(1, #r.items.selfthing)
+  end)
+
+  it("a stale weekStart walks to the current week", function()
+    local ws = utc(2026, 10, 6, 9) -- Tuesday, three weeks back
+    local now = utc(2026, 10, 28, 12)
+    local from, to = S.Period("week", now, { tz = 0, weekStart = ws })
+    assert.equal(utc(2026, 10, 27, 9), from)
+    assert.equal(utc(2026, 11, 3, 9), to)
+    from = S.Period("week", utc(2026, 10, 1), { tz = 0, weekStart = ws })
+    assert.equal(utc(2026, 9, 29, 9), from)
+  end)
+
+  it("positive tz moves the month edge earlier", function()
+    assert.equal("2026-10", S.MonthKey(utc(2026, 10, 31, 22, 59, 59), 3600))
+    assert.equal("2026-11", S.MonthKey(utc(2026, 10, 31, 23, 0, 0), 3600))
+  end)
+
+  it("MonthKey rolls over December to January", function()
+    assert.equal("2026-12", S.MonthKey(utc(2026, 12, 31, 23, 59, 59), 0))
+    assert.equal("2027-01", S.MonthKey(utc(2027, 1, 1, 0, 0, 0), 0))
+    assert.equal("2027-01", S.MonthKey(utc(2026, 12, 31, 23, 0, 0), 3600))
+  end)
+
   it("CanSeeBreakdown: self yes, officer yes, other no", function()
     assert.is_true(S.CanSeeBreakdown("a", "a", false))
     assert.is_true(S.CanSeeBreakdown("a", "b", true))

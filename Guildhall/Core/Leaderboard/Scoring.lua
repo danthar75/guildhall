@@ -10,7 +10,7 @@ local Scoring = ns.Scoring
 
 local WEEK, DAY, HOUR = 604800, 86400, 3600
 local RETENTION = 34560000
--- Tuesday 2026-01-06 15:00 UTC, a known weekly reset instant (epoch anchor for the fallback).
+-- Tuesday 1970-01-06 15:00 UTC, a known weekly reset instant (epoch anchor for the fallback).
 local TUE_1500 = 5 * DAY + 15 * HOUR
 
 local function round(n, step) return math.floor(n / step + 0.5) * step end
@@ -99,6 +99,8 @@ end
 function Scoring.Board(result, board, weights, opts)
   local isHidden = opts and opts.isHidden
   local out = {}
+  local def = board ~= "overall" and ns.Activity.Get(board) or nil
+  if def and def.verify == "self" then return out end
   for profile, totals in pairs(result.byProfile or {}) do
     if not (isHidden and isHidden(profile)) then
       local value
@@ -127,7 +129,7 @@ function Scoring.Breakdown(ledger, profile, from, to, weights)
   local lines, items, notCounted = {}, {}, {}
   for _, def in ipairs(ns.Activity.Types()) do
     local value = totals[def.id]
-    if value and value ~= 0 then
+    if value and value ~= 0 and def.verify ~= "self" then
       local w = weightOf(weights, def.id)
       lines[#lines + 1] = {
         type = def.id, value = value, weight = w,
