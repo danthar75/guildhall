@@ -167,6 +167,17 @@ describe("Boot", function()
     assert.same({ reminders = true, sound = true, roles = { d = true } }, GuildhallDB.personal.groups)
   end)
 
+  it("the kill watch gets the guarded timer, the random source, the profile and the player", function()
+    local kctx = ns.groups.kills.ctx
+    assert.is_function(kctx.random)
+    assert.is_table(kctx.profile)
+    assert.equal(ns.services.random, kctx.random)
+    assert.equal(ns.services.profile, kctx.profile)
+    assert.equal(ns.services.playerChar, kctx.playerChar)
+    assert.equal(ns.groups.after, kctx.after)
+    assert.equal(ns.services.profile, ns.groups.credit.ctx.profile)
+  end)
+
   it("registers the Groups events, both spec events included", function()
     for _, e in ipairs({ "ENCOUNTER_START", "ENCOUNTER_END", "BOSS_KILL", "PLAYER_ENTERING_WORLD", "READY_CHECK",
       "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_TALENT_UPDATE", "CALENDAR_UPDATE_EVENT_LIST",

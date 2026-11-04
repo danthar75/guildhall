@@ -2,7 +2,9 @@ local ADDON, ns = ...
 
 -- Observations: the replicated set of raw first-hand events (trades, COD, manual deals,
 -- witnesses, bank readings) the Leaderboard derives its scores from. Day-bucketed Sync keeps
--- login cheap for large sets. Records live 400 days. Only officers ever see the log detail.
+-- login cheap for large sets. Records live 400 days unless the publisher asks for a shorter
+-- expiry (Publish opts.exp); every record's exp must lie within [d.at, t + 400 days]. Only
+-- officers ever see the log detail.
 ns.Observations = ns.Observations or {}
 local Obs = ns.Observations
 
@@ -33,6 +35,14 @@ end
 
 local function isInt(x)
   return type(x) == "number" and x == x and x ~= math.huge and x ~= -math.huge and x == math.floor(x)
+end
+
+local function finite(x) return type(x) == "number" and x == x and x ~= math.huge and x ~= -math.huge end
+
+-- A record's expiry is valid when it is no later than the retention after its publish time and no
+-- earlier than the event it records.
+local function validExp(exp, t, at)
+  return finite(exp) and finite(t) and finite(at) and exp <= t + RETENTION and exp >= at
 end
 
 function Obs.Validate(d)
@@ -148,6 +158,7 @@ function Obs.New(ctx)
         local ok, err = Obs.Validate(rec.d)
         if not ok then return false, err end
         if rec.d.at > self.now() + DAY then return false, "at too far ahead" end
+        if not validExp(rec.exp, rec.t, rec.d.at) then return false, "bad exp" end
       end
       return true
     end,
@@ -175,12 +186,19 @@ function O:_nextId()
   return string.format("%s:o%d_%d", self.profile:Id(), at, session.n)
 end
 
-function O:Publish(d)
+-- opts.exp (optional): an earlier expiry for this record, within [d.at, now + 400 days]; the
+-- record is dropped everywhere once it passes (List hides it, Purge removes it, Sync skips it).
+function O:Publish(d, opts)
   if self.profile:IsExcluded(self.playerChar) then return "excluded" end
   local ok, err = Obs.Validate(d)
   if not ok then return "invalid", err end
   local t = self.now()
-  local rec = { id = self:_nextId(), v = 1, t = t, exp = t + RETENTION,
+  local exp = t + RETENTION
+  if type(opts) == "table" and opts.exp ~= nil then
+    if not validExp(opts.exp, t, d.at) then return "invalid", "bad exp" end
+    exp = opts.exp
+  end
+  local rec = { id = self:_nextId(), v = 1, t = t, exp = exp,
     by = self.profile:Id(), char = self.playerChar, d = copy(d) }
   local status = self.sync:Publish(rec)
   return status, rec

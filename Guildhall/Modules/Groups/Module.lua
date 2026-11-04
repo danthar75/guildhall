@@ -153,7 +153,8 @@ local function build(n, s)
     profile = s.profile, roster = s.roster, playerChar = s.playerChar, moduleDb = db, syncs = s.syncs,
     observations = observations, onChange = function() changed(g) end,
   })
-  local kills = G.KillWatch.new({ compat = s.compat, observations = observations, now = s.now, after = g.after })
+  local kills = G.KillWatch.new({ compat = s.compat, observations = observations, now = s.now, after = g.after,
+    random = s.random, profile = s.profile, playerChar = s.playerChar })
   local creditCtx = { observations = observations, config = config, compat = s.compat, now = s.now,
     profile = s.profile }
   local credit = G.Credit.new(creditCtx)
