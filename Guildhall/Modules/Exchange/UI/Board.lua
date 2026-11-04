@@ -218,11 +218,20 @@ function Board.Refresh()
   Details.Show(found)
 end
 
+-- Status line after a successful Post/Save. During a chat lockdown the message waits in
+-- Comm's queue, so say so instead of implying guildmates already have it.
+function Board.SavedText(wasEditing, chatRestricted)
+  local text = wasEditing and "Listing saved." or "Listing posted."
+  if chatRestricted then text = text .. " It will reach guildmates when chat restrictions lift." end
+  return text
+end
+
 -- Called by the Form after a successful Post/Save.
 function Board.OnSaved(rec, wasEditing)
   if not view then return end
   if rec then view.selectedId = rec.id end
-  setStatus(wasEditing and "Listing saved." or "Listing posted.")
+  local s = services()
+  setStatus(Board.SavedText(wasEditing, s and s.compat and s.compat:IsRestricted("Chat") or false))
   Board.Refresh()
 end
 
