@@ -327,6 +327,8 @@ describe("Leaderboard.SettingsView", function()
         D({ what = "checklist", key = "mc", before = { name = "Molten Core" }, after = { lines = { { kind = "item", item = 999, count = 2 } } } }))
       assert.same({ "Renamed checklist Old -> New" }, D({ what = "checklist", key = "mc", before = { name = "Old" }, after = { name = "New" } }))
       assert.same({ "Deleted checklist Molten Core" }, D({ what = "checklist", key = "mc", before = { name = "Molten Core" }, after = { deleted = true } }))
+      assert.same({ "Made checklist checklist:mc:fire the default" },
+        D({ what = "checklist", key = "checklist:mc:fire", before = { default = false }, after = { default = true } }))
       for _, l in ipairs(out) do assert.is_nil(l:find("[\128-\255]")) end
       _G.GetItemInfo = saved
     end)

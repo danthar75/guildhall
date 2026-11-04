@@ -27,6 +27,9 @@ local ADDON, ns = ...
 -- guild, that nobody re-saves, stays divergent; a retake or re-tick fixes it through the floor.
 -- Sync buckets (bucket below): "c" for weights, perms and months; "x<YYYY-MM>" for exclusions and
 -- "h<YYYY-MM>" for history, from the time in the id.
+-- Other modules add record kinds with Config.AddRecordKind(prefix, { validate, bucket, floor }): the
+-- group finder's "checklist:" and "checklistdefault:" (Modules/Groups/Checklist.lua). The built-in
+-- kinds above are dispatched first and cannot be overridden.
 ns.LbConfig = ns.LbConfig or {}
 local Config = ns.LbConfig
 
@@ -165,8 +168,9 @@ local function validSummary(x)
 end
 
 -- One side of a checklist history entry (changed keys only; each field may be absent):
--- name (string <= 32 bytes), lines (<= 12 of item/enchants/manual), deleted (boolean).
-local CHECKLIST_FIELDS = { name = true, lines = true, deleted = true }
+-- name (string <= 32 bytes), lines (<= 12 of item/enchants/manual), deleted (boolean),
+-- default (boolean: whether it is its instance's default checklist).
+local CHECKLIST_FIELDS = { name = true, lines = true, deleted = true, default = true }
 local MAX_CL_NAME, MAX_CL_LINES, MAX_CL_TEXT, MAX_CL_COUNT = 32, 12, 64, 200
 
 local function validChecklistLine(l)
@@ -187,19 +191,24 @@ local function validChecklistLine(l)
   return false
 end
 
+-- An array of at most 12 valid checklist lines.
+local function validChecklistLines(lines)
+  if type(lines) ~= "table" then return false end
+  local n = 0
+  for _ in pairs(lines) do n = n + 1 end
+  if n ~= #lines or n > MAX_CL_LINES then return false end
+  for _, l in ipairs(lines) do if not validChecklistLine(l) then return false end end
+  return true
+end
+
 local function validChecklistSide(x)
   if x == nil then return true end
   if type(x) ~= "table" then return false end
   for k in pairs(x) do if not CHECKLIST_FIELDS[k] then return false end end
   if x.name ~= nil and (type(x.name) ~= "string" or #x.name > MAX_CL_NAME) then return false end
   if x.deleted ~= nil and type(x.deleted) ~= "boolean" then return false end
-  if x.lines ~= nil then
-    if type(x.lines) ~= "table" then return false end
-    local n = 0
-    for _ in pairs(x.lines) do n = n + 1 end
-    if n ~= #x.lines or n > MAX_CL_LINES then return false end
-    for _, l in ipairs(x.lines) do if not validChecklistLine(l) then return false end end
-  end
+  if x.default ~= nil and type(x.default) ~= "boolean" then return false end
+  if x.lines ~= nil and not validChecklistLines(x.lines) then return false end
   return true
 end
 
@@ -286,12 +295,50 @@ local function validHistory(self, rec)
     return true
   end
   if d.what == "checklist" then
+    if type(d.key) ~= "string" or not d.key:match("^checklist:") then return false, "bad key" end
     if not validChecklistSide(d.before) or not validChecklistSide(d.after) then return false, "bad checklist change" end
     return true
   end
   if not validSummary(d.before) or not validSummary(d.after) then return false, "bad summary" end
   return true
 end
+
+-- Record kinds other modules add: array of { prefix, validate, bucket, floor }.
+local extraKinds = {}
+local BUILTIN_PREFIXES = { "history:", "exclude:", "month:", "weights", "perms" }
+
+local function extraKind(id)
+  if type(id) ~= "string" then return nil end
+  for _, k in ipairs(extraKinds) do
+    if id:sub(1, #k.prefix) == k.prefix then return k end
+  end
+  return nil
+end
+
+-- Adds a record kind told apart by its id prefix. opts:
+--   validate(config, rec) -> ok, reason   required; runs for every incoming and checked record
+--                                          (rec.del is already refused).
+--   bucket   string, or function(rec) -> string; the sync bucket (default "c").
+--   floor    true, or function(id) -> bool; whether the version floor tracks the id (default no).
+-- Returns false for a bad or taken prefix, or one that overlaps a built-in or added kind.
+function Config.AddRecordKind(prefix, opts)
+  if type(prefix) ~= "string" or prefix == "" or type(opts) ~= "table" or type(opts.validate) ~= "function" then
+    return false
+  end
+  local function overlaps(p)
+    return prefix:sub(1, #p) == p or p:sub(1, #prefix) == prefix
+  end
+  for _, p in ipairs(BUILTIN_PREFIXES) do if overlaps(p) then return false end end
+  for _, k in ipairs(extraKinds) do if overlaps(k.prefix) then return false end end
+  extraKinds[#extraKinds + 1] = { prefix = prefix, validate = opts.validate, bucket = opts.bucket, floor = opts.floor }
+  return true
+end
+
+-- Helpers for added kinds: the arrival model the built-in kinds use, and the checklist line check.
+Config.LEFT = LEFT
+Config.AuthorStatus = authorStatus
+Config.ValidChecklistLines = validChecklistLines
+Config.MAX_CHECKLIST_NAME = MAX_CL_NAME
 
 -- Dispatch by id prefix. Returns ok, reason.
 local function validateRecord(self, rec)
@@ -345,6 +392,8 @@ local function validateRecord(self, rec)
     if rec.t > rec.d.to + GRACE then return false, "bad save time" end
     return true, left
   end
+  local kind = extraKind(id)
+  if kind then return kind.validate(self, rec) end
   return false, "unknown record kind"
 end
 
@@ -352,6 +401,11 @@ end
 local function floorTracked(id)
   if id == "weights" or id == "perms" then return true end
   if id:match("^month:%d%d%d%d%-%d%d$") then return true end
+  local kind = extraKind(id)
+  if kind then
+    if type(kind.floor) == "function" then return kind.floor(id) == true end
+    return kind.floor == true
+  end
   return validRef(id:match("^exclude:(.*)$")) == true
 end
 
@@ -376,6 +430,12 @@ function Config.Bucket(rec)
   if T then
     local key = monthOfIdTime(T)
     return key and ("h" .. key) or "c"
+  end
+  local kind = extraKind(id)
+  if kind then
+    local b = kind.bucket
+    if type(b) == "function" then b = b(rec) end
+    return type(b) == "string" and b or "c"
   end
   return "c"
 end
@@ -527,6 +587,19 @@ function C:_logHistory(what, key, before, after)
     return false
   end
   return self.sync:Publish(rec) == "accepted"
+end
+
+-- Publishes a record of an added kind only when it passes the same check peers run on arrival.
+-- Returns ok, rec or false, reason.
+function C:PublishChecked(id, d, exp, t)
+  t = t or self.now()
+  local v = math.max(self.set:NextVersion(id), (self.seenV[id] or 0) + 1)
+  local rec = { id = id, v = v, t = t, exp = exp or (t + MONTH_RETENTION),
+    by = self.profile:Id(), char = self.playerChar, d = d }
+  local ok, reason = validateRecord(self, rec)
+  if not ok then return false, reason end
+  if self.sync:Publish(rec) ~= "accepted" then return false, "not accepted" end
+  return true, rec
 end
 
 -- Never lets a history problem escape after the change it records has been sent.

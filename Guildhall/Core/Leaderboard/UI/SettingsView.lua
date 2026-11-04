@@ -152,6 +152,9 @@ local function describeChecklist(e, out)
   elseif b.deleted == true and a.deleted == false then
     out[#out + 1] = "Restored checklist " .. name
   end
+  if a.default == true and b.default ~= true then
+    out[#out + 1] = "Made checklist " .. name .. " the default"
+  end
   if a.name ~= nil and b.name ~= nil and a.name ~= b.name then
     out[#out + 1] = "Renamed checklist " .. Util.Escape(b.name) .. " -> " .. Util.Escape(a.name)
   end

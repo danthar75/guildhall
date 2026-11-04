@@ -394,7 +394,7 @@ describe("Permissions", function()
     local function hist(cfg, before, after, char)
       local t = clock.now()
       return { id = "history:pX:" .. t .. ":1", v = 1, t = t, exp = t + TWO_YEARS, by = "pX", char = char or "Gm-Realm",
-        d = { what = "checklist", key = "mc", before = before, after = after, by = char or "Gm-Realm", at = t } }
+        d = { what = "checklist", key = "checklist:mc:main", before = before, after = after, by = char or "Gm-Realm", at = t } }
     end
     local function item(id, count) return { kind = "item", item = id, count = count } end
 

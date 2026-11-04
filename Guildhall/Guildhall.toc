@@ -58,4 +58,5 @@ Modules/Groups/Post.lua
 Modules/Groups/Groups.lua
 Modules/Groups/KillWatch.lua
 Modules/Groups/Credit.lua
+Modules/Groups/Checklist.lua
 Core/Boot.lua

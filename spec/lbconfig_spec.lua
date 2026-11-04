@@ -941,4 +941,94 @@ describe("Leaderboard Config", function()
       assert.equal("c", B(nil))
     end)
   end)
+
+  describe("added record kinds", function()
+    local REF = "bank:pX:o1793793600_7"
+    local function xr(v, char, t)
+      t = t or clock.now()
+      return { id = "exclude:" .. REF, v = v, t = t, exp = t + 63072000, by = "pX", char = char,
+        d = { ref = REF, excluded = true, by = char, at = t } }
+    end
+    local function hrec(key)
+      local t = clock.now()
+      return { id = "history:pX:" .. t .. ":1", v = 1, t = t, exp = t + 63072000, by = "pX", char = "Boss-Realm",
+        d = { what = "checklist", key = key, before = { name = "A" }, after = { name = "B" }, by = "Boss-Realm", at = t } }
+    end
+
+    it("AddRecordKind dispatches validate, bucket and floor by prefix", function()
+      local seen = {}
+      assert.is_true(ns.LbConfig.AddRecordKind("test:", {
+        validate = function(c, r) seen[#seen + 1] = r.id; assert.equal(cfg, c); return r.d.good == true, "nope" end,
+        bucket = function(r) return "t" .. #r.id end,
+        floor = function(id) return id ~= "test:free" end,
+      }))
+      assert.equal("accepted", apply(rec("test:a", 1, "Grunt-Realm", { good = true })))
+      assert.equal("invalid", apply(rec("test:b", 3, "Grunt-Realm", { good = false })))
+      assert.equal("nope", ctx.log:Query()[1].reason)
+      assert.same({ "test:a", "test:b" }, seen)
+      assert.equal(3, cfg.seenV["test:b"])
+      apply(rec("test:free", 4, "Grunt-Realm", {}))
+      assert.is_nil(cfg.seenV["test:free"])
+      assert.equal("t6", ns.LbConfig.Bucket({ id = "test:a" }))
+      local del = rec("test:c", 1, "Boss-Realm", { good = true }); del.del = true
+      assert.equal("invalid", apply(del))
+    end)
+
+    it("AddRecordKind refuses bad, taken or built-in prefixes", function()
+      local v = function() return true end
+      assert.is_true(ns.LbConfig.AddRecordKind("thing:", { validate = v }))
+      assert.is_false(ns.LbConfig.AddRecordKind("thing:", { validate = v }))
+      assert.is_false(ns.LbConfig.AddRecordKind("thing:sub", { validate = v }))
+      assert.is_false(ns.LbConfig.AddRecordKind("thi", { validate = v }))
+      for _, p in ipairs({ "history:", "exclude:", "month:", "weights", "perms", "weightsx", "hist" }) do
+        assert.is_false(ns.LbConfig.AddRecordKind(p, { validate = v }), p)
+      end
+      assert.is_false(ns.LbConfig.AddRecordKind("", { validate = v }))
+      assert.is_false(ns.LbConfig.AddRecordKind("other:", {}))
+      assert.equal("c", ns.LbConfig.Bucket({ id = "thing:1" }))
+    end)
+
+    it("weights, perms and exclusions behave the same once the group finder's kinds are added", function()
+      loadAddonFile(ns, "Guildhall/Modules/Groups/Perms.lua")
+      loadAddonFile(ns, "Guildhall/Modules/Groups/Instances.lua")
+      ns.Groups = ns.Groups or {}
+      ns.Observations = ns.Observations or { AddKind = function() end, KINDS = {} }
+      loadAddonFile(ns, "Guildhall/Modules/Groups/Credit.lua")
+      loadAddonFile(ns, "Guildhall/Modules/Groups/Checklist.lua")
+      assert.equal("invalid", apply(rec("weights", 1, "Grunt-Realm", { weights = { sales = 9 } })))
+      assert.equal("accepted", apply(rec("weights", 1, "Boss-Realm", { weights = { sales = 9 } })))
+      assert.equal("invalid", apply(rec("perms", 1, "Grunt-Realm", { grants = {} })))
+      assert.equal("accepted", apply(rec("perms", 1, "Boss-Realm", { grants = {} })))
+      assert.equal("invalid", apply(xr(1, "Grunt-Realm")))
+      assert.equal("accepted", apply(xr(1, "Boss-Realm")))
+      assert.equal("invalid", apply(rec("nonsense", 1, "Boss-Realm", {})))
+      assert.equal("invalid", apply(rec("month:2026-13", 1, "Boss-Realm", {})))
+      local B = ns.LbConfig.Bucket
+      assert.equal("c", B({ id = "weights" }))
+      assert.equal("x2026-11", B({ id = "exclude:" .. REF }))
+      assert.equal("h2026-11", B({ id = "history:pX:1793793600:3" }))
+      assert.equal("c", B({ id = "checklist:mc:fire" }))
+      apply(rec("weights", 7, "Grunt-Realm", { weights = {} }))
+      assert.equal(7, cfg.seenV.weights)
+      apply(rec("nonsense", 9, "Grunt-Realm", {}))
+      assert.is_nil(cfg.seenV.nonsense)
+    end)
+
+    it("a checklist history entry needs a checklist id as its key", function()
+      assert.equal("invalid", apply(hrec(nil)))
+      assert.equal("invalid", apply(hrec("mc")))
+      assert.equal("invalid", apply(hrec("checklistdefault:mc")))
+      assert.equal("accepted", apply(hrec("checklist:mc:fire")))
+    end)
+
+    it("a checklist history side may carry default as a boolean only", function()
+      local r = hrec("checklist:mc:fire")
+      r.d.before, r.d.after = { default = false }, { default = true }
+      assert.equal("accepted", apply(r))
+      local bad = hrec("checklist:mc:x")
+      bad.id = "history:pX:" .. clock.now() .. ":2"
+      bad.d.after = { default = "yes" }
+      assert.equal("invalid", apply(bad))
+    end)
+  end)
 end)
