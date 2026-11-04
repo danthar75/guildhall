@@ -179,7 +179,7 @@ Note: have the cloth, need a tailor. Tipping 20g.
 - Expired listings are dropped locally by every client. No messages are needed for that.
 - Inside chat lockdown, outgoing messages are queued and sent once the restriction lifts, and the UI keeps working from local data.
 
-### Theming (branding deferred)
+### Theming (branding: see "Guild branding" below)
 The user wants guild branding later (Emergence's name, colors and maybe a logo) and isn't sure it matters now. **Decision (my call):** v1 ships a neutral default look, but every visible brand element goes through the core's theme layer:
 - the window title text
 - accent and border colors
@@ -187,6 +187,29 @@ The user wants guild branding later (Emergence's name, colors and maybe a logo) 
 - an optional banner line
 
 Branding can then be added later as configuration or a small theme file, without touching module code. No Emergence art in v1.
+
+### Guild branding and the Guildhall logo (added 2026-11-04, from Classic Era testing)
+- **Built:** when in a guild, the main window header shows the guild's tabard, drawn with Blizzard's `SetLargeGuildTabardTextures` and the guild frame's own textures, followed by the guild name in gold and a small grey "Guildhall". A guild with no tabard gets Blizzard's "no logo" placeholder. Outside a guild the header reads plain "Guildhall". The user approved the look in game.
+- **Logo:** Guildhall gets its own logo, chosen by the user from three concepts on the mockup page. It is used on the minimap button (required by the user), as the addon-list icon (`## IconTexture`), in the header when not in a guild, and on GitHub, the README and the Discord post. In game it ships as one small image file in the addon, and the README's "text files only" safety note says so.
+
+### Board filters (added 2026-11-04; the user approved this design for v1)
+- **Category** button next to Search. It opens a small list: All; Crafted, with one entry per profession; Materials; Recipes; Gear; Other. It combines with the All / Buying / Selling / Mine tabs, with Search, and with Member.
+- **Member** button. It lists guildmates who currently have listings and filters by player (profile), so alts are included.
+- **Profession of a listing**, from most to least certain:
+  1. The item was shift-clicked from an open profession window.
+  2. The item type implies it. Recipes name their profession; potions, elixirs and flasks mean Alchemy; food means Cooking; bandages mean First Aid.
+  3. The poster's choice in an optional Profession picker on the form. The picker is pre-filled from 1 or 2 and can be changed.
+
+  Stored as optional `d.prof`. The profession list and names come from the game where possible, so it holds for Forever.
+- **Categories from item class:** trade goods and reagents → Materials; recipes → Recipes; weapons and armour without a profession → Gear; anything with a profession (other than recipes) → Crafted / that profession; hand-typed names and everything else → Other. The game has no "crafted" flag, so Crafted means "tagged with a profession".
+
+### Deal tracking and leaderboard (planned; design in progress 2026-11-04)
+The motivation for the Exchange is keeping gold in the guild. The user wants a guild total of gold kept in the guild, plus a fun leaderboard to promote use: listings posted, purchases, gold earned from guildmates, gold paid to guildmates.
+- **Only listing-matched deals count** (user's decision). A deal is a trade-window trade or CoD mail between the poster and a guildmate, for the listed item.
+- **Detected automatically by default** (user's decision). Each side's client records what it saw (trade window contents and gold; CoD sent and CoD paid). A deal counts only when both sides' records match, so nobody can inflate the numbers alone. Both parties can also confirm a deal by hand when needed (user's decision), for example gold sent by plain mail. Both people need Guildhall for a deal to count.
+- **Anti-gaming:** listings only count toward the leaderboard if they stayed up a while or ended in a deal.
+- **APIs:** reading trade and mail details (`GetPlayerTradeMoney`, `GetTargetTradeMoney`, `GetTradeTargetItemLink`, `GetInboxHeaderInfo`) is not restricted on Forever. Only the action APIs are, and Guildhall never calls those. Values go through `Compat:Safe`.
+- Still to design: how a deal is matched to a listing, the record format and sync, time windows, and the leaderboard UI.
 
 ## Schedule and testing (user's input)
 
