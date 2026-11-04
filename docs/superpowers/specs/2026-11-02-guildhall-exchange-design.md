@@ -216,6 +216,24 @@ The form shows only the optional fields that make sense for the item; a hidden f
 
 COD and quantity always apply. `d.mats` may be nil ("doesn't apply"). The default Discord template uses `{matsLine}`, which is empty in that case.
 
+### Guild leaderboard: a core system fed by modules (planned; user's direction 2026-11-04)
+The leaderboard is part of the **core**, not the Exchange. Each module registers the activities it can report, and the leaderboard shows whatever is registered. v1 has only Exchange activities. Later modules (all to be decided and built later) add their own without changing the leaderboard. Examples the user named:
+- raid attendance
+- gathering events
+- transmog events
+- other guild events
+
+Shape (my proposal, to be detailed when it's built):
+- **Activity types.** A module registers each activity type with:
+  - an id
+  - a label
+  - a unit: count, or gold
+  - how it is verified
+- **Verification levels.** "Both parties' clients agree" (Exchange deals); "confirmed by an organizer or officer" (likely for events and attendance); "self-reported" (shown, but never counted toward rankings).
+- **Credit.** Credit goes to the player (profile), not the character, the same as listing ownership.
+- **Shared records.** Activity records sync through the same replicated-set machinery as listings and profiles.
+- **Views.** The leaderboard has a period (this week / this month / all time) and one board per activity type. Whether there is also a combined score is still open.
+
 ### Deal tracking and leaderboard (planned; design in progress 2026-11-04)
 The motivation for the Exchange is keeping gold in the guild. The user wants a guild total of gold kept in the guild, plus a fun leaderboard to promote use: listings posted, purchases, gold earned from guildmates, gold paid to guildmates.
 - **Only listing-matched deals count** (user's decision). A deal is a trade-window trade or CoD mail between the poster and a guildmate, for the listed item.
