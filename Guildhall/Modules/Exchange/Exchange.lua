@@ -32,7 +32,7 @@ function ns.Exchange.Create(ctx)
   self.db = db
   self.listings = ns.ReplicatedSet.new(SET_NAME, db.listings, { now = ctx.now, onChange = function()
     changed()
-    if self.started then self:_witness() end
+    if self.started then self:_queueWitness() end
   end })
   self.imported = ns.ReplicatedSet.new("exchange.imported", db.imported, { now = ctx.now, onChange = changed })
   self.drafts = MailDrafts.new(db.drafts)
@@ -90,6 +90,7 @@ function Ex:Start()
   self.imported:Purge()
   self.sync:Start()
   self.started = true
+  self:_pruneDeclined()
   self:_witness()
 end
 
@@ -168,25 +169,29 @@ end
 
 local CONFIRM_WINDOW = 1209600   -- a manual deal waits this long for the other side (14 days)
 local WITNESS_AGE = 86400        -- a listing must be this old before anyone witnesses it
-
-local function dealKey(d)
-  return table.concat({ d.listing, tostring(d.item), d.count, d.copper, d.seller, d.buyer }, "|")
-end
+local WITNESS_DELAY = 2          -- listing changes arrive in bursts; witness once they settle
+local MAX_COPPER, MAX_COUNT = 10000000000, 10000
 
 -- Records a deal done by hand (no trade window or CoD mail) on one of the listings. The other
 -- side confirms it later; until then it is unpaired. Returns true, record or false, reason.
 function Ex:RecordDeal(listingId, partner, count, copper)
+  local Deals = ns.Exchange.Deals
   local err = self:_gate()
   if err then return false, err end
   local me = self.profile:Id()
   if type(partner) ~= "string" or partner == "" then return false, "no partner" end
   if partner == me then return false, "partner is you" end
-  if type(count) ~= "number" or count < 1 or count ~= math.floor(count) then return false, "bad count" end
-  if type(copper) ~= "number" or copper < 0 or copper ~= math.floor(copper) then return false, "bad amount" end
+  if type(count) ~= "number" or count ~= math.floor(count) or count < 1 or count > MAX_COUNT then
+    return false, "bad count"
+  end
+  if type(copper) ~= "number" or copper ~= math.floor(copper) or copper < 1 or copper > MAX_COPPER then
+    return false, "bad amount"
+  end
   local rec = self.listings:Get(listingId)
   if not rec or type(rec.d) ~= "table" then return false, "unknown listing" end
   if rec.by ~= me and rec.by ~= partner then return false, "neither of you owns that listing" end
-  local item = ns.Util.ItemIdFromLink(rec.d.item)
+  if not Deals.Matchable(rec, self.now()) then return false, "listing ended" end
+  local item = Deals.ItemKey(rec)
   if not item then return false, "bad listing" end
   local obs = self.ctx.observations
   if not obs then return false, "unavailable" end
@@ -194,29 +199,36 @@ function Ex:RecordDeal(listingId, partner, count, copper)
   local transfer = { me = me, partner = partner, at = self.now(),
     give = weSell and { { id = item, n = count } } or {}, get = weSell and {} or { { id = item, n = count } },
     giveCopper = weSell and 0 or copper, getCopper = weSell and copper or 0 }
-  local status, o = obs:Publish(ns.Exchange.Deals.Observation("manual", rec, transfer))
+  local d = Deals.Observation("manual", rec, transfer)
+  if Deals.AutoPaired(obs)[Deals.Key(d)] then return false, "already recorded" end
+  local status, o = obs:Publish(d)
   if status ~= "accepted" then return false, status end
   return true, o
 end
 
 -- Manual observations from the other party that name me and still wait for my side.
 function Ex:PendingConfirmations()
+  local Deals = ns.Exchange.Deals
   local out = {}
   local obs = self.ctx.observations
   if not obs then return out end
   local me, now = self.profile:Id(), self.now()
-  local mine = {}
+  local mine = Deals.AutoPaired(obs)
   local list = obs:List("manual")
   for _, rec in ipairs(list) do
-    if rec.by == me and type(rec.d) == "table" then mine[dealKey(rec.d)] = true end
+    if rec.by == me and Deals.Valid(rec.d) then mine[Deals.Key(rec.d)] = true end
   end
   for _, rec in ipairs(list) do
     local d = rec.d
-    if rec.by ~= me and type(d) == "table" and (d.seller == me or d.buyer == me)
-        and (rec.by == d.seller or rec.by == d.buyer) and type(d.at) == "number"
-        and now - d.at <= CONFIRM_WINDOW and not self.db.declined[rec.id] and not mine[dealKey(d)] then
+    if rec.by ~= me and Deals.Valid(d) and (d.seller == me or d.buyer == me)
+        and (rec.by == d.seller or rec.by == d.buyer)
+        and now - d.at <= CONFIRM_WINDOW and not self.db.declined[rec.id] and not mine[Deals.Key(d)] then
       local listing = self:Get(d.listing)
-      if listing then out[#out + 1] = { obs = rec, listing = listing } end
+      if not listing then
+        -- The listing was purged: the observation's own fields stand in for it.
+        listing = { id = d.listing, by = Deals.OwnerOf(d), stub = true, d = { item = tostring(d.item), qty = d.count } }
+      end
+      out[#out + 1] = { obs = rec, listing = listing }
     end
   end
   return out
@@ -227,9 +239,7 @@ function Ex:ConfirmDeal(obsId)
   if err then return false, err end
   for _, p in ipairs(self:PendingConfirmations()) do
     if p.obs.id == obsId then
-      local d = ns.Util.DeepCopy(p.obs.d)
-      d.at = self.now()
-      local status = self.ctx.observations:Publish(d)
+      local status = self.ctx.observations:Publish(ns.Exchange.Deals.Rebuild(p.obs.d, self.now()))
       if status ~= "accepted" then return false, status end
       return true
     end
@@ -239,13 +249,38 @@ end
 
 function Ex:DeclineDeal(obsId)
   if type(obsId) ~= "string" then return false end
-  self.db.declined[obsId] = true
+  self.db.declined[obsId] = self.now()
   changed()
   return true
 end
 
+-- Forgets declines whose observation is gone or older than the confirmation window.
+function Ex:_pruneDeclined()
+  local obs = self.ctx.observations
+  if not obs then return end
+  local live = {}
+  for _, rec in ipairs(obs:List("manual")) do live[rec.id] = true end
+  local now = self.now()
+  for id, at in pairs(self.db.declined) do
+    if type(at) ~= "number" then self.db.declined[id] = now
+    elseif not live[id] or now - at > CONFIRM_WINDOW then self.db.declined[id] = nil end
+  end
+end
+
+function Ex:_queueWitness()
+  local after = self.ctx.after
+  if not after then return self:_witness() end
+  if self.witnessQueued then return end
+  self.witnessQueued = true
+  after(WITNESS_DELAY, function()
+    self.witnessQueued = false
+    self:_witness()
+  end)
+end
+
 -- Publishes one witness observation for each listing a day old or more that someone else
--- posted, once no witness exists in the observation set (so never twice, even after a reload).
+-- posted, once no witness naming its owner exists in the observation set (so never twice,
+-- even after a reload).
 function Ex:_witness()
   local obs = self.ctx.observations
   if not obs or self:_gate() then return end
@@ -258,7 +293,10 @@ function Ex:_witness()
         if not seen then
           seen = {}
           for _, w in ipairs(obs:List("witness")) do
-            if type(w.d) == "table" then seen[w.d.listing] = true end
+            if type(w.d) == "table" and (w.d.owner == nil or w.d.owner == (type(w.d.listing) == "string"
+                and w.d.listing:match("^(.+):[^:]*$"))) then
+              seen[w.d.listing] = true
+            end
           end
         end
         if not seen[rec.id] then

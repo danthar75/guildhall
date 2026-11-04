@@ -45,7 +45,7 @@ describe("Exchange DealWatch", function()
     w:OnEvent("UI_INFO_MESSAGE", 1, "Trade complete.")
     assert.equal(1, #published)
     assert.same({ kind = "trade", listing = "L1", seller = "ann", buyer = "bob", item = 2589, count = 20,
-      copper = 50000, at = 5000 }, published[1])
+      copper = 50000, at = 5000, owner = "ann", listed = 1000 }, published[1])
   end)
 
   it("accepts the numeric message type form", function()

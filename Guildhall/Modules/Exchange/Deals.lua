@@ -37,6 +37,17 @@ local function active(rec, at)
   return true
 end
 
+-- The profile id a listing id carries ("<profile>:<n>"), or nil.
+local function idPrefix(id)
+  return type(id) == "string" and id:match("^(.+):[^:]*$") or nil
+end
+
+-- True when a listing can still be matched at `at`: active, or ended within the window.
+function Deals.Matchable(rec, at)
+  local isActive, endedAt = active(rec, at)
+  return isActive or (type(endedAt) == "number" and at - endedAt <= WINDOW), isActive
+end
+
 -- Seller and buyer profile ids for a listing record and the transfer's other party.
 local function roles(listing, transfer)
   local owner = listing.by
@@ -58,8 +69,8 @@ function Deals.Match(transfer, listings, ctx)
       and type(d.item) == "string"
     local id = ok and ns.Util.ItemIdFromLink(d.item) or nil
     if id and not (type(d.created) == "number" and d.created > at) then
-      local isActive, endedAt = active(rec, at)
-      if isActive or (type(endedAt) == "number" and at - endedAt <= WINDOW) then
+      local matchable, isActive = Deals.Matchable(rec, at)
+      if matchable then
         local seller = roles(rec, transfer)
         local sellerIsMe = seller == transfer.me
         local items = sellerIsMe and transfer.give or transfer.get
@@ -81,21 +92,36 @@ end
 -- The observation data both sides publish (payload fields are integers or short strings).
 function Deals.Observation(kind, listing, transfer)
   local seller, buyer = roles(listing, transfer)
-  local id = ns.Util.ItemIdFromLink(listing.d.item)
+  local id = Deals.ItemKey(listing)
   local sellerIsMe = seller == transfer.me
   return {
     kind = kind, listing = listing.id, seller = seller, buyer = buyer, item = id,
     count = total(sellerIsMe and transfer.give or transfer.get, id),
     copper = sellerIsMe and transfer.getCopper or transfer.giveCopper,
-    at = transfer.at,
+    at = transfer.at, owner = listing.by,
+    listed = type(listing.d.created) == "number" and listing.d.created or nil,
   }
+end
+
+-- The pairing item of a listing: its item id, or its typed name (hand-typed listings).
+function Deals.ItemKey(listing)
+  local d = listing.d
+  if type(d) ~= "table" or type(d.item) ~= "string" then return nil end
+  return ns.Util.ItemIdFromLink(d.item) or d.item:sub(1, 64)
+end
+
+-- A confirming observation: the known fields of a peer's, republished by the other side.
+function Deals.Rebuild(d, at)
+  return { kind = "manual", listing = d.listing, seller = d.seller, buyer = d.buyer, item = d.item,
+    count = d.count, copper = d.copper, at = at, owner = d.owner, listed = d.listed }
 end
 
 local function rows(d, ref, at, counted, why, sides)
   local out = {}
   local function add(type_, profile, value)
     out[#out + 1] = { type = type_, profile = profile, value = value, at = at, item = d.item,
-      ref = ref, counted = counted, why = why, listing = d.listing }
+      ref = ref, counted = counted, why = why, listing = d.listing,
+      owner = Deals.OwnerOf(d), listed = d.listed }
   end
   if sides.seller then
     add("exchange.sales", d.seller, 1)
@@ -108,53 +134,105 @@ local function rows(d, ref, at, counted, why, sides)
   return out
 end
 
+local function isInt(x)
+  return type(x) == "number" and x == x and x ~= math.huge and x ~= -math.huge and x == math.floor(x)
+end
+
+-- The owner a deal observation names: its owner field, else the listing id's prefix.
+function Deals.OwnerOf(d)
+  if type(d) ~= "table" then return nil end
+  if type(d.owner) == "string" then return d.owner end
+  return idPrefix(d.listing)
+end
+
+-- True for a well-formed deal payload (so Key and the deriver never meet a bad field).
+function Deals.Valid(d)
+  if type(d) ~= "table" or type(d.listing) ~= "string" or type(d.seller) ~= "string"
+      or type(d.buyer) ~= "string" or d.seller == d.buyer or not isInt(d.at)
+      or not isInt(d.count) or not isInt(d.copper)
+      or not (type(d.item) == "string" or isInt(d.item)) then return false end
+  if d.owner ~= nil then
+    local prefix = idPrefix(d.listing)
+    if type(d.owner) ~= "string" or (prefix and d.owner ~= prefix)
+        or (d.owner ~= d.seller and d.owner ~= d.buyer) then return false end
+  end
+  if d.listed ~= nil and not isInt(d.listed) then return false end
+  return true
+end
+
+-- Identity of a deal across both sides and across kinds.
+function Deals.Key(d)
+  return table.concat({ d.listing, tostring(d.item), d.count, d.copper, d.seller, d.buyer }, "|")
+end
+
 local function valid(rec)
   local d = rec.d
-  return type(d) == "table" and type(d.listing) == "string" and type(d.seller) == "string"
-    and type(d.buyer) == "string" and d.seller ~= d.buyer and type(d.at) == "number"
-    and type(d.count) == "number" and type(d.copper) == "number"
-    and (rec.by == d.seller or rec.by == d.buyer)
+  return Deals.Valid(d) and (rec.by == d.seller or rec.by == d.buyer)
+end
+
+-- Pairs the observations of one kind: array of { a, mate?, key } in a stable order.
+local function pairUp(kind, list)
+  local window = PAIR_WINDOW[kind]
+  local groups, order = {}, {}
+  for _, rec in ipairs(list) do
+    if valid(rec) then
+      local key = Deals.Key(rec.d)
+      if not groups[key] then groups[key] = {}; order[#order + 1] = key end
+      table.insert(groups[key], rec)
+    end
+  end
+  local out = {}
+  for _, key in ipairs(order) do
+    local g = groups[key]
+    table.sort(g, function(a, b)
+      if a.d.at ~= b.d.at then return a.d.at < b.d.at end
+      return tostring(a.id) < tostring(b.id)
+    end)
+    local used = {}
+    for i, a in ipairs(g) do
+      if not used[i] then
+        used[i] = true
+        local mate
+        for j = i + 1, #g do
+          local b = g[j]
+          if not used[j] and b.by ~= a.by and b.d.at - a.d.at <= window then mate = j; break end
+        end
+        if mate then used[mate] = true end
+        out[#out + 1] = { a = a, mate = mate and g[mate] or nil, key = key }
+      end
+    end
+  end
+  return out
+end
+
+-- Set of Deals.Key values with a paired trade or CoD deal in ctx.observations.
+function Deals.AutoPaired(observations)
+  local set = {}
+  if observations then
+    for _, kind in ipairs({ "trade", "cod" }) do
+      for _, p in ipairs(pairUp(kind, observations:List(kind))) do
+        if p.mate then set[p.key] = true end
+      end
+    end
+  end
+  return set
 end
 
 local function derive(kind)
-  local window = PAIR_WINDOW[kind]
-  return function(list)
-    local groups, order = {}, {}
-    for _, rec in ipairs(list) do
-      if valid(rec) then
-        local d = rec.d
-        local key = table.concat({ d.listing, tostring(d.item), d.count, d.copper, d.seller, d.buyer }, "|")
-        if not groups[key] then groups[key] = {}; order[#order + 1] = key end
-        table.insert(groups[key], rec)
-      end
-    end
+  return function(list, ctx)
+    local skip = kind == "manual" and Deals.AutoPaired(ctx and ctx.observations) or {}
     local out = {}
-    for _, key in ipairs(order) do
-      local g = groups[key]
-      table.sort(g, function(a, b)
-        if a.d.at ~= b.d.at then return a.d.at < b.d.at end
-        return tostring(a.id) < tostring(b.id)
-      end)
-      local used = {}
-      for i, a in ipairs(g) do
-        if not used[i] then
-          local mate
-          for j = i + 1, #g do
-            local b = g[j]
-            if not used[j] and b.by ~= a.by and b.d.at - a.d.at <= window then mate = j; break end
-          end
-          local d = a.d
-          local ref = "deal:" .. d.listing .. ":" .. tostring(a.id)
-          if mate then
-            used[i], used[mate] = true, true
-            for _, c in ipairs(rows(d, ref, d.at, true, nil, { seller = true, buyer = true })) do out[#out + 1] = c end
-          else
-            used[i] = true
-            local why = kind == "manual" and "waiting for confirmation" or "unpaired"
-            local sides = a.by == d.seller and { seller = true } or { buyer = true }
-            for _, c in ipairs(rows(d, ref, d.at, false, why, sides)) do out[#out + 1] = c end
-          end
+    for _, p in ipairs(pairUp(kind, list)) do
+      local d = p.a.d
+      local ref = "deal:" .. d.listing .. ":" .. tostring(p.a.id)
+      if p.mate then
+        if not skip[p.key] then
+          for _, c in ipairs(rows(d, ref, d.at, true, nil, { seller = true, buyer = true })) do out[#out + 1] = c end
         end
+      elseif not skip[p.key] then
+        local why = kind == "manual" and "waiting for confirmation" or "unpaired"
+        local sides = p.a.by == d.seller and { seller = true } or { buyer = true }
+        for _, c in ipairs(rows(d, ref, d.at, false, why, sides)) do out[#out + 1] = c end
       end
     end
     return out
@@ -164,11 +242,8 @@ end
 for kind in pairs(PAIR_WINDOW) do ns.Activity.RegisterDeriver(kind, derive(kind)) end
 
 -- A listing counts once for its owner when a non-owner witnessed it, or when it ended in a
--- paired deal (ctx.observations, when present, supplies the deal observations).
-local function listingOwner(id)
-  return type(id) == "string" and id:match("^(.+):%d+$") or nil
-end
-
+-- paired deal (ctx.observations, when present, supplies the deal observations). Credit lands at
+-- the listing's creation time.
 ns.Activity.RegisterDeriver("witness", function(list, ctx)
   local out, done = {}, {}
   local function add(listing, owner, at)
@@ -179,17 +254,21 @@ ns.Activity.RegisterDeriver("witness", function(list, ctx)
   end
   for _, rec in ipairs(list) do
     local d = rec.d
-    if type(d) == "table" and type(d.listing) == "string" and type(d.owner) == "string"
-        and type(d.at) == "number" and rec.by ~= d.owner then
-      add(d.listing, d.owner, d.at)
+    if type(d) == "table" and type(d.listing) == "string" and isInt(d.at) then
+      local owner = idPrefix(d.listing)
+      if owner and (d.owner == nil or d.owner == owner) and rec.by ~= owner then
+        add(d.listing, owner, d.at)
+      end
     end
   end
   local obs = ctx and ctx.observations
   if obs then
     for kind in pairs(PAIR_WINDOW) do
       for _, c in ipairs(ns.Activity.Deriver(kind)(obs:List(kind), ctx)) do
-        local owner = c.counted and listingOwner(c.listing)
-        if owner and c.profile == owner then add(c.listing, owner, c.at) end
+        if c.counted and c.owner and c.profile == c.owner and isInt(c.listed)
+            and c.owner == idPrefix(c.listing) then
+          add(c.listing, c.owner, c.listed)
+        end
       end
     end
   end

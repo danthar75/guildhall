@@ -90,7 +90,7 @@ describe("Exchange deals", function()
     it("describes the deal from either side", function()
       local l = listing()
       local want = { kind = "trade", listing = "L1", seller = "ann", buyer = "bob", item = 2589,
-        count = 20, copper = 50000, at = 5000 }
+        count = 20, copper = 50000, at = 5000, owner = "ann", listed = 1000 }
       assert.same(want, Deals.Observation("trade", l, transfer()))
       local buyerView = transfer({ me = "bob", partner = "ann", give = {}, get = { { id = 2589, n = 12 }, { id = 2589, n = 8 } },
         giveCopper = 50000, getCopper = 0 })
@@ -233,7 +233,7 @@ describe("Exchange deals", function()
       w:OnEvent("MAIL_SEND_SUCCESS")
       assert.equal(1, #published)
       assert.same({ kind = "cod", listing = "L1", seller = "ann", buyer = "bob", item = 2589, count = 20,
-        copper = 50000, at = 5000 }, published[1])
+        copper = 50000, at = 5000, owner = "ann", listed = 1000 }, published[1])
     end)
 
     it("a failed send (no success event) publishes nothing", function()
@@ -273,7 +273,7 @@ describe("Exchange deals", function()
       w:OnEvent("MAIL_INBOX_UPDATE")
       assert.equal(1, #published)
       assert.same({ kind = "cod", listing = "L1", seller = "bob", buyer = "ann", item = 2589, count = 20,
-        copper = 50000, at = 5000 }, published[1])
+        copper = 50000, at = 5000, owner = "bob", listed = 1000 }, published[1])
       w:OnEvent("MAIL_INBOX_UPDATE")
       assert.equal(1, #published)
     end)

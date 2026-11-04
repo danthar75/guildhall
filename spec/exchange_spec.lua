@@ -441,7 +441,7 @@ describe("Exchange", function()
       local q = a.ex:PendingConfirmations()
       a.ex:DeclineDeal(q[1].obs.id)
       assert.equal(0, #a.ex:PendingConfirmations())
-      assert.is_true(a.moduleDb.declined[q[1].obs.id])
+      assert.equal(clock.now(), a.moduleDb.declined[q[1].obs.id])
     end)
 
     it("a 25 h old listing gets one witness from a non-owner; the owner's client doesn't witness", function()
@@ -484,6 +484,174 @@ describe("Exchange", function()
       b.ex:Start()
       assert.equal(1, #b.obs:List("witness"))
       assert.equal(1, count(b))   -- deal plus witness
+    end)
+  end)
+  describe("fix round 1", function()
+    local LINK = "|Hitem:2589::|h[Linen Cloth]|h"
+    local function wts(n, kind) return post(n, { kind = kind or "WTS", item = LINK, qty = 20, mats = false, cod = false }) end
+    local function ids(n) return n.profile:Id() end
+    local function witnessCredits(n)
+      return n.ns.Activity.Deriver("witness")(n.obs:List("witness"), { observations = n.obs })
+    end
+    local function countedSales(n)
+      local k = 0
+      for _, kind in ipairs({ "trade", "cod", "manual" }) do
+        for _, c in ipairs(n.ns.Activity.Deriver(kind)(n.obs:List(kind), { observations = n.obs })) do
+          if c.counted and c.type == "exchange.sales" then k = k + 1 end
+        end
+      end
+      return k
+    end
+
+    it("a deal on a typed listing records, confirms and pairs", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local typed = post(a)
+      local ok, o = b.ex:RecordDeal(typed.id, ids(a), 1, 100)
+      assert.is_true(ok, tostring(o))
+      assert.equal("Linen Cloth", o.d.item)
+      assert.is_true(a.ex:ConfirmDeal(a.ex:PendingConfirmations()[1].obs.id))
+      assert.equal(1, countedSales(a))
+    end)
+
+    it("RecordDeal refuses a listing that ended more than 48 h ago", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local rec = wts(a)
+      a.ex:Remove(rec.id)
+      assert.is_true((b.ex:RecordDeal(rec.id, ids(a), 1, 100)))
+      clock.advance(3 * 86400)
+      assert.is_false((b.ex:RecordDeal(rec.id, ids(a), 1, 100)))
+    end)
+
+    it("CheckIncoming rejects a listing id whose prefix is not the author", function()
+      local a, m = node("Alice-Realm", { id = 1 }), node("Mal-Realm", { id = 3 })
+      local L = m.ns.Exchange.Listing.New({ kind = "WTS", item = LINK, qty = 1, mats = false, cod = false },
+        ids(m), "Mal-Realm", clock.now(), 1)
+      L.id = ids(a) .. ":900"
+      m.ex.sync:Publish(L)
+      assert.is_nil(a.ex:Get(L.id))
+      assert.equal("bad id", a.logStore[#a.logStore].reason)
+    end)
+
+    it("observations carry the listing owner", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local rec = wts(a)
+      local _, o = b.ex:RecordDeal(rec.id, ids(a), 20, 50000)
+      assert.equal(ids(a), o.d.owner)
+    end)
+
+    it("a malformed manual observation neither crashes nor is listed", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local rec = wts(a)
+      b.obs:Publish({ kind = "manual", listing = rec.id, seller = ids(a), buyer = ids(b), item = 2589,
+        count = true, copper = 5, at = clock.now() })
+      local ok, q = pcall(function() return a.ex:PendingConfirmations() end)
+      assert.is_true(ok, tostring(q))
+      assert.equal(0, #q)
+      assert.is_false((a.ex:ConfirmDeal("x")))
+    end)
+
+    it("a manual deal on top of a paired trade is refused and counts nothing extra", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local rec = wts(a)
+      local d = { kind = "trade", listing = rec.id, seller = ids(a), buyer = ids(b), item = 2589, count = 20,
+        copper = 50000, at = clock.now(), owner = ids(a) }
+      a.obs:Publish(d); b.obs:Publish(d)
+      local ok, why = b.ex:RecordDeal(rec.id, ids(a), 20, 50000)
+      assert.is_false(ok); assert.equal("already recorded", why)
+      -- a manual observation from an older build still adds nothing and is not offered
+      b.obs:Publish({ kind = "manual", listing = rec.id, seller = ids(a), buyer = ids(b), item = 2589,
+        count = 20, copper = 50000, at = clock.now() })
+      assert.equal(0, #a.ex:PendingConfirmations())
+      a.obs:Publish({ kind = "manual", listing = rec.id, seller = ids(a), buyer = ids(b), item = 2589,
+        count = 20, copper = 50000, at = clock.now() })
+      assert.equal(1, countedSales(a))
+    end)
+
+    it("confirming republishes only the known fields", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local rec = wts(a)
+      b.obs:Publish({ kind = "manual", listing = rec.id, seller = ids(a), buyer = ids(b), item = 2589,
+        count = 20, copper = 50000, at = clock.now(), junk = "x" })
+      assert.is_true(a.ex:ConfirmDeal(a.ex:PendingConfirmations()[1].obs.id))
+      for _, o in ipairs(a.obs:List("manual")) do
+        if o.by == ids(a) then assert.is_nil(o.d.junk) end
+      end
+    end)
+
+    it("a purged listing still lists the confirmation from the observation's fields", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local rec = wts(a)
+      b.ex:RecordDeal(rec.id, ids(a), 20, 50000)
+      a.moduleDb.listings[rec.id] = nil
+      local q = a.ex:PendingConfirmations()
+      assert.equal(1, #q)
+      assert.equal(rec.id, q[1].listing.id)
+      assert.is_true(a.ex:ConfirmDeal(q[1].obs.id))
+    end)
+
+    it("Start prunes declines that are old or whose observation is gone", function()
+      local a = node("Alice-Realm", { id = 1 })
+      a.moduleDb.declined["gone"] = clock.now()
+      a.ex:Start()
+      assert.is_nil(a.moduleDb.declined["gone"])
+    end)
+
+    it("witness checks are debounced through ctx.after", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      b.ex:Start()
+      local runs = 0
+      local orig = b.ex._witness
+      b.ex._witness = function(self) runs = runs + 1; return orig(self) end
+      wts(a); wts(a); wts(a)
+      assert.equal(0, runs)
+      clock.advance(3)
+      timers.run(clock)
+      assert.equal(1, runs)
+    end)
+
+    it("price and count limits", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local rec = wts(a)
+      assert.is_false((b.ex:RecordDeal(rec.id, ids(a), 1, 0)))
+      assert.is_false((b.ex:RecordDeal(rec.id, ids(a), 1, 10000000001)))
+      assert.is_false((b.ex:RecordDeal(rec.id, ids(a), 10001, 5)))
+      assert.is_true((b.ex:RecordDeal(rec.id, ids(a), 10000, 10000000000)))
+    end)
+
+    it("a same-profile witness gives no credit", function()
+      local a = node("Alice-Realm", { id = 1 })
+      local rec = wts(a)
+      a.obs:Publish({ kind = "witness", listing = rec.id, owner = ids(a), at = rec.t })
+      assert.equal(0, #witnessCredits(a))
+    end)
+
+    it("a forged or mismatched owner earns nothing, and a real one is credited at creation", function()
+      local a, b, c = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 }), node("Cy-Realm", { id = 3 })
+      local rec = wts(a)
+      for i = 1, 3 do
+        c.obs:Publish({ kind = "witness", listing = "fake:" .. i, owner = ids(b), at = clock.now() })
+      end
+      c.obs:Publish({ kind = "witness", listing = rec.id, owner = ids(c), at = clock.now() })
+      assert.equal(0, #witnessCredits(a))
+      clock.advance(25 * 3600)
+      b.ex:Start()   -- the bogus witness does not stop the real one
+      local credits = witnessCredits(a)
+      assert.equal(1, #credits)
+      assert.equal(ids(a), credits[1].profile); assert.equal(rec.t, credits[1].at)
+    end)
+
+    it("an id-prefix squat can't be witnessed or deal-credited to the prefix owner", function()
+      local a, b, m = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 }), node("Mal-Realm", { id = 3 })
+      local L = m.ns.Exchange.Listing.New({ kind = "WTS", item = LINK, qty = 1, mats = false, cod = false },
+        ids(m), "Mal-Realm", clock.now(), 1)
+      L.id = ids(b) .. ":900"
+      m.ex.sync:Publish(L)
+      m.obs:Publish({ kind = "manual", listing = L.id, seller = ids(m), buyer = ids(a), item = 2589, count = 1,
+        copper = 100, at = clock.now(), owner = ids(b), listed = clock.now() })
+      a.obs:Publish({ kind = "manual", listing = L.id, seller = ids(m), buyer = ids(a), item = 2589, count = 1,
+        copper = 100, at = clock.now(), owner = ids(b), listed = clock.now() })
+      for _, c in ipairs(witnessCredits(a)) do assert.is_not.equal(ids(b), c.profile) end
+      assert.equal(0, #witnessCredits(a))
     end)
   end)
 end)
