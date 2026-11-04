@@ -108,6 +108,13 @@ function Profile:Consent(excludedArray)
   self.p.consented = true
 end
 
+-- True when the player chose not to link fullName in this guild.
+function Profile:IsExcluded(fullName)
+  local n = self:_norm(fullName)
+  local e = n and self.p.chars[n]
+  return self:_inGuild(e) and e.included == false or false
+end
+
 function Profile:_included()
   return self:_names(function(e) return e.included == true end)
 end

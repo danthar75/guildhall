@@ -91,6 +91,24 @@ describe("Exchange", function()
     assert.is_false(ok); assert.equal("consent", err)
   end)
 
+  it("posting, editing, renewing and removing from an excluded character is refused (I4)", function()
+    local a = node("Alice-Realm", { id = 1 })
+    local rec = post(a)
+    -- the player later unchecks this character ("Change..." in Settings)
+    a.profile.p.chars["Alice-Realm"].included = nil
+    a.profile:Consent({ "Alice-Realm" })
+    local before = #a.logStore
+    local ok, err = a.ex:Post({ kind = "WTS", item = "x", mats = false, cod = false })
+    assert.is_false(ok); assert.equal("excluded", err)
+    for _, fn in ipairs({ "Renew", "Remove" }) do
+      ok, err = a.ex[fn](a.ex, rec.id)
+      assert.is_false(ok); assert.equal("excluded", err)
+    end
+    ok, err = a.ex:Edit(rec.id, { note = "hi" })
+    assert.is_false(ok); assert.equal("excluded", err)
+    assert.equal(before, #a.logStore) -- nothing was published
+  end)
+
   it("Post returns the validation error", function()
     local a = node("Alice-Realm")
     local ok, err = a.ex:Post({ kind = "XX", item = "x", mats = false, cod = false })

@@ -27,6 +27,7 @@ end
 local ERRORS = {
   trial = "Trial accounts can browse but can't post (Blizzard blocks addon messages for trial accounts).",
   consent = "Choose which characters to link first.",
+  excluded = "This character isn't linked to your profile. Posting from it would reveal the link. Link it in Settings or post from a linked character.",
   ["not owner"] = "That listing isn't yours to change.",
   ["not officer"] = "Only officers can remove other members' listings.",
   expired = "That listing has already expired.",

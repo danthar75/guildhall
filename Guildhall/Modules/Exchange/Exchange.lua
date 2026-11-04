@@ -90,6 +90,9 @@ end
 function Ex:_gate()
   if self.compat:IsTrial() then return "trial" end
   if self.profile:NeedsConsent() then return "consent" end
+  -- Every record carries by = profile id and char = this character, so publishing from an
+  -- unlinked character would reveal the link the player declined.
+  if self.profile:IsExcluded(self.playerChar) then return "excluded" end
 end
 
 function Ex:_nextId()
