@@ -25,6 +25,7 @@ Core/UI/Launcher.lua
 Core/UI/LogView.lua
 Core/UI/SettingsView.lua
 Core/UI/Consent.lua
+Modules/Exchange/Category.lua
 Modules/Exchange/Listing.lua
 Modules/Exchange/Format.lua
 Modules/Exchange/MailDrafts.lua

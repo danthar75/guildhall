@@ -20,6 +20,13 @@ local function isInt(n)
   return type(n) == "number" and n == math.floor(n) and n == n and n ~= math.huge and n ~= -math.huge
 end
 
+-- Profession keys are defined in Category.lua (loaded first); the fallback keeps the same shape rule.
+local function isProfKey(s)
+  local C = ns.Exchange.Category
+  if C and C.IsProfKey then return C.IsProfKey(s) end
+  return type(s) == "string" and #s >= 1 and #s <= 24 and s:find("^%l+$") ~= nil
+end
+
 -- Returns ok, err. Never raises on malformed input. Unknown extra keys are allowed.
 function Listing.Validate(d)
   if type(d) ~= "table" then return false, "payload not a table" end
@@ -29,6 +36,7 @@ function Listing.Validate(d)
   if type(d.mats) ~= "boolean" then return false, "bad mats" end
   if type(d.cod) ~= "boolean" then return false, "bad cod" end
   if d.note ~= nil and (type(d.note) ~= "string" or #d.note > 200) then return false, "bad note" end
+  if d.prof ~= nil and not isProfKey(d.prof) then return false, "bad prof" end
   if d.offRemove ~= nil and type(d.offRemove) ~= "boolean" then return false, "bad offRemove" end
   if d.src ~= nil and d.src ~= "discord" then return false, "bad src" end
   if d.poster ~= nil and (type(d.poster) ~= "string" or #d.poster > 64) then return false, "bad poster" end
@@ -52,13 +60,13 @@ local function backfillCreated(n, rec)
   if type(n.d) == "table" and n.d.created == nil and isInt(rec.t) then n.d.created = rec.t end
 end
 
--- changes: shallow-merged into a copy of d. qty/note == false removes the field.
+-- changes: shallow-merged into a copy of d. qty/note/prof == false removes the field.
 -- The result is NOT validated; callers validate d before publishing.
 function Listing.Edit(rec, changes, char, now)
   local n = copy(rec)
   n.d = type(rec.d) == "table" and copy(rec.d) or {}
   for k, v in pairs(changes) do
-    if v == false and (k == "qty" or k == "note") then n.d[k] = nil else n.d[k] = v end
+    if v == false and (k == "qty" or k == "note" or k == "prof") then n.d[k] = nil else n.d[k] = v end
   end
   n.v, n.t, n.char = rec.v + 1, now, char
   backfillCreated(n, rec)
