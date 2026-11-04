@@ -32,12 +32,14 @@ local ADDON, ns = ...
 --       be read. ok = false means at least one line failed (miss >= 1). Informational only: it
 --       earns nothing.
 --   prepared  { raider, instance, ok, at }: a leadership confirmation (Confirm needs "prepared").
--- Deriver "prepared": per (raider, instance, server day of at), the newest confirmation whose author
--- is permitted when deriving wins (the author's rank from this client's roster; not on the roster
--- means not permitted; a raidlead grant needs Credit.RaidLeaders for that instance and day). One
--- groups.prepared contribution when it says ok = true and the raider is a credited member (named by
--- at least 2 reports, Credit's rule) of a verified kill of that instance on that server day, so a
--- confirmation backdated to a night the raider wasn't there earns nothing.
+-- Deriver "prepared": a confirmation counts only when the raider attended: Credit's AttendedNear finds a
+-- verified kill of that instance crediting the raider (named by at least 2 reports) with kill.at in
+-- [at - 30 min, at + 6 h], so a confirmation backdated to a night the raider wasn't there earns
+-- nothing, and one at 23:40 before kills after midnight still counts. The night is the server day of
+-- that kill. Per (raider, instance, night), the newest confirmation whose author is permitted when
+-- deriving wins (the author's rank from this client's roster; not on the roster means not permitted;
+-- a raidlead grant needs Credit.RaidLeaders for that instance and night). One groups.prepared
+-- contribution when it says ok = true.
 --
 -- Globals: ns.Groups.Checklist.
 ns.Groups = ns.Groups or {}
@@ -193,28 +195,26 @@ function Checklist.DerivePrepared(list, ctx)
   if type(now) == "function" then now = now() end
   local tz = tzOf(config, ctx.compat, now)
   local credit = ns.Groups.Credit.new(ctx)
-  local leadersOf, attendees, best, keys = {}, {}, {}, {}
+  local leadersOf, best, keys, dayOf = {}, {}, {}, {}
   for _, rec in ipairs(list or {}) do
     local d = type(rec) == "table" and rec.d
     if type(d) == "table" and d.kind == "prepared" and type(d.raider) == "string" and type(d.ok) == "boolean"
         and finite(d.at) and ns.Instances.Get(d.instance) and type(rec.char) == "string" then
-      local day = ns.Scoring.DayKey(d.at, tz)
-      local lk = d.instance .. "|" .. day
-      local set = leadersOf[lk]
-      if not set then
-        set = credit:RaidLeaders(d.instance, day)
-        leadersOf[lk] = set
-      end
-      local present = attendees[lk]
-      if not present then
-        present = credit:Attendees(d.instance, day)
-        attendees[lk] = present
-      end
-      if present[d.raider] and perms:Can(rec.char, "prepared", { raidLeaders = set }) then
-        local key = d.raider .. "|" .. lk
-        local cur = best[key]
-        if not cur then keys[#keys + 1] = key end
-        if not cur or newer(rec, cur) then best[key] = rec end
+      local kill = credit:AttendedNear(d.instance, d.raider, d.at)
+      if kill then
+        local day = ns.Scoring.DayKey(kill.at, tz)
+        local lk = d.instance .. "|" .. day
+        local set = leadersOf[lk]
+        if not set then
+          set = credit:RaidLeaders(d.instance, day)
+          leadersOf[lk] = set
+        end
+        if perms:Can(rec.char, "prepared", { raidLeaders = set }) then
+          local key = d.raider .. "|" .. lk
+          local cur = best[key]
+          if not cur then keys[#keys + 1] = key end
+          if not cur or newer(rec, cur) then best[key], dayOf[key] = rec, day end
+        end
       end
     end
   end
@@ -224,9 +224,8 @@ function Checklist.DerivePrepared(list, ctx)
     local rec = best[key]
     local d = rec.d
     if d.ok == true then
-      local day = ns.Scoring.DayKey(d.at, tz)
       out[#out + 1] = { type = "groups.prepared", char = d.raider, value = 1, at = d.at, counted = true,
-        ref = "prepared:" .. d.instance .. ":" .. day .. ":" .. d.raider }
+        ref = "prepared:" .. d.instance .. ":" .. dayOf[key] .. ":" .. d.raider }
     end
   end
   return out

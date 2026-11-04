@@ -9,12 +9,14 @@ local ADDON, ns = ...
 --       secret or nil) changes within 900 s of an open ask naming one of its chars. Once per ask.
 --   flexok   { ask, at }: the asker's "Switched" tick, for raiders without dual spec.
 -- Deriver "flexask": one groups.flex per ask (char = raider, ref = "flex:<ask id>") when all hold:
+--   * the raider attended: Credit's AttendedNear finds a verified kill of that instance crediting the
+--     raider with kill.at in [ask.at - 30 min, ask.at + 6 h]; the night is that kill's server day
+--     (an ask at 23:40 before kills after midnight counts);
 --   * the asker is permitted when deriving (perms:Can "flex"; rank from this client's roster, absent
---     from the roster means not permitted; a raidlead grant needs Credit.RaidLeaders that day);
---   * the raider is a credited attendee of a verified kill of that instance on the ask's server day;
+--     from the roster means not permitted; a raidlead grant needs Credit.RaidLeaders that night);
 --   * a flexdone from the raider's profile (profile:OwnerOf(raider) == rec.by) with 0 <= at - ask.at <=
 --     900, or a flexok from the asker's profile (rec.by equal to the ask's rec.by), exists.
--- One groups.flex per raider per instance per server day: the first qualifying ask by (at, id) counts, later
+-- One groups.flex per raider per instance per night: the first qualifying ask by (at, id) counts, later
 -- ones get an uncounted row, why = "already credited tonight" (own chars only).
 -- An ask whose asker's profile owns the raider never counts. Uncounted rows ("waiting for the switch",
 -- "not permitted") go only to the raider's own chars (the deriving client's profile).
@@ -124,15 +126,15 @@ function Flex.Derive(list, ctx)
   end)
   local credited = {}
 
-  local leadersOf, attendees, out = {}, {}, {}
+  local leadersOf, out = {}, {}
   for _, rec in ipairs(asks) do
     local d = rec.d
-    local day = ns.Scoring.DayKey(d.at, tz)
-    local lk = d.instance .. "|" .. day
-    leadersOf[lk] = leadersOf[lk] or credit:RaidLeaders(d.instance, day)
-    attendees[lk] = attendees[lk] or credit:Attendees(d.instance, day)
+    local kill = credit:AttendedNear(d.instance, d.raider, d.at)
+    local day = kill and ns.Scoring.DayKey(kill.at, tz)
+    local lk = kill and d.instance .. "|" .. day
+    if lk then leadersOf[lk] = leadersOf[lk] or credit:RaidLeaders(d.instance, day) end
     local owner = profile and profile.OwnerOf and profile:OwnerOf(d.raider) or nil
-    if attendees[lk][d.raider] and owner ~= rec.by and rec.char ~= d.raider then
+    if kill and owner ~= rec.by and rec.char ~= d.raider then
       local permitted = perms:Can(rec.char, "flex", { raidLeaders = leadersOf[lk] })
       local row = { type = "groups.flex", char = d.raider, value = 1, at = d.at, ref = "flex:" .. rec.id }
       if not permitted then

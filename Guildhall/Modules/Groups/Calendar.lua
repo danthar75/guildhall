@@ -11,10 +11,12 @@ local ADDON, ns = ...
 --   Both need to > from and to - from <= 30000 (the calendar window is start-1800..start+21600).
 -- Deriver "signup" (observations only; the Groups records are purged with their post): per (char, post) or
 -- (char, title, start) the latest observation by (at, id) wins; a withdrawn one counts nothing. A signup
--- counts when rec.char is a credited attendee of a verified kill whose `at` falls in its window, of its
--- instance (a calendar entry without an instance: any raid). Credit goes to rec.char (the player's own
--- client). At most one groups.signedup per (char, instance, server day of the kill), so a raid that is both
--- posted and on the calendar counts once. ref = "signup:<char>:<instance>:<dayKey>".
+-- counts when Credit's AttendedIn finds a verified kill crediting rec.char (named by at least 2 reports)
+-- whose `at` falls in its window and not before the signup, of its instance (a calendar entry without an
+-- instance: any raid). Non-final dungeon boss kills never count (they expire after 2 days). Credit goes
+-- to rec.char (the player's own client). At most one groups.signedup per (char, instance, server day of
+-- the kill), so a raid that is both posted and on the calendar counts once.
+-- ref = "signup:<char>:<instance>:<dayKey>".
 -- Uncounted rows ("no verified kill yet", "already credited tonight") go to the deriving client's own chars.
 --
 -- Wiring (Task 9): Calendar.new(ctx) with ctx { config, observations, compat, now, playerChar, profile, db };
@@ -122,41 +124,15 @@ function Calendar.Derive(list, ctx)
   end
   table.sort(items, function(a, b) return a.lk < b.lk end)
 
-  local kills = ns.Groups.Credit.Verified(ctx.observations and ctx.observations:List("kill") or {}, profile)
-  table.sort(kills, function(a, b)
-    if a.at ~= b.at then return a.at < b.at end
-    return tostring(a.id) < tostring(b.id)
-  end)
-  local attendees = {}
-  local function attended(k, char)
-    local day = ns.Scoring.DayKey(k.at, tz)
-    local ak = k.instance .. "|" .. day
-    attendees[ak] = attendees[ak] or credit:Attendees(k.instance, day)
-    if not attendees[ak][char] then return false end
-    for _, n in ipairs(k.confirmed or {}) do
-      if n == char then return true, day end
-    end
-    return false
-  end
-
   -- candidate credits: (char, instance, kill day) -> earliest kill, then item key
   -- A signup must come before the kill (and, for a post, inside its own window): a self-declared
   -- window around a kill that already happened earns nothing.
   local best, rows = {}, {}
   for _, p in ipairs(items) do
     local found
-    local valid = not p.post or p.at <= p.to
-    for _, k in ipairs(kills) do
-      if valid and p.at <= k.at and k.at >= p.from and k.at <= p.to then
-        local entry = ns.Instances.Get(k.instance)
-        if (p.instance == nil and entry and entry.kind == "raid") or p.instance == k.instance then
-          local ok, day = attended(k, p.char)
-          if ok then
-            found = { kill = k, day = day }
-            break
-          end
-        end
-      end
+    if not p.post or p.at <= p.to then
+      local kill = credit:AttendedIn(p.instance, p.char, math.max(p.from, p.at), p.to)
+      if kill then found = { kill = kill, day = ns.Scoring.DayKey(kill.at, tz) } end
     end
     if found then
       local ck = p.char .. "|" .. found.kill.instance .. "|" .. found.day

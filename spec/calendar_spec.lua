@@ -445,6 +445,29 @@ describe("Groups Calendar", function()
     assert.equal(0, counted(derive(raider), "Raider-R"))
   end)
 
+  it("an event at 23:30 with kills after midnight counts once, on the kill's server day", function()
+    local raider = client("Raider-R")
+    clock.advance(3 * 3600 + 30 * 60) -- 23:30
+    local start = clock.now()
+    raider.events = { { title = "MC late", start = start, instance = "mc", myStatus = "accepted" } }
+    raider.cal:Refresh()
+    verifiedKill(start + 40 * 60)     -- 00:10
+    local out = derive(raider)
+    assert.equal(1, counted(out, "Raider-R"))
+    assert.equal("signup:Raider-R:mc:2026-11-05", out[1].ref)
+  end)
+
+  it("a dungeon post signup needs the final boss: non-final kills expire and never credit", function()
+    local raider = client("Raider-R")
+    local now = clock.now()
+    assert.equal("accepted", (raider.obs:Publish({ kind = "signup", post = "vc", instance = "deadmines",
+      from = now - 600, to = now + 3600, status = "signedup", at = now })))
+    verifiedKill(now + 100, nil, "deadmines", 2741)
+    assert.equal(0, counted(derive(raider), "Raider-R"))
+    verifiedKill(now + 1800, nil, "deadmines", 2747)
+    assert.equal(1, counted(derive(raider), "Raider-R"))
+  end)
+
   it("a raid posted and on the calendar counts once per instance and day", function()
     local raider = client("Raider-R")
     local now = clock.now()

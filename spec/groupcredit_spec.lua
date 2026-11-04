@@ -414,6 +414,70 @@ describe("Groups Credit", function()
     assert.equal(MC[10], out[1].encounter)
   end)
 
+  describe("AttendedNear / AttendedIn", function()
+    local MIN = 60
+    local function service(list)
+      ctx.observations = { changes = 1, List = function(_, kind) return kind == "kill" and list or {} end }
+      return Credit.new(ctx)
+    end
+
+    it("finds the earliest crediting kill within [at - 30 min, at + 6 h], across midnight", function()
+      local list = {}
+      -- a confirmation at 23:40, kills from 00:10 the next server day
+      local at = T0 + 23 * HOUR + 40 * MIN
+      pair(list, "mc", 663, FIVE, T0 + DAY + 10 * MIN)
+      pair(list, "mc", 664, FIVE, T0 + DAY + 50 * MIN)
+      local credit = service(list)
+      local k = credit:AttendedNear("mc", "C-R", at)
+      assert.is_not_nil(k)
+      assert.equal(663, k.encounter)
+      assert.equal(T0 + DAY + 10 * MIN, k.at)
+      -- 7 h before any kill: nothing
+      assert.is_nil(credit:AttendedNear("mc", "C-R", T0 + DAY + 10 * MIN - 7 * HOUR))
+      -- the edges are inclusive
+      assert.is_not_nil(credit:AttendedNear("mc", "C-R", T0 + DAY + 10 * MIN - 6 * HOUR))
+      assert.is_not_nil(credit:AttendedNear("mc", "C-R", T0 + DAY + 50 * MIN + 30 * MIN))
+      assert.is_nil(credit:AttendedNear("mc", "C-R", T0 + DAY + 50 * MIN + 30 * MIN + 1))
+      -- another instance, or a name not on the kill
+      assert.is_nil(credit:AttendedNear("bwl", "C-R", at))
+      assert.is_nil(credit:AttendedNear("mc", "Nobody-R", at))
+    end)
+
+    it("only verified kills that credit the char count (named by 2 reports, linked reporters)", function()
+      local list = {}
+      list[#list + 1] = kill("p1", "mc", 663, FIVE, T0 + HOUR)                 -- one report: not verified
+      local two = pair({}, "mc", 664, FIVE, T0 + 2 * HOUR)
+      two[2].d.members = { "A-R", "B-R", "C-R", "D-R" }                       -- E-R on one list only
+      list[#list + 1], list[#list + 2] = two[1], two[2]
+      local credit = service(list)
+      assert.equal(664, credit:AttendedNear("mc", "A-R", T0 + HOUR).encounter)
+      assert.is_nil(credit:AttendedNear("mc", "E-R", T0 + HOUR))
+      chars.p2 = nil                                                            -- p2's char unlinked
+      Credit.ProfilesChanged()
+      assert.is_nil(credit:AttendedNear("mc", "A-R", T0 + HOUR))
+    end)
+
+    it("non-final dungeon kills don't count (they expire after 2 days)", function()
+      local list = pair({}, "deadmines", 2741, FIVE, T0 + HOUR)
+      local credit = service(list)
+      assert.is_nil(credit:AttendedNear("deadmines", "A-R", T0 + HOUR))
+      pair(list, "deadmines", 2747, FIVE, T0 + 2 * HOUR)
+      credit = service(list)
+      assert.equal(2747, credit:AttendedNear("deadmines", "A-R", T0 + HOUR).encounter)
+    end)
+
+    it("AttendedIn takes an explicit window; a nil instance means any raid", function()
+      local list = {}
+      pair(list, "rfc", RFC_FINAL, FIVE, T0 + HOUR)
+      pair(list, "bwl", 610, FIVE, T0 + 3 * HOUR)
+      local credit = service(list)
+      assert.equal(RFC_FINAL, credit:AttendedIn("rfc", "A-R", T0, T0 + 2 * HOUR).encounter)
+      assert.is_nil(credit:AttendedIn("rfc", "A-R", T0 + HOUR + 1, T0 + 2 * HOUR))
+      assert.equal(610, credit:AttendedIn(nil, "A-R", T0, T0 + 4 * HOUR).encounter)
+      assert.is_nil(credit:AttendedIn(nil, "A-R", T0, T0 + 2 * HOUR))
+    end)
+  end)
+
   it("Bosses counts the different bosses with a verified kill that day", function()
     local day = ns.Scoring.DayKey(T0 + 20 * HOUR, 0)
     local list = {}

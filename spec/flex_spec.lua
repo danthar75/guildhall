@@ -146,6 +146,48 @@ describe("Groups Flex", function()
     assert.equal(1, counted(derive(raider), "Raider-R"))
   end)
 
+  it("an ask at 23:40 counts for kills after midnight; an ask 7 h before any kill doesn't", function()
+    grant({ flex = { ranks = { 1 }, raidlead = false } })
+    spec = 1
+    local raider, off = client("Raider-R"), client("Off-R")
+    clock.advance(3 * 3600 + 40 * 60) -- 23:40
+    local askAt = clock.now()
+    local _, id = off.fx:Ask("Raider-R", "mc")
+    clock.advance(120)
+    spec = 2
+    raider.fx:OnSpecChanged()
+    assert.equal(0, counted(derive(raider), "Raider-R")) -- no kill yet
+    verifiedKill(askAt + 30 * 60, "Gm-R", {})           -- 00:10, the next server day
+    local out = derive(raider)
+    assert.equal(1, counted(out, "Raider-R"))
+    assert.equal("flex:" .. id, out[1].ref)
+    -- a second ask after midnight, the same night: already credited
+    clock.advance(40 * 60)
+    local _, id2 = off.fx:Ask("Raider-R", "mc")
+    clock.advance(60)
+    spec = 1
+    raider.fx:OnSpecChanged()
+    out = derive(raider)
+    assert.equal(1, counted(out, "Raider-R"))
+    local second
+    for _, r in ipairs(out) do if r.ref == "flex:" .. id2 then second = r end end
+    assert.is_false(second.counted)
+    assert.equal("already credited tonight", second.why)
+  end)
+
+  it("an ask 7 h before any kill earns nothing", function()
+    grant({ flex = { ranks = { 1 }, raidlead = false } })
+    spec = 1
+    local raider, off = client("Raider-R"), client("Off-R")
+    local _, id = off.fx:Ask("Raider-R", "mc")
+    assert.is_truthy(id)
+    clock.advance(60)
+    spec = 2
+    raider.fx:OnSpecChanged()
+    verifiedKill(clock.now() + 7 * 3600, "Gm-R", {})
+    assert.same({}, derive(raider))
+  end)
+
   it("a change after 16 min doesn't count", function()
     local raider, off = setup()
     local _, id = off.fx:Ask("Raider-R", "mc")

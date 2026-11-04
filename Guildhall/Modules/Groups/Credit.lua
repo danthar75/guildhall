@@ -334,8 +334,16 @@ function C:_dayIndex()
   local cache = self.cache
   if not (cache and type(changes) == "number" and cache.changes == changes and cache.tz == tz
       and cache.gen == profileGen) then
-    local byDay, members, bosses = {}, {}, {}
+    local byDay, members, bosses, runs = {}, {}, {}, {}
     for _, k in ipairs(Credit.Verified(obs and obs:List("kill") or {}, profileOf(ctx))) do
+      -- attendance (AttendedIn) uses only kills that last: a non-final dungeon boss kill expires
+      -- after 2 days, so credit derived from it would vanish
+      local entry, isFinal = ns.Instances.ByEncounter(k.encounter)
+      if entry.kind == "raid" or isFinal then
+        local cset = {}
+        for _, ch in ipairs(k.confirmed) do cset[ch] = true end
+        runs[#runs + 1] = { kill = k, raid = entry.kind == "raid", confirmed = cset }
+      end
       local key = k.instance .. "|" .. ns.Scoring.DayKey(k.at, tz)
       local set = byDay[key] or {}
       byDay[key] = set
@@ -347,7 +355,8 @@ function C:_dayIndex()
       bosses[key] = bset
       bset[k.encounter] = true
     end
-    cache = { changes = changes, tz = tz, gen = profileGen, byDay = byDay, members = members, bosses = bosses }
+    cache = { changes = changes, tz = tz, gen = profileGen, byDay = byDay, members = members, bosses = bosses,
+      runs = runs }
     self.cache = cache
   end
   return cache
@@ -407,6 +416,33 @@ end
 -- `instance` on server day dayKey. Returns a new table each call.
 function C:Attendees(instance, dayKey)
   return copySet(self:_dayIndex().members[tostring(instance) .. "|" .. tostring(dayKey)])
+end
+
+-- Attendance window around a confirmation, ask or event start: from 30 min before to 6 h after.
+local ATTEND_BEFORE, ATTEND_AFTER = 1800, 21600
+
+-- The earliest verified kill (Credit.Verified's table; read-only) of `instance` (nil = any raid) with
+-- from <= kill.at <= to that credits `char` (named by at least 2 of its reporters), or nil.
+-- Non-final dungeon boss kills never count (they expire after 2 days).
+function C:AttendedIn(instance, char, from, to)
+  if type(char) ~= "string" or not finite(from) or not finite(to) then return nil end
+  for _, r in ipairs(self:_dayIndex().runs) do   -- in time order
+    local k = r.kill
+    if k.at > to then break end
+    if k.at >= from and r.confirmed[char] and (k.instance == instance or (instance == nil and r.raid)) then
+      return k
+    end
+  end
+  return nil
+end
+
+-- The earliest verified kill of `instance` crediting `char` with kill.at in [at - 1800, at + 21600],
+-- or nil: a raider counts as present for a confirmation, ask or signup at `at` when this returns a
+-- kill. Callers key "one per night" on the server day of the returned kill, not of `at`, so a raid
+-- that forms before midnight and kills after it is one night.
+function C:AttendedNear(instance, char, at)
+  if not finite(at) then return nil end
+  return self:AttendedIn(instance, char, at - ATTEND_BEFORE, at + ATTEND_AFTER)
 end
 
 -- How many different bosses of `instance` have a verified kill on server day dayKey.
