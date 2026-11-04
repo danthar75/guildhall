@@ -123,7 +123,12 @@ describe("Ledger", function()
     assert.same({}, r.byProfile)
     assert.equal(105, r.guild["bank.gold"])
     assert.equal(105, r.goldKept)
-    ranks["Ghost-R"] = nil -- unknown rank is not excluded
+    -- unknown rank is not excluded, even with bankexclude set
+    config.bankexclude = { 0 }
+    ranks["Ghost-R"] = nil
+    local r2 = ledger:Query({ includeUncounted = true })
+    assert.equal(105, r2.guild["bank.gold"])
+    for _, row in ipairs(r2.rows) do assert.not_equal("rank excluded", row.why) end
   end)
 
   it("hidden profile still counts in goldKept", function()
@@ -142,6 +147,18 @@ describe("Ledger", function()
     local r = ledger:Query({ item = function(id) return id == 2 end })
     assert.equal(7, r.byProfile.ann["bank.items"])
     assert.equal(7, r.guild["bank.items"])
+  end)
+
+  it("a failing deriver is reported, skipped and retried", function()
+    local errs, calls = {}, 0
+    ns.OnError = function(m) errs[#errs + 1] = m end
+    ns.Activity.RegisterDeriver("fake", function() calls = calls + 1; error("boom") end)
+    assert.same({}, ledger:Contributions())
+    assert.equal(1, #errs)
+    assert.truthy(errs[1]:find("deriver 'fake'", 1, true))
+    assert.truthy(errs[1]:find("boom", 1, true))
+    ledger:Contributions()
+    assert.equal(2, calls)
   end)
 
   it("Contributions caches until observations change or Invalidate", function()

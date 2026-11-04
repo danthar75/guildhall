@@ -34,15 +34,23 @@ function L:Contributions()
   local changes = obs.changes
   if self.cache and not self.dirty and self.cacheChanges == changes then return self.cache end
   local activity = self.ctx.activity or ns.Activity
-  local out = {}
+  local out, failed = {}, false
   for _, kind in ipairs(kinds()) do
     local fn = activity.Deriver(kind)
     if fn then
       local ok, list = pcall(fn, obs:List(kind), self.ctx)
       if ok and type(list) == "table" then
         for _, c in ipairs(list) do out[#out + 1] = c end
+      elseif not ok then
+        failed = true
+        if ns.OnError then ns.OnError("Leaderboard deriver '" .. kind .. "': " .. tostring(list)) end
       end
     end
+  end
+  if failed then
+    -- Don't cache a partial result: the next call retries the failed deriver.
+    self.cache, self.dirty = nil, true
+    return out
   end
   self.cache, self.cacheChanges, self.dirty = out, changes, false
   return out
