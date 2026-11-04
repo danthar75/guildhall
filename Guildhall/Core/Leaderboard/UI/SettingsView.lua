@@ -2,6 +2,7 @@ local ADDON, ns = ...
 
 -- Leaderboard section of the Settings tab: the opt-out checkbox, the privacy note and the
 -- activity weights. Officers edit and publish the weights; everyone else sees them read-only.
+-- Officers and the guild master also see the shared change history (newest 20 entries, wheel scrolls).
 -- SettingsView.Build(parent) -> section { refresh }; sets the parent's height.
 -- No named globals.
 ns.Leaderboard = ns.Leaderboard or {}
@@ -31,6 +32,49 @@ local function lb() return ns.leaderboard end
 local function canEditWeights()
   local s = services()
   return s ~= nil and s.roster:IsOfficer(s.playerChar) == true
+end
+
+-- Who sees the change history: officers and the guild master (rank 0). Task 16 may widen this.
+local function canSeeHistory()
+  local s = services()
+  if s == nil then return false end
+  if s.roster:IsOfficer(s.playerChar) == true then return true end
+  return s.roster.RankIndex ~= nil and s.roster:RankIndex(s.playerChar) == 0
+end
+
+local HISTORY_ENTRIES = 20 -- newest entries shown
+local HISTORY_ROWS = 8     -- lines visible at once; the mouse wheel scrolls the rest
+local MONTHS = { "January", "February", "March", "April", "May", "June", "July", "August",
+  "September", "October", "November", "December" }
+
+local function weightLabel(id)
+  for _, def in ipairs(ns.Activity.Types()) do
+    if def.id == id then return def.label end
+  end
+  return tostring(id)
+end
+
+-- Plain-language lines for one history entry (ASCII only): one per changed weight, or one for a
+-- month retake. Nothing for a kind this version doesn't know.
+local function describe(e)
+  local out = {}
+  if e.what == "weights" then
+    local ids = {}
+    for id in pairs(e.after or {}) do ids[#ids + 1] = id end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+      local was, now = (e.before or {})[id], e.after[id]
+      if was ~= now then
+        out[#out + 1] = "Leaderboard weight " .. Util.Escape(weightLabel(id)) .. ": "
+          .. (was ~= nil and tostring(was) or "default") .. " -> " .. tostring(now)
+      end
+    end
+  elseif e.what == "month" then
+    local y, m = tostring(e.key):match("^(%d+)-(%d+)$")
+    local name = MONTHS[tonumber(m or 0)]
+    if name then out[#out + 1] = "Retook " .. name .. " " .. y .. " top 5" end
+  end
+  return out
 end
 
 -- A weight box accepts a plain decimal from 0 to 1000. Returns the number, or nil.
@@ -187,7 +231,65 @@ function SettingsView.Build(parent)
   section.status:SetPoint("TOPLEFT", 4, y - 28)
   section.changed = UI.Text(parent, "GameFontDisableSmall", "")
   section.changed:SetPoint("TOPLEFT", 4, y - 44)
+
+  -- Change history (officers and the guild master) ---------------------------------------
+  y = y - 70
+  section.historyHead = UI.Text(parent, "GameFontNormal", "Change history")
+  section.historyHead:SetPoint("TOPLEFT", 4, y)
+  section.historyHead:Hide()
+  section.historyEmpty = UI.Text(parent, "GameFontDisableSmall", "No changes recorded yet.")
+  section.historyEmpty:SetPoint("TOPLEFT", 4, y - 20)
+  section.historyEmpty:Hide()
+  section.historyLines, section.historyOffset = {}, 0
+  local box = CreateFrame("Frame", nil, parent)
+  box:SetSize(WIDTH, HISTORY_ROWS * 16)
+  box:SetPoint("TOPLEFT", 4, y - 20)
+  box:EnableMouseWheel(true)
+  box:Hide()
+  section.historyBox, section.historyRows = box, {}
+  for i = 1, HISTORY_ROWS do
+    local line = UI.Text(box, "GameFontHighlightSmall", "")
+    line:SetPoint("TOPLEFT", 0, -(i - 1) * 16)
+    line:SetWidth(WIDTH)
+    line:SetJustifyH("LEFT")
+    section.historyRows[i] = line
+  end
+  local function renderHistory()
+    local maxOffset = math.max(0, #section.historyLines - HISTORY_ROWS)
+    section.historyOffset = math.max(0, math.min(section.historyOffset, maxOffset))
+    for i, line in ipairs(section.historyRows) do
+      line:SetText(section.historyLines[section.historyOffset + i] or "")
+    end
+  end
+  on(box, "OnMouseWheel", function(_, delta)
+    section.historyOffset = section.historyOffset - delta
+    renderHistory()
+  end)
+  y = y - 20 - HISTORY_ROWS * 16
   parent:SetHeight(-y + 66)
+
+  local function refreshHistory()
+    local l = lb()
+    section.historyLines = {}
+    if canSeeHistory() and l then
+      local tz = l.config:Tz() or 0
+      local entries = l.config:History()
+      for i = 1, math.min(HISTORY_ENTRIES, #entries) do
+        local e = entries[i]
+        local stamp = (date or os.date)("!%Y-%m-%d %H:%M", e.at + tz)
+        for _, text in ipairs(describe(e)) do
+          section.historyLines[#section.historyLines + 1] = stamp .. "  "
+            .. Util.Escape(Util.DisplayName(e.by)) .. "  " .. text
+        end
+      end
+      section.historyHead:Show()
+      if #section.historyLines == 0 then section.historyEmpty:Show() else section.historyEmpty:Hide() end
+      box:Show()
+    else
+      section.historyHead:Hide(); section.historyEmpty:Hide(); box:Hide()
+    end
+    renderHistory()
+  end
 
   function section.refresh()
     local svc = services()
@@ -207,6 +309,7 @@ function SettingsView.Build(parent)
     if editable then section.publish:Show() else section.publish:Hide(); section.error:Hide() end
     if editable then recheck() end
     section.changed:SetText(lastChanged())
+    refreshHistory()
   end
   section.refresh()
   return section

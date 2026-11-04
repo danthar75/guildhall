@@ -1,7 +1,7 @@
 -- Leaderboard section of the Settings tab: opt-out, weights editor, who may publish.
 describe("Leaderboard.SettingsView", function()
   local fakes = require("spec.helpers.fakes")
-  local ns, W, section, buttons, errors, officer, hidden, published, order, pubMap, pubResult, weights, info
+  local ns, W, section, buttons, errors, officer, hidden, published, order, pubMap, pubResult, weights, info, rank, history, texts
   local GLOBALS = { "CreateFrame" }
   local saved = {}
 
@@ -10,7 +10,7 @@ describe("Leaderboard.SettingsView", function()
     W = fakes.widgets()
     _G.CreateFrame = W.CreateFrame
     buttons, errors, order, pubMap, pubResult = {}, {}, {}, nil, true
-    officer, hidden, published = false, false, 0
+    officer, hidden, published, rank, history, texts = false, false, 0, 5, {}, {}
     weights = { ["exchange.sales"] = 5, ["exchange.gold.earned"] = 0.1 }
     info = { char = "Dor-Realm", at = 1699999999 }
     ns = {}
@@ -26,14 +26,16 @@ describe("Leaderboard.SettingsView", function()
         if not ok then ns.OnError(res); return nil end
         return res
       end,
-      Text = function(_, _, text) local t = W.new("FontString"); t.text = text; return t end,
+      Text = function(_, _, text)
+        local t = W.new("FontString"); t.text = text; texts[#texts + 1] = t; return t
+      end,
       Button = function(_, text, _, onClick)
         local b = W.new("Button"); b.onClick = onClick; buttons[text] = b; return b
       end,
     }
     ns.services = {
       playerChar = "Dor-Realm",
-      roster = { IsOfficer = function() return officer end },
+      roster = { IsOfficer = function() return officer end, RankIndex = function() return rank end },
       profile = {
         Id = function() return "p14" end,
         IsHidden = function() return hidden end,
@@ -44,6 +46,7 @@ describe("Leaderboard.SettingsView", function()
       Weights = function() return weights end,
       Tz = function() return 0 end,
       WeightsInfo = function() return info end,
+      History = function() return history end,
       PublishWeights = function(_, map) pubMap = map; return pubResult, (not pubResult) and "not accepted" or nil end,
     } }
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/UI/SettingsView.lua")
@@ -196,5 +199,66 @@ describe("Leaderboard.SettingsView", function()
       .. "Guildhall only shows totals to members, and each breakdown only to its player and officers. "
       .. "The records still travel between guildmates' clients so deals can be checked, so someone reading their "
       .. "own SavedVariables file could see them.", found)
+  end)
+
+  describe("change history", function()
+    local function lines()
+      local out = {}
+      for _, r in ipairs(section.historyRows) do
+        local t = r.text
+        if t and t ~= "" then out[#out + 1] = t end
+      end
+      return out
+    end
+    local function fill()
+      history = {
+        { what = "month", key = "2026-10", by = "Boss-Realm", at = 1700003600,
+          before = { savedBy = "A-Realm", savedAt = 1 }, after = { savedBy = "Boss-Realm", savedAt = 2 } },
+        { what = "weights", by = "Dor-Realm", at = 1700000000,
+          before = { ["exchange.sales"] = 3, ["exchange.gold.earned"] = 0.1 },
+          after = { ["exchange.sales"] = 30, ["exchange.gold.earned"] = 0.1 } },
+      }
+    end
+
+    it("a plain member sees no history", function()
+      fill(); section.refresh()
+      assert.is_false(section.historyBox.shown)
+      assert.is_false(section.historyHead.shown)
+      assert.same({}, lines())
+    end)
+
+    it("an officer sees plain-language lines, newest first, in ASCII", function()
+      fill(); becomeOfficer()
+      assert.is_true(section.historyHead.shown)
+      local l = lines()
+      assert.equal(2, #l)
+      assert.equal("2023-11-14 23:13  Boss  Retook October 2026 top 5", l[1])
+      assert.equal("2023-11-14 22:13  Dor  Leaderboard weight Sales: 3 -> 30", l[2])
+      for _, line in ipairs(l) do assert.is_nil(line:find("[\128-\255]")) end
+    end)
+
+    it("the guild master (rank 0) sees it without being an officer", function()
+      fill(); rank = 0; section.refresh()
+      assert.is_true(section.historyBox.shown)
+      assert.equal(2, #lines())
+    end)
+
+    it("shows only the newest 20 entries and the wheel scrolls", function()
+      history = {}
+      for i = 1, 30 do
+        history[i] = { what = "weights", by = "Dor-Realm", at = 1700000000 - i,
+          before = { ["exchange.sales"] = i }, after = { ["exchange.sales"] = i + 100 } }
+      end
+      becomeOfficer()
+      assert.equal(20, #section.historyLines)
+      assert.equal(8, #lines())
+      local wheel = handler(section.historyBox, "OnMouseWheel")
+      for _ = 1, 50 do wheel(section.historyBox, -1) end
+      assert.equal(12, section.historyOffset)
+      assert.is_truthy(lines()[8]:find("20 -> 120", 1, true))
+      wheel(section.historyBox, 100)
+      assert.equal(0, section.historyOffset)
+      assert.same({}, errors)
+    end)
   end)
 end)

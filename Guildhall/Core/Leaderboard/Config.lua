@@ -4,7 +4,10 @@ local ADDON, ns = ...
 --   "weights"       { weights = {[typeId]=0..1000}, tz = server offset seconds }  (newest version wins)
 --   "month:YYYY-MM" frozen top-5 record of a finished month (first accepted wins; an officer
 --                   retake, d.retake = true with a Greater version, replaces it)
--- Other record kinds (history:, perms, exclude:) join later through the id-prefix dispatch in
+--   "history:<profile>:<t>:<n>"  append-only log of one officer decision (a weights change or a
+--                   month retake): { what, key, before, after, by = char, at }. Never replaced (a
+--                   second version is rejected); expires after 2 years. n is a per-session counter.
+-- Other record kinds (perms, exclude:) join later through the id-prefix dispatch in
 -- validateRecord. A record is checked against the roster only when it arrives, so a demoted
 -- officer's earlier record stays in effect. An unknown roster rejects it for now; the next sync
 -- offers it again.
@@ -21,6 +24,9 @@ local MAX_CATCHUP = 13
 local MAX_ID, MAX_NAME, MAX_BOARDS, MAX_WEIGHTS = 16, 48, 16, 32
 local MAX_VALUE = 1e12
 local RETENTION = 34560000
+local HISTORY_RETENTION = 63072000 -- 2 years
+-- What a history record may describe. Task 16 adds "perms", Task 17 "bank".
+local HISTORY_WHAT = { weights = true, month = true }
 
 local C = {}
 C.__index = C
@@ -34,6 +40,12 @@ end
 -- Task 16 replaces this with a Permissions check. true only when the roster is known and says so.
 local function canAdminister(roster, char)
   return type(char) == "string" and roster ~= nil and roster:IsOfficer(char) == true
+end
+
+-- Who may author a history record. Task 16 changes this to "the author held the permission for
+-- rec.d.what". Checked when the record arrives, like every other record.
+local function canWriteHistory(self, rec)
+  return canAdminister(self.roster, rec.char)
 end
 
 local function validWeights(w)
@@ -92,10 +104,47 @@ local function validMonth(ym, d)
   return true
 end
 
+local function validSummary(x)
+  return x == nil or (type(x) == "table" and type(x.savedBy) == "string" and #x.savedBy <= MAX_NAME
+    and finite(x.savedAt))
+end
+
+local function validHistory(self, rec)
+  local profile, at = rec.id:match("^history:([^:]+):(%d+):%d+$")
+  if not profile or #profile > MAX_ID then return false, "bad history id" end
+  -- Append-only: a new id starts at version 1. A re-delivery of the very same record is not an
+  -- error (Apply files it as stale); any other second version is.
+  local old = self.set:Get(rec.id)
+  if old then
+    if rec.v ~= old.v or rec.t ~= old.t then return false, "history is append-only" end
+  elseif rec.v ~= 1 then
+    return false, "bad history version"
+  end
+  if rec.by ~= profile then return false, "history author mismatch" end
+  local d = rec.d
+  if type(d) ~= "table" then return false, "not a table" end
+  if not canWriteHistory(self, rec) then return false, "author not permitted" end
+  if not HISTORY_WHAT[d.what] then return false, "unknown history kind" end
+  if d.by ~= rec.char then return false, "history author mismatch" end
+  if not finite(d.at) or d.at ~= rec.t or tonumber(at) ~= rec.t then
+    return false, "bad history time"
+  end
+  if rec.exp ~= rec.t + HISTORY_RETENTION then return false, "bad history expiry" end
+  if d.key ~= nil and (type(d.key) ~= "string" or #d.key > MAX_NAME) then return false, "bad key" end
+  if d.what == "weights" then
+    local ok, err = validWeights(d.before)
+    if not ok then return false, err end
+    return validWeights(d.after)
+  end
+  if not validSummary(d.before) or not validSummary(d.after) then return false, "bad summary" end
+  return true
+end
+
 -- Dispatch by id prefix. Returns ok, reason.
 local function validateRecord(self, rec)
   local id = rec.id
   if rec.del == true then return false, "deletions not allowed" end
+  if id:sub(1, 8) == "history:" then return validHistory(self, rec) end
   if not canAdminister(self.roster, rec.char) then return false, "author not an officer" end
   if id == "weights" then
     if type(rec.d) ~= "table" then return false, "not a table" end
@@ -127,6 +176,7 @@ function Config.new(ctx)
   self.profile, self.log, self.now = ctx.profile, ctx.log, ctx.now
   self.roster, self.compat = ctx.roster, ctx.compat
   self.playerChar = ctx.playerChar
+  self.historySeq = 0
   self.set = ns.ReplicatedSet.new(SET_NAME, ctx.db, {
     now = ctx.now, maxFuture = 86400,
     onChange = function() if ns.Events then ns.Events:Fire("LeaderboardConfigChanged") end end,
@@ -172,6 +222,40 @@ function C:_publish(id, d, exp, t)
   return self.sync:Publish(rec) == "accepted", rec
 end
 
+-- Records an officer decision next to the change it describes, in the same call as the publish.
+-- The id carries a per-session counter so two changes in one second don't collide; a counter
+-- that restarts after a reload skips ids already taken.
+function C:_logHistory(what, key, before, after)
+  local at = self.now()
+  local id
+  repeat
+    self.historySeq = self.historySeq + 1
+    id = string.format("history:%s:%d:%d", self.profile:Id(), at, self.historySeq)
+  until not self.set:Get(id)
+  local d = { what = what, key = key, before = before, after = after, by = self.playerChar, at = at }
+  return (self:_publish(id, d, at + HISTORY_RETENTION, at))
+end
+
+-- Change history, newest first: { id, what, key, before, after, by, at }.
+function C:History()
+  local out = {}
+  for _, rec in ipairs(self.set:List(false)) do
+    if rec.id:match("^history:") and type(rec.d) == "table" then
+      local e = copy(rec.d)
+      e.id = rec.id
+      e.seq = tonumber(rec.id:match(":(%d+)$")) or 0
+      out[#out + 1] = e
+    end
+  end
+  table.sort(out, function(a, b)
+    if a.at ~= b.at then return a.at > b.at end
+    if a.seq ~= b.seq then return a.seq > b.seq end
+    return a.id > b.id
+  end)
+  for _, e in ipairs(out) do e.seq = nil end
+  return out
+end
+
 local function liveData(self, id)
   local rec = self.set:Get(id)
   if rec and not rec.del and type(rec.d) == "table" then return rec.d end
@@ -214,8 +298,10 @@ function C:PublishWeights(map)
   if not ok then return false, err end
   local tz = self.compat:ServerOffset()
   if tz == nil then tz = self:Tz() end
+  local before = self:Weights()
   local good = self:_publish("weights", { weights = copy(map), tz = tz,
     changedBy = self.playerChar, changedAt = self.now() })
+  if good then self:_logHistory("weights", nil, before, copy(map)) end
   return good, (not good) and "not accepted" or nil
 end
 
@@ -321,7 +407,13 @@ end
 function C:RetakeMonth(ym, ledger)
   if not self:_isOfficer() then return false, "officers only" end
   if not self:Month(ym) then return false, "no such month" end
+  local old = self:Month(ym)
   local d = self:_monthData(ym, ledger, self.now())
   d.retake = true
-  return (self:_publish("month:" .. ym, d))
+  local good = self:_publish("month:" .. ym, d)
+  if good then
+    self:_logHistory("month", ym, { savedBy = old.savedBy, savedAt = old.savedAt },
+      { savedBy = d.savedBy, savedAt = d.savedAt })
+  end
+  return good
 end

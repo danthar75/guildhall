@@ -352,4 +352,134 @@ describe("Leaderboard Config", function()
     assert.equal("invalid", apply(rec("month:2026-10", 1, "Boss-Realm", { month = "2026-09" })))
     assert.equal("invalid", apply(rec("month:2026-10", 1, "Boss-Realm", "x")))
   end)
+  describe("change history", function()
+    local TWO_YEARS = 63072000
+    local function ids()
+      local out = {}
+      for _, r in ipairs(cfg.set:List(false)) do
+        if r.id:match("^history:") then out[#out + 1] = r end
+      end
+      return out
+    end
+    local function hrec(id, v, char, d, t)
+      t = t or clock.now()
+      return { id = id, v = v, t = t, exp = t + TWO_YEARS, by = "pX", char = char, d = d }
+    end
+    local function hd(char, at)
+      return { what = "weights", before = { sales = 5 }, after = { sales = 9 }, by = char, at = at or clock.now() }
+    end
+
+    it("a weights change writes one history record", function()
+      assert.is_true((cfg:PublishWeights({ sales = 9 })))
+      local h = ids()
+      assert.equal(1, #h)
+      local r = h[1]
+      assert.equal("history:pMe:" .. clock.now() .. ":1", r.id)
+      assert.equal("weights", r.d.what)
+      assert.equal("Boss-Realm", r.d.by)
+      assert.equal(clock.now(), r.d.at)
+      assert.equal(9, r.d.after.sales)
+      assert.equal(5, r.d.before.sales)
+      assert.equal(r.t + TWO_YEARS, r.exp)
+    end)
+
+    it("two changes in the same second get different ids", function()
+      assert.is_true((cfg:PublishWeights({ sales = 9 })))
+      assert.is_true((cfg:PublishWeights({ sales = 8 })))
+      assert.equal(2, #ids())
+    end)
+
+    it("a second version of a history id is rejected", function()
+      local id = "history:pX:" .. clock.now() .. ":1"
+      assert.equal("accepted", apply(hrec(id, 1, "Boss-Realm", hd("Boss-Realm"))))
+      local second = hrec(id, 2, "Boss-Realm", hd("Boss-Realm"))
+      second.d.after = { sales = 1 }
+      assert.equal("invalid", apply(second))
+      assert.equal(9, cfg.set:Get(id).d.after.sales)
+    end)
+
+    it("a non-officer's history record is rejected", function()
+      local id = "history:pX:" .. clock.now() .. ":1"
+      assert.equal("invalid", apply(hrec(id, 1, "Grunt-Realm", hd("Grunt-Realm"))))
+      assert.is_nil(cfg.set:Get(id))
+    end)
+
+    it("rejects malformed history records", function()
+      local now = clock.now()
+      local id = "history:pX:" .. now .. ":1"
+      assert.equal("invalid", apply(hrec(id, 1, "Boss-Realm", { what = "bogus", by = "Boss-Realm", at = now })))
+      assert.equal("invalid", apply(hrec(id, 1, "Boss-Realm", hd("Other-Realm")))) -- by must be the author
+      local noexp = hrec(id, 1, "Boss-Realm", hd("Boss-Realm")); noexp.exp = noexp.exp + 1
+      assert.equal("invalid", apply(noexp))
+      local deleted = hrec(id, 1, "Boss-Realm", hd("Boss-Realm")); deleted.del = true
+      assert.equal("invalid", apply(deleted))
+      local bad = hd("Boss-Realm"); bad.after = { sales = -1 }
+      assert.equal("invalid", apply(hrec(id, 1, "Boss-Realm", bad)))
+    end)
+
+    it("History is listed newest first", function()
+      assert.is_true((cfg:PublishWeights({ sales = 9 })))
+      clock.advance(100)
+      assert.is_true((cfg:PublishWeights({ sales = 8 })))
+      clock.advance(100)
+      assert.is_true((cfg:PublishWeights({ sales = 7 })))
+      local h = cfg:History()
+      assert.equal(3, #h)
+      assert.equal(7, h[1].after.sales)
+      assert.equal(8, h[2].after.sales)
+      assert.equal(9, h[3].after.sales)
+      assert.is_true(h[1].at > h[2].at)
+    end)
+
+    it("History returns copies", function()
+      assert.is_true((cfg:PublishWeights({ sales = 9 })))
+      cfg:History()[1].after.sales = 1
+      assert.equal(9, cfg:History()[1].after.sales)
+    end)
+
+    it("a refused publish writes no history", function()
+      local g = build("Grunt-Realm")
+      assert.is_false((g:PublishWeights({ sales = 9 })))
+      assert.is_false((g:RetakeMonth("2026-10", ledger({}))))
+      assert.equal(0, #g:History())
+      local b = build("Boss-Realm")
+      assert.is_false((b:PublishWeights({ sales = 5000 })))
+      assert.is_false((b:RetakeMonth("2026-09", ledger({}))))
+      assert.equal(0, #b:History())
+    end)
+
+    it("a month retake writes a summary record", function()
+      clock.advance(utc(2026, 11, 10) - clock.now())
+      cfg:MaybeSaveMonth(ledger({ p1 = { sales = 3 } }), clock.now())
+      assert.equal(0, #cfg:History()) -- the automatic save is not an officer decision
+      local savedAt = cfg:Month("2026-10").savedAt
+      clock.advance(10)
+      assert.is_true(cfg:RetakeMonth("2026-10", ledger({ p2 = { sales = 4 } })))
+      local h = cfg:History()
+      assert.equal(1, #h)
+      assert.equal("month", h[1].what)
+      assert.equal("2026-10", h[1].key)
+      assert.same({ savedBy = "Boss-Realm", savedAt = savedAt }, h[1].before)
+      assert.same({ savedBy = "Boss-Realm", savedAt = clock.now() }, h[1].after)
+    end)
+
+    it("MaybeRefreshTz writes no history", function()
+      assert.is_true((cfg:PublishWeights({ sales = 9 })))
+      assert.equal(1, #cfg:History())
+      clock.advance(10)
+      offset = 3600
+      assert.is_true(cfg:MaybeRefreshTz())
+      assert.equal(1, #cfg:History())
+    end)
+
+    it("history survives the retention window of 2 years and then purges", function()
+      assert.is_true((cfg:PublishWeights({ sales = 9 })))
+      clock.advance(TWO_YEARS - 10)
+      cfg.set:Purge()
+      assert.equal(1, #cfg:History())
+      clock.advance(20)
+      cfg.set:Purge()
+      assert.equal(0, #cfg:History())
+    end)
+  end)
 end)
