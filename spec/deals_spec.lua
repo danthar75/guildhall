@@ -187,12 +187,13 @@ describe("Exchange deals", function()
   end)
 
   describe("CoD mail (DealWatch)", function()
-    local published, now, mailSnap, inbox, listings, hooks, scripts, env
+    local money, published, now, mailSnap, inbox, listings, hooks, scripts, env
     local LINK2 = "|Hitem:2589::|h[Linen Cloth]|h"
 
     local function build(compatOver)
       local compat = {
         Safe = function(_, v) return v end,
+        Money = function() return money end,
         SendMailSnapshot = function() return mailSnap and { to = mailSnap.to, cod = mailSnap.cod, items = mailSnap.items } end,
         InboxCount = function() local n = 0; for k in pairs(inbox) do if k > n then n = k end end; return n end,
         InboxCod = function(_, i) return inbox[i] end,
@@ -215,7 +216,9 @@ describe("Exchange deals", function()
     before_each(function()
       loadAddonFile(ns, "Guildhall/Modules/Exchange/DealWatch.lua")
       published, now, hooks, scripts = {}, 5000, {}, {}
-      env = { SendMail = function() end, TakeInboxItem = function() end, AutoLootMailItem = function() end }
+      money = 1000000
+      env = { SendMail = function() end, TakeInboxItem = function() end, AutoLootMailItem = function() end,
+        ReturnInboxItem = function() end, DeleteInboxItem = function() end }
       mailSnap = { to = "Bob-R", cod = 50000, items = { { id = 2589, n = 20 } } }
       inbox = {}
       listings = { { id = "L1", v = 1, t = 1000, by = "ann", char = "Ann-R", exp = 700000, del = false,
@@ -266,6 +269,7 @@ describe("Exchange deals", function()
       hooks.AutoLootMailItem(1)
       assert.equal(0, #published)   -- a request only; nothing yet
       inbox[1] = nil
+      money = money - 50000
       w:OnEvent("MAIL_INBOX_UPDATE")
       assert.equal(1, #published)
       assert.same({ kind = "cod", listing = "L1", seller = "bob", buyer = "ann", item = 2589, count = 20,
@@ -294,8 +298,10 @@ describe("Exchange deals", function()
       hooks.TakeInboxItem(1, 1)
       hooks.AutoLootMailItem(1)
       inbox[1] = nil
+      money = money - 50000
       w:OnEvent("MAIL_INBOX_UPDATE")
       w:OnEvent("MAIL_INBOX_UPDATE")
+      w:OnEvent("PLAYER_MONEY")
       assert.equal(1, #published)
     end)
 
@@ -312,6 +318,7 @@ describe("Exchange deals", function()
       -- an addon takes mail 1 and mail 2 back to back; indexes shift by the next event
       hooks.TakeInboxItem(2, 1)
       inbox = {}
+      money = money - 120000
       w:OnEvent("MAIL_INBOX_UPDATE")
       assert.equal(2, #published)
       table.sort(published, function(x, y) return x.count > y.count end)
@@ -327,6 +334,7 @@ describe("Exchange deals", function()
       w:OnEvent("MAIL_INBOX_UPDATE")
       hooks.TakeInboxItem(1, 2)
       inbox[1] = nil   -- cod now 0: InboxCod no longer reports it
+      money = money - 50000
       w:OnEvent("MAIL_INBOX_UPDATE")
       assert.equal(1, #published)
       assert.equal(40, published[1].count)
@@ -367,12 +375,95 @@ describe("Exchange deals", function()
       return cns.Compat.new(env2)
     end
 
+    it("mail Returned after a failed take publishes nothing", function()
+      inbox[1] = codMail()
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      w:OnEvent("MAIL_INBOX_UPDATE")   -- failed: header unchanged
+      hooks.TakeInboxItem(1, 1)        -- retry, then the player clicks Return before the answer
+      hooks.ReturnInboxItem(1)
+      inbox[1] = nil
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      w:OnEvent("PLAYER_MONEY")
+      assert.equal(0, #published)
+    end)
+
+    it("the signature vanishing with no money drop publishes nothing", function()
+      inbox[1] = codMail()
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      inbox[1] = nil
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(0, #published)
+    end)
+
+    it("unreadable money publishes nothing", function()
+      inbox[1] = codMail()
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      money = nil
+      hooks.TakeInboxItem(1, 1)
+      inbox[1] = nil
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(0, #published)
+    end)
+
+    it("money arriving after the inbox update still settles a successful take once", function()
+      inbox[1] = codMail()
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      inbox[1] = nil
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(0, #published)
+      money = money - 50000
+      w:OnEvent("PLAYER_MONEY")
+      w:OnEvent("PLAYER_MONEY")
+      assert.equal(1, #published)
+    end)
+
+    it("three identical CoD mails taken one at a time publish three observations", function()
+      for i = 1, 3 do inbox[i] = codMail() end
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      for n = 3, 1, -1 do
+        hooks.TakeInboxItem(1, 1)
+        inbox[n] = nil
+        money = money - 50000
+        w:OnEvent("MAIL_INBOX_UPDATE")
+      end
+      assert.equal(3, #published)
+    end)
+
+    it("item id comes from the slot's itemID when the link is uncached", function()
+      local c = realCompat({ SendMailNameEditBox = { GetText = function() return "Bob-R" end },
+        GetSendMailCOD = function() return 50000 end,
+        GetSendMailItemLink = function() return nil end,
+        GetSendMailItem = function(i) if i == 1 then return "x", 2589, nil, 20 end end,
+        issecretvalue = function() return false end })
+      assert.same({ { id = 2589, n = 20 } }, c:SendMailSnapshot().items)
+      local bad = realCompat({ SendMailNameEditBox = { GetText = function() return "Bob-R" end },
+        GetSendMailCOD = function() return 50000 end,
+        GetSendMailItemLink = function(i) if i == 1 then return "garbage" end end,
+        GetSendMailItem = function() return "x", nil, nil, 20 end,
+        issecretvalue = function() return false end })
+      assert.is_nil(bad:SendMailSnapshot())
+    end)
+
     it("SendMailSnapshot: secret cod, link or count gives nil; unparseable link gives nil", function()
       local function mk(over)
         local e = { SendMailNameEditBox = { GetText = function() return "Bob-R" end },
           GetSendMailCOD = function() return 50000 end,
           GetSendMailItemLink = function(i) if i == 1 then return LINK2 end end,
-          GetSendMailItem = function() return "x", 2589, nil, 20 end,
+          GetSendMailItem = function(i) if i == 1 then return "x", 2589, nil, 20 end
+            if i == 2 then return "y", nil, nil, 1 end end,
           issecretvalue = function() return false end }
         for k, v in pairs(over) do e[k] = v end
         return realCompat(e)
@@ -389,7 +480,8 @@ describe("Exchange deals", function()
       local function mk(over)
         local e = { GetInboxHeaderInfo = function() return nil, nil, "Bob-R", "s", 0, 50000 end,
           GetInboxItemLink = function(_, i) if i == 1 then return LINK2 end end,
-          GetInboxItem = function() return "x", 2589, nil, 20 end,
+          GetInboxItem = function(_, i) if i == 1 then return "x", 2589, nil, 20 end
+            if i == 2 then return "y", nil, nil, 1 end end,
           issecretvalue = function() return false end }
         for k, v in pairs(over) do e[k] = v end
         return realCompat(e)

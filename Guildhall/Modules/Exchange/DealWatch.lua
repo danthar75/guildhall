@@ -21,7 +21,7 @@ local W = {}
 W.__index = W
 
 function DealWatch.new(ctx)
-  return setmetatable({ ctx = ctx, snap = nil, partner = nil, sendSnap = nil, preSnap = nil, pending = {}, counts = {}, published = {} }, W)
+  return setmetatable({ ctx = ctx, snap = nil, partner = nil, sendSnap = nil, preSnap = nil, pending = {} }, W)
 end
 
 local function accepted(v) return v == 1 or v == true end
@@ -78,17 +78,43 @@ local function signature(mail)
   return mail.sender .. "|" .. mail.cod .. "|" .. table.concat(parts, ",")
 end
 
-local PUBLISHED_TTL = 3600
+local PENDING_TTL = 5   -- seconds a take may wait for its money to leave
 
--- A take hook only means a request was sent. Record it; MAIL_INBOX_UPDATE decides if it worked.
+-- Live count of CoD mails per signature in the current inbox.
+function W:_liveCounts()
+  local compat = self.ctx.compat
+  local counts = {}
+  for i = 1, compat:InboxCount() do
+    local mail = compat:InboxCod(i)
+    if mail then
+      local sig = signature(mail)
+      counts[sig] = (counts[sig] or 0) + 1
+    end
+  end
+  return counts
+end
+
+-- A take hook only means a request was sent. Record it with the money and live signature count
+-- at that moment; settlement decides if it worked.
 function W:_onTake(index)
   local ctx = self.ctx
   local mail = ctx.compat:InboxCod(index)
+  local money = ctx.compat:Money()
+  if not mail or not money then return end
+  local sig = signature(mail)
+  self.pending[#self.pending + 1] = { sig = sig, mail = mail, moneyBefore = money,
+    countBefore = self:_liveCounts()[sig] or 1, at = ctx.now() }
+end
+
+-- Return/Delete hooks: those pending takes will not pay, cancel them.
+function W:_onCancel(index)
+  local mail = self.ctx.compat:InboxCod(index)
   if not mail then return end
-  local sig, now = signature(mail), ctx.now()
-  local seen = self.published[sig]
-  if seen and now - seen < PUBLISHED_TTL then return end
-  self.pending[#self.pending + 1] = { sig = sig, mail = mail }
+  local sig, keep = signature(mail), {}
+  for _, p in ipairs(self.pending) do
+    if p.sig ~= sig then keep[#keep + 1] = p end
+  end
+  self.pending = keep
 end
 
 function W:_publishTaken(mail)
@@ -111,38 +137,36 @@ function W:_sendSuccess()
     giveCopper = 0, getCopper = snap.cod, at = ctx.now() })
 end
 
--- Rebuilds the signature counts, then settles pending takes: a take succeeded when fewer mails
--- with its signature remain than before (at most one publication per vanished mail).
-function W:_cacheInbox()
+-- A pending take succeeded only with proof of payment: fewer mails with its signature remain than
+-- when it was taken AND the player's money fell by at least the CoD. At most one publication per
+-- vanished mail. On MAIL_INBOX_UPDATE (final) takes that did not succeed are consumed, unless the
+-- mail is gone and the money has not moved yet (PLAYER_MONEY may follow; stale ones expire).
+function W:_settle(final)
   local compat, ctx = self.ctx.compat, self.ctx
-  local counts = {}
-  for i = 1, compat:InboxCount() do
-    local mail = compat:InboxCod(i)
-    if mail then
-      local sig = signature(mail)
-      counts[sig] = (counts[sig] or 0) + 1
-    end
-  end
-  local pending, before = self.pending, self.counts
-  self.pending, self.counts = {}, counts
+  if #self.pending == 0 then return end
+  local counts, money, now = self:_liveCounts(), compat:Money(), ctx.now()
   local groups, order = {}, {}
-  for _, p in ipairs(pending) do
+  for _, p in ipairs(self.pending) do
     local g = groups[p.sig]
-    if not g then g = { n = 0, mail = p.mail }; groups[p.sig] = g; order[#order + 1] = p.sig end
-    g.n = g.n + 1
+    if not g then g = { list = {} }; groups[p.sig] = g; order[#order + 1] = p.sig end
+    g.list[#g.list + 1] = p
   end
-  local now = ctx.now()
-  for sig, t in pairs(self.published) do
-    if now - t >= PUBLISHED_TTL then self.published[sig] = nil end
-  end
+  local keep = {}
   for _, sig in ipairs(order) do
-    local g = groups[sig]
-    local drop = (before[sig] or g.n) - (counts[sig] or 0)
-    for _ = 1, math.min(g.n, drop) do
-      self.published[sig] = now
-      self:_publishTaken(g.mail)
+    local list = groups[sig].list
+    local first = list[1]
+    local drop = first.countBefore - (counts[sig] or 0)
+    local k = money and math.min(#list, drop) or 0
+    while k > 0 and money > first.moneyBefore - first.mail.cod * k do k = k - 1 end
+    for _ = 1, k do self:_publishTaken(first.mail) end
+    if k == 0 and drop > 0 and money and not final then
+      -- keep waiting for the money (PLAYER_MONEY)
+      for _, p in ipairs(list) do keep[#keep + 1] = p end
+    elseif k == 0 and drop > 0 and money and now - first.at <= PENDING_TTL then
+      for _, p in ipairs(list) do keep[#keep + 1] = p end
     end
   end
+  self.pending = keep
 end
 
 -- Post-hooks only; every body is pcall'd so a hook can never raise into Blizzard code.
@@ -155,6 +179,8 @@ function W:InstallHooks()
   if env.SendMail then hook("SendMail", guard(function(to) self:_onSendMail(to) end)) end
   if env.TakeInboxItem then hook("TakeInboxItem", guard(function(index) self:_onTake(index) end)) end
   if env.AutoLootMailItem then hook("AutoLootMailItem", guard(function(index) self:_onTake(index) end)) end
+  if env.ReturnInboxItem then hook("ReturnInboxItem", guard(function(index) self:_onCancel(index) end)) end
+  if env.DeleteInboxItem then hook("DeleteInboxItem", guard(function(index) self:_onCancel(index) end)) end
   local btn = env.SendMailMailButton
   if btn and btn.HookScript then
     btn:HookScript("PreClick", guard(function()
@@ -172,7 +198,9 @@ function W:OnEvent(event, ...)
   elseif event == "MAIL_FAILED" then
     self.sendSnap, self.preSnap = nil, nil
   elseif event == "MAIL_INBOX_UPDATE" then
-    self:_cacheInbox()
+    self:_settle(true)
+  elseif event == "PLAYER_MONEY" then
+    self:_settle(false)
   elseif event == "TRADE_ACCEPT_UPDATE" then
     local player, target = ctx.compat:Safe((...)), ctx.compat:Safe((select(2, ...)))
     if accepted(player) and accepted(target) then

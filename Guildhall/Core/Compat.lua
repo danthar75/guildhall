@@ -201,8 +201,32 @@ function Compat:TradeSnapshot()
   return { give = give, get = get, giveCopper = giveCopper, getCopper = getCopper }
 end
 
+-- One attachment slot: nil = unreadable (abort the whole snapshot), false = empty slot,
+-- else { id, n }. The item id prefers the slot's itemID (works while the link is uncached) and
+-- falls back to parsing the link. An occupied slot without an id aborts.
+function Compat:_attachment(rawLink, rawId, rawN)
+  if self:Safe(rawLink) == nil and self:_isSecret(rawLink) then return nil end
+  local link, id = self:Safe(rawLink), self:Safe(rawId)
+  if type(id) ~= "number" then
+    id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
+  end
+  if link == nil and id == nil then return false end
+  if not id then return nil end
+  local n = self:Safe(rawN)
+  if type(n) ~= "number" then return nil end
+  if n <= 0 then return false end
+  return { id = id, n = n }
+end
+
+function Compat:Money()
+  local env = self.env
+  if not env.GetMoney then return nil end
+  local m = self:Safe((env.GetMoney()))
+  return type(m) == "number" and m or nil
+end
+
 -- Reads the filled-in Send Mail fields: { to, cod, items = {{id,n}} }, or nil when the CoD is 0,
--- the APIs/fields are missing, or ANY value is secret.
+-- the APIs/fields are missing, or ANY value is secret / unreadable.
 function Compat:SendMailSnapshot()
   local env = self.env
   local box = env.SendMailNameEditBox
@@ -212,17 +236,10 @@ function Compat:SendMailSnapshot()
   if type(to) ~= "string" or to == "" or type(cod) ~= "number" or cod <= 0 then return nil end
   local items = {}
   for i = 1, env.ATTACHMENTS_MAX_SEND or 12 do
-    local rawLink = env.GetSendMailItemLink(i)
-    if self:Safe(rawLink) == nil and self:_isSecret(rawLink) then return nil end
-    local link = self:Safe(rawLink)
-    if link ~= nil then
-      local _, _, _, n = env.GetSendMailItem(i)
-      n = self:Safe(n)
-      if n == nil then return nil end
-      local id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
-      if not id then return nil end   -- an unreadable link: no partial snapshot
-      if type(n) == "number" and n > 0 then items[#items + 1] = { id = id, n = n } end
-    end
+    local _, rawId, _, rawN = env.GetSendMailItem(i)
+    local a = self:_attachment(env.GetSendMailItemLink(i), rawId, rawN)
+    if a == nil then return nil end
+    if a then items[#items + 1] = a end
   end
   if #items == 0 then return nil end
   return { to = to, cod = cod, items = items }
@@ -244,17 +261,10 @@ function Compat:InboxCod(index)
   if type(sender) ~= "string" or sender == "" or type(cod) ~= "number" or cod <= 0 then return nil end
   local items = {}
   for i = 1, env.ATTACHMENTS_MAX_RECEIVE or 16 do
-    local rawLink = env.GetInboxItemLink(index, i)
-    if self:Safe(rawLink) == nil and self:_isSecret(rawLink) then return nil end
-    local link = self:Safe(rawLink)
-    if link ~= nil then
-      local _, _, _, n = env.GetInboxItem(index, i)
-      n = self:Safe(n)
-      if n == nil then return nil end
-      local id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
-      if not id then return nil end   -- an unreadable link: no partial snapshot
-      if type(n) == "number" and n > 0 then items[#items + 1] = { id = id, n = n } end
-    end
+    local _, rawId, _, rawN = env.GetInboxItem(index, i)
+    local a = self:_attachment(env.GetInboxItemLink(index, i), rawId, rawN)
+    if a == nil then return nil end
+    if a then items[#items + 1] = a end
   end
   if #items == 0 then return nil end
   return { sender = sender, cod = cod, items = items }
