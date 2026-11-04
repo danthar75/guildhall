@@ -654,4 +654,53 @@ describe("Exchange", function()
       assert.equal(0, #witnessCredits(a))
     end)
   end)
+  describe("fix round 2", function()
+    local LINK = "|Hitem:2589::|h[Linen Cloth]|h"
+    local function wts(n) return post(n, { kind = "WTS", item = LINK, qty = 20, mats = false, cod = false }) end
+    local function ids(n) return n.profile:Id() end
+    local function sales(n)
+      local k = 0
+      for _, kind in ipairs({ "trade", "cod", "manual" }) do
+        for _, c in ipairs(n.ns.Activity.Deriver(kind)(n.obs:List(kind), { observations = n.obs })) do
+          if c.counted and c.type == "exchange.sales" then k = k + 1 end
+        end
+      end
+      return k
+    end
+    local function trade(a, b, rec)
+      local d = { kind = "trade", listing = rec.id, seller = ids(a), buyer = ids(b), item = 2589, count = 20,
+        copper = 50000, at = clock.now(), owner = ids(a), listed = rec.t }
+      a.obs:Publish(d); b.obs:Publish(d)
+    end
+
+    it("a manual deal 3 days after a same-key trade records, confirms and counts", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local rec = wts(a)
+      trade(a, b, rec)
+      clock.advance(3 * 86400)
+      assert.is_true((b.ex:RecordDeal(rec.id, ids(a), 20, 50000)))
+      assert.is_true(a.ex:ConfirmDeal(a.ex:PendingConfirmations()[1].obs.id))
+      assert.equal(2, sales(a))
+    end)
+
+    it("a manual deal 1 h after a same-key trade is refused", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local rec = wts(a)
+      trade(a, b, rec)
+      clock.advance(3600)
+      local ok, why = b.ex:RecordDeal(rec.id, ids(a), 20, 50000)
+      assert.is_false(ok); assert.equal("already recorded", why)
+    end)
+
+    it("the owner's own witness doesn't stop non-owners witnessing", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      local rec = wts(a)
+      a.obs:Publish({ kind = "witness", listing = rec.id, owner = ids(a), at = rec.t })
+      clock.advance(25 * 3600)
+      b.ex:Start()
+      local mine = 0
+      for _, w in ipairs(b.obs:List("witness")) do if w.by == ids(b) then mine = mine + 1 end end
+      assert.equal(1, mine)
+    end)
+  end)
 end)

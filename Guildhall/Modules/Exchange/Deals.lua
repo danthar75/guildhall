@@ -205,17 +205,28 @@ local function pairUp(kind, list)
   return out
 end
 
--- Set of Deals.Key values with a paired trade or CoD deal in ctx.observations.
+-- Map of Deals.Key -> times of paired trade or CoD deals in ctx.observations.
 function Deals.AutoPaired(observations)
   local set = {}
   if observations then
     for _, kind in ipairs({ "trade", "cod" }) do
       for _, p in ipairs(pairUp(kind, observations:List(kind))) do
-        if p.mate then set[p.key] = true end
+        if p.mate then
+          set[p.key] = set[p.key] or {}
+          table.insert(set[p.key], p.a.d.at)
+        end
       end
     end
   end
   return set
+end
+
+-- True when a manual deal (key, at) repeats an auto-paired deal made within 48 h of it.
+function Deals.IsDuplicate(autoPaired, key, at)
+  for _, t in ipairs(autoPaired[key] or {}) do
+    if math.abs(at - t) <= WINDOW then return true end
+  end
+  return false
 end
 
 local function derive(kind)
@@ -225,11 +236,12 @@ local function derive(kind)
     for _, p in ipairs(pairUp(kind, list)) do
       local d = p.a.d
       local ref = "deal:" .. d.listing .. ":" .. tostring(p.a.id)
+      local dup = kind == "manual" and Deals.IsDuplicate(skip, p.key, d.at)
       if p.mate then
-        if not skip[p.key] then
+        if not dup then
           for _, c in ipairs(rows(d, ref, d.at, true, nil, { seller = true, buyer = true })) do out[#out + 1] = c end
         end
-      elseif not skip[p.key] then
+      elseif not dup then
         local why = kind == "manual" and "waiting for confirmation" or "unpaired"
         local sides = p.a.by == d.seller and { seller = true } or { buyer = true }
         for _, c in ipairs(rows(d, ref, d.at, false, why, sides)) do out[#out + 1] = c end

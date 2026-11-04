@@ -200,7 +200,7 @@ function Ex:RecordDeal(listingId, partner, count, copper)
     give = weSell and { { id = item, n = count } } or {}, get = weSell and {} or { { id = item, n = count } },
     giveCopper = weSell and 0 or copper, getCopper = weSell and copper or 0 }
   local d = Deals.Observation("manual", rec, transfer)
-  if Deals.AutoPaired(obs)[Deals.Key(d)] then return false, "already recorded" end
+  if Deals.IsDuplicate(Deals.AutoPaired(obs), Deals.Key(d), d.at) then return false, "already recorded" end
   local status, o = obs:Publish(d)
   if status ~= "accepted" then return false, status end
   return true, o
@@ -213,7 +213,7 @@ function Ex:PendingConfirmations()
   local obs = self.ctx.observations
   if not obs then return out end
   local me, now = self.profile:Id(), self.now()
-  local mine = Deals.AutoPaired(obs)
+  local auto, mine = Deals.AutoPaired(obs), {}
   local list = obs:List("manual")
   for _, rec in ipairs(list) do
     if rec.by == me and Deals.Valid(rec.d) then mine[Deals.Key(rec.d)] = true end
@@ -222,7 +222,8 @@ function Ex:PendingConfirmations()
     local d = rec.d
     if rec.by ~= me and Deals.Valid(d) and (d.seller == me or d.buyer == me)
         and (rec.by == d.seller or rec.by == d.buyer)
-        and now - d.at <= CONFIRM_WINDOW and not self.db.declined[rec.id] and not mine[Deals.Key(d)] then
+        and now - d.at <= CONFIRM_WINDOW and not self.db.declined[rec.id] and not mine[Deals.Key(d)]
+        and not Deals.IsDuplicate(auto, Deals.Key(d), d.at) then
       local listing = self:Get(d.listing)
       if not listing then
         -- The listing was purged: the observation's own fields stand in for it.
@@ -293,7 +294,7 @@ function Ex:_witness()
         if not seen then
           seen = {}
           for _, w in ipairs(obs:List("witness")) do
-            if type(w.d) == "table" and (w.d.owner == nil or w.d.owner == (type(w.d.listing) == "string"
+            if rec.by ~= w.by and type(w.d) == "table" and (w.d.owner == nil or w.d.owner == (type(w.d.listing) == "string"
                 and w.d.listing:match("^(.+):[^:]*$"))) then
               seen[w.d.listing] = true
             end
