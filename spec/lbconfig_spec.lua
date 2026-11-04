@@ -1,6 +1,6 @@
 describe("Leaderboard Config", function()
   local fakes = require("spec.helpers.fakes")
-  local clock, timers, bus, officers, offset, cfg, ns, ctx, store
+  local clock, timers, bus, officers, offset, cfg, ns, ctx, store, loaded
 
   local function utc(y, m, d, h)
     local a = math.floor((14 - m) / 12)
@@ -27,7 +27,7 @@ describe("Leaderboard Config", function()
       -- An officer here is rank 0 (the guild master), who holds every permission by default;
       -- spec/permissions_spec.lua covers the other ranks.
       roster = { IsOfficer = function(_, name) return officers[name] end,
-        HasRanks = function() return true end,
+        HasRanks = function() return loaded end,
         RankIndex = function(_, name) if officers[name] ~= nil then return officers[name] and 0 or 5 end end },
       profile = {
         Id = function() return "pMe" end,
@@ -47,7 +47,7 @@ describe("Leaderboard Config", function()
     timers = fakes.timers(clock)
     bus = fakes.bus(clock, timers)
     officers = { ["Boss-Realm"] = true, ["Grunt-Realm"] = false }
-    offset = 0
+    offset, loaded = 0, true
     build("Boss-Realm")
   end)
 
@@ -71,11 +71,12 @@ describe("Leaderboard Config", function()
   end)
 
   it("an unknown roster rejects now and accepts on a later sync", function()
-    officers["Boss-Realm"] = nil
+    loaded = false
     local r = rec("weights", 1, "Boss-Realm", { weights = { sales = 9 } })
     assert.equal("invalid", apply(r))
+    assert.equal("roster unknown", ctx.log:Query()[1].reason)
     assert.is_nil(cfg.set:Get("weights"))
-    officers["Boss-Realm"] = true
+    loaded = true
     assert.equal("accepted", apply(r))
   end)
 
@@ -637,12 +638,12 @@ describe("Leaderboard Config", function()
     end)
 
     it("an unknown roster rejects an exclusion now and accepts it on a later sync", function()
-      officers["Boss-Realm"] = nil
+      loaded = false
       local r = xrec(1, "Boss-Realm")
       assert.equal("invalid", apply(r))
       local last = ctx.log:Query()[1]
       assert.equal("roster unknown", last.reason)
-      officers["Boss-Realm"] = true
+      loaded = true
       assert.equal("accepted", apply(r))
     end)
 
@@ -780,6 +781,151 @@ describe("Leaderboard Config", function()
       assert.equal(1, #after.boards["bank.gold"])
       assert.equal("pCat", after.overall[1].profile)
       assert.equal(700000, after.goldKept)
+    end)
+  end)
+
+  describe("final review: convergence", function()
+    local TWO_YEARS = 63072000
+    local REF = "bank:0123456789ab:o1793790000_1"
+    local function lastLog() return ctx.log:Query()[1] end
+    local function xrec(v, char, t)
+      t = t or clock.now()
+      return { id = "exclude:" .. REF, v = v, t = t, exp = t + TWO_YEARS, by = "pX", char = char,
+        d = { ref = REF, excluded = true, by = char, at = t } }
+    end
+
+    it("records from an author a loaded roster doesn't list are accepted as 'author left the guild'", function()
+      officers["Gone-Realm"] = nil
+      assert.equal("accepted", apply(rec("weights", 3, "Gone-Realm", { weights = { sales = 7 } })))
+      assert.equal("author left the guild", lastLog().reason)
+      assert.equal(7, cfg:Weights().sales)
+      local ym, d = bigMonth(10)
+      assert.equal("accepted", apply(rec("month:" .. ym, 1, "Gone-Realm", d)))
+      assert.equal("author left the guild", lastLog().reason)
+      local _, d2 = bigMonth(10)
+      d2.retake = true
+      assert.equal("accepted", apply(rec("month:" .. ym, 2, "Gone-Realm", d2)))
+      assert.equal("author left the guild", lastLog().reason)
+      assert.equal("accepted", apply(xrec(1, "Gone-Realm")))
+      assert.equal("author left the guild", lastLog().reason)
+      assert.is_not_nil(cfg:Exclusions()[REF])
+      assert.equal("accepted", apply(rec("perms", 1, "Gone-Realm", { grants = {} })))
+      assert.equal("author left the guild", lastLog().reason)
+    end)
+
+    it("a departed author's record still has to pass every payload check", function()
+      officers["Gone-Realm"] = nil
+      assert.equal("invalid", apply(rec("weights", 1, "Gone-Realm", { weights = { sales = -1 } })))
+      local ym, d = bigMonth(10)
+      assert.equal("invalid", apply(rec("month:" .. ym, 2, "Gone-Realm", d))) -- auto save past v1
+      local bad = xrec(1, "Gone-Realm")
+      bad.d.by = "Other-Realm"
+      assert.equal("invalid", apply(bad))
+      assert.equal("invalid", apply(rec("perms", 1, "Gone-Realm", { grants = {}, extra = 1 })))
+      assert.equal("invalid", apply(rec("weights", 1, nil, { weights = { sales = 1 } })))
+    end)
+
+    it("an unknown roster still rejects with 'roster unknown', and a demoted author still in the guild is still rejected", function()
+      loaded = false
+      for _, r in ipairs({ rec("weights", 1, "Boss-Realm", { weights = { sales = 7 } }), xrec(1, "Boss-Realm"),
+        rec("perms", 1, "Boss-Realm", { grants = {} }) }) do
+        assert.equal("invalid", apply(r))
+        assert.equal("roster unknown", lastLog().reason)
+      end
+      local ym, d = bigMonth(10)
+      assert.equal("invalid", apply(rec("month:" .. ym, 1, "Boss-Realm", d)))
+      assert.equal("roster unknown", lastLog().reason)
+      loaded = true
+      -- Grunt is rank 5, no permission
+      assert.equal("invalid", apply(rec("weights", 1, "Grunt-Realm", { weights = { sales = 7 } })))
+      assert.equal("author lacks permission", lastLog().reason)
+      assert.equal("invalid", apply(xrec(1, "Grunt-Realm")))
+      assert.equal("invalid", apply(rec("month:" .. ym, 1, "Grunt-Realm", d)))
+      assert.equal("author not an officer", lastLog().reason)
+      assert.equal("invalid", apply(rec("perms", 1, "Grunt-Realm", { grants = {} })))
+      assert.equal("author not the guild master", lastLog().reason)
+    end)
+
+    it("a publish outranks the highest version seen for the id, even a rejected one", function()
+      assert.equal("invalid", apply(rec("weights", 7, "Grunt-Realm", { weights = { sales = 1 } })))
+      assert.equal(7, cfg.seenV.weights)
+      assert.is_true((cfg:PublishWeights({ sales = 9 })))
+      assert.equal(8, cfg.set:Get("weights").v)
+      assert.is_nil(cfg.seenV.weights) -- caught up
+      assert.equal("invalid", apply(xrec(4, "Grunt-Realm")))
+      assert.is_true((cfg:SetExcluded(REF, true, "x")))
+      assert.equal(5, cfg.set:Get("exclude:" .. REF).v)
+      assert.is_true((cfg.perms:Publish({ weights = { ranks = { 0 } } })))
+      assert.equal(1, cfg.set:Get("perms").v)
+    end)
+
+    it("the floor ignores history ids, unknown ids and absurd versions", function()
+      apply(rec("history:pX:1:1", 9, "Grunt-Realm", {}))
+      apply(rec("nonsense", 9, "Grunt-Realm", {}))
+      apply(rec("weights", 2 ^ 40, "Grunt-Realm", { weights = {} }))
+      apply(rec("weights", 2.5, "Grunt-Realm", { weights = {} }))
+      assert.same({}, cfg.seenV)
+    end)
+
+    it("the floor is kept in ctx.seenV (the module db) and survives a rebuild", function()
+      local seen, db = {}, store
+      local c = ns.LbConfig.new({ comm = bus:join("Two-Realm"), now = clock.now, after = timers.after,
+        random = function(lo) return lo end, log = ctx.log, roster = ctx.roster, profile = ctx.profile,
+        compat = ctx.compat, playerChar = "Boss-Realm", db = db, seenV = seen })
+      assert.equal("invalid", c.sync:_applyOne(rec("weights", 4, "Grunt-Realm", { weights = {} }), "S"))
+      assert.equal(4, seen.weights)
+      local c2 = ns.LbConfig.new({ comm = bus:join("Three-Realm"), now = clock.now, after = timers.after,
+        random = function(lo) return lo end, log = ctx.log, roster = ctx.roster, profile = ctx.profile,
+        compat = ctx.compat, playerChar = "Boss-Realm", db = {}, seenV = seen })
+      assert.is_true((c2:PublishWeights({ sales = 3 })))
+      assert.equal(5, c2.set:Get("weights").v)
+    end)
+
+    it("an automatic month save stays version 1 whatever the floor says", function()
+      clock.advance(utc(2026, 11, 10) - clock.now())
+      assert.equal("invalid", apply(rec("month:2026-10", 3, "Grunt-Realm", { month = "2026-10" })))
+      assert.equal(3, cfg.seenV["month:2026-10"])
+      assert.is_true(cfg:MaybeSaveMonth(ledger({ pA = { sales = 3 } }), clock.now()))
+      assert.equal(1, cfg.set:Get("month:2026-10").v)
+    end)
+
+    it("a rejected record re-offered at every sync is logged once per session", function()
+      local r = rec("weights", 1, "Grunt-Realm", { weights = { sales = 9 } })
+      local before = #ctx.log.store
+      for _ = 1, 4 do assert.equal("invalid", apply(r)) end
+      assert.equal(before + 1, #ctx.log.store)
+      local r2 = rec("weights", 2, "Grunt-Realm", { weights = { sales = 9 } })
+      apply(r2)
+      assert.equal(before + 2, #ctx.log.store)
+    end)
+
+    it("a hidden profile is saved with an empty name", function()
+      ctx.profile.IsHidden = function(_, id) return id == "pB" end
+      clock.advance(utc(2026, 11, 10) - clock.now())
+      assert.is_true(cfg:MaybeSaveMonth(ledger({ pA = { sales = 3 }, pB = { sales = 5 } }), clock.now()))
+      local m = cfg:Month("2026-10")
+      assert.equal("pB", m.overall[1].profile)
+      assert.equal("", m.overall[1].name)
+      assert.equal("pA", m.overall[2].name)
+      assert.equal("", m.boards.sales[1].name)
+    end)
+
+    it("bucket is deterministic per id", function()
+      local B = ns.LbConfig.Bucket
+      assert.equal("c", B({ id = "weights" }))
+      assert.equal("c", B({ id = "perms" }))
+      assert.equal("c", B({ id = "month:2026-10", t = 1 }))
+      assert.equal("c", B({ id = "month:2026-10", t = 999999999 }))
+      assert.equal("x2026-11", B({ id = "exclude:" .. REF }))
+      assert.equal("x2026-11", B({ id = "exclude:bank:abc:o1793793600_7", t = 5 }))
+      assert.equal("h2026-11", B({ id = "history:pX:1793793600:3" }))
+      assert.equal("h1970-01", B({ id = "history:pX:0:1" }))
+      for _, id in ipairs({ "exclude:bank:o42", "exclude:junk", "history:pX:abc:1", "history:pX:99999999999999:1",
+        "whatever", "" }) do
+        assert.equal("c", B({ id = id }), id)
+      end
+      assert.equal("c", B({}))
+      assert.equal("c", B(nil))
     end)
   end)
 end)

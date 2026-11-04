@@ -14,9 +14,10 @@ local ADDON, ns = ...
 -- perms:Validate(rec) -> ok, reason, for an incoming "perms" record of core.config.
 --
 -- The record is id "perms" in core.config: d.grants = { [key] = { ranks = {0, 1, ...}, raidlead } }.
--- It is checked against the roster only when it arrives (the author must be rank 0 then), so a
--- former guild master's record stays until the new one publishes. Unknown keys are kept so a
--- newer client's keys survive an older guild master's save.
+-- It is checked against the roster when it arrives (the author must be rank 0 then, or missing from
+-- a loaded roster: a guild master who left), so a former guild master's record stays until the new
+-- one publishes; LbConfig's version floor makes the new one outrank it everywhere. Unknown keys are
+-- kept so a newer client's keys survive an older guild master's save.
 local Permissions = {}
 ns.Permissions = Permissions
 
@@ -205,18 +206,22 @@ function P:Publish(map)
   return good, (not good) and "not accepted" or nil
 end
 
--- Incoming record: accepted only while the roster says its author is rank 0. An unknown roster
--- (or an author it doesn't list) rejects it for now; the next sync offers it again.
+-- Incoming record: accepted while the roster says its author is rank 0, or when a loaded roster
+-- does not list the author (a guild master who left; reason "author left the guild"). An unknown
+-- roster rejects it for now; LbConfig re-syncs once the roster loads.
 function P:Validate(rec)
   local r = self.roster
   if r == nil or r.RankIndex == nil or (r.HasRanks and r:HasRanks() ~= true) then return false, "roster unknown" end
+  if type(rec.char) ~= "string" then return false, "roster unknown" end
   local rank = self:_rank(rec.char)
-  if rank == nil then return false, "roster unknown" end
-  if rank ~= 0 then return false, "author not the guild master" end
+  local left = rank == nil and "author left the guild" or nil
+  if not left and rank ~= 0 then return false, "author not the guild master" end
   if type(rec.d) ~= "table" then return false, "not a table" end
   -- Publish writes only `grants`; anything else is refused so the record stays small and exact.
   for field in pairs(rec.d) do
     if field ~= "grants" then return false, "unknown perms field" end
   end
-  return Permissions.ValidGrants(rec.d.grants)
+  local ok, err = Permissions.ValidGrants(rec.d.grants)
+  if not ok then return false, err end
+  return true, left
 end

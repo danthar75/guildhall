@@ -16,8 +16,17 @@ local ADDON, ns = ...
 -- Weights, retakes and bank reviews need the "weights" / "retake" / "bankreview" permission (guild
 -- master only by default); the automatic month save stays an officer action. Record kinds are told
 -- apart by the id-prefix dispatch in validateRecord. A record is checked against the roster and permissions
--- only when it arrives, so a demoted author's earlier record stays in effect. An unknown roster
--- rejects it for now; the next sync offers it again.
+-- when it arrives, so a demoted author's earlier record stays in effect where it was already held.
+-- An author missing from a loaded roster has left the guild: their weights, month, exclusion and
+-- perms records are accepted ("author left the guild"), which is what clients that saw them earlier
+-- already hold. An unknown roster rejects for now; Config re-syncs once the roster loads and
+-- whenever a peer's perms record is accepted, so peers offer it again.
+-- Version floor: seenV[id] is the highest version seen for an id, whatever the outcome, and a
+-- publish uses at least seenV + 1, so a successor's record outranks a rejected one on every client.
+-- Residual: an automatic month save (always v1) or an exclusion by a demoted author still in the
+-- guild, that nobody re-saves, stays divergent; a retake or re-tick fixes it through the floor.
+-- Sync buckets (bucket below): "c" for weights, perms and months; "x<YYYY-MM>" for exclusions and
+-- "h<YYYY-MM>" for history, from the time in the id.
 ns.LbConfig = ns.LbConfig or {}
 local Config = ns.LbConfig
 
@@ -37,6 +46,9 @@ local HISTORY_WHAT = { weights = true, month = true, perms = true, bank = true }
 local MAX_REF, MAX_REASON = 48, 80
 local EXCLUDE_FIELDS = { ref = true, excluded = true, reason = true, by = true, at = true }
 local REFUSED = "no permission"
+local LEFT = "author left the guild"
+local MAX_SEEN = 512          -- version-floor entries kept
+local MAX_V = 2 ^ 31          -- versions above this are not recorded in the floor
 
 local C = {}
 C.__index = C
@@ -69,6 +81,17 @@ local function historyAuthorKnown(self, char)
   local r = self.roster
   if r == nil or r.RankIndex == nil or (r.HasRanks and r:HasRanks() ~= true) then return true end
   return r:RankIndex(char) ~= nil
+end
+
+-- "unknown" while the roster is not loaded, "left" when a loaded roster does not list char,
+-- "member" otherwise ("bad" for a non-string char).
+local function authorStatus(roster, char)
+  if type(char) ~= "string" then return "bad" end
+  if roster == nil or roster.RankIndex == nil or (roster.HasRanks and roster:HasRanks() ~= true) then
+    return "unknown"
+  end
+  if roster:RankIndex(char) == nil then return "left" end
+  return "member"
 end
 
 local function deepEqual(a, b)
@@ -174,11 +197,11 @@ local function validExclusion(self, rec)
   if d.by ~= rec.char then return false, "exclusion author mismatch" end
   if not finite(d.at) or d.at ~= rec.t then return false, "bad exclusion time" end
   if rec.exp ~= rec.t + HISTORY_RETENTION then return false, "bad exclusion expiry" end
-  -- Checked when the record arrives. An unknown roster (or an author it doesn't list yet) is
-  -- rejected for now; the next sync offers the record again.
-  local r = self.roster
-  if r == nil or r.RankIndex == nil or (r.HasRanks and r:HasRanks() ~= true) then return false, "roster unknown" end
-  if type(rec.char) ~= "string" or r:RankIndex(rec.char) == nil then return false, "roster unknown" end
+  -- Checked when the record arrives. An unknown roster rejects for now (a re-sync offers it again);
+  -- an author a loaded roster does not list has left the guild and is accepted.
+  local status = authorStatus(self.roster, rec.char)
+  if status == "unknown" or status == "bad" then return false, "roster unknown" end
+  if status == "left" then return true, LEFT end
   if not self.perms:Can(rec.char, "bankreview") then return false, "author lacks permission" end
   return true
 end
@@ -234,18 +257,27 @@ local function validateRecord(self, rec)
   if id == "perms" then return self.perms:Validate(rec) end
   if id:sub(1, 8) == "exclude:" then return validExclusion(self, rec) end
   if id == "weights" then
-    if not self.perms:Can(rec.char, "weights") then return false, "author lacks permission" end
+    local status = authorStatus(self.roster, rec.char)
+    if status == "unknown" or status == "bad" then return false, "roster unknown" end
+    if status == "member" and not self.perms:Can(rec.char, "weights") then return false, "author lacks permission" end
     if type(rec.d) ~= "table" then return false, "not a table" end
     if not validTz(rec.d.tz) then return false, "bad tz" end
     if rec.d.changedBy ~= nil and (type(rec.d.changedBy) ~= "string" or #rec.d.changedBy > MAX_NAME) then
       return false, "bad changedBy"
     end
     if rec.d.changedAt ~= nil and not finite(rec.d.changedAt) then return false, "bad changedAt" end
-    return validWeights(rec.d.weights)
+    local ok, err = validWeights(rec.d.weights)
+    if not ok then return false, err end
+    return true, status == "left" and LEFT or nil
   end
   local ym = id:match("^month:(%d%d%d%d%-%d%d)$")
   if ym then
-    if type(rec.d) == "table" and rec.d.retake == true then
+    local status = authorStatus(self.roster, rec.char)
+    if status == "unknown" or status == "bad" then return false, "roster unknown" end
+    local left = status == "left" and LEFT or nil
+    if left then
+      -- accepted below once the payload checks pass
+    elseif type(rec.d) == "table" and rec.d.retake == true then
       if not self.perms:Can(rec.char, "retake") then return false, "author lacks permission" end
     elseif not canAdminister(self.roster, rec.char) then
       return false, "author not an officer"
@@ -258,7 +290,7 @@ local function validateRecord(self, rec)
     if rec.d.retake == true then
       -- A retake replaces a saved month, so it is never the first version.
       if rec.v < 2 then return false, "bad retake version" end
-      return true
+      return true, left
     end
     -- An automatic save is always version 1, and never replaces a retake.
     if rec.v ~= 1 or (old and type(old.d) == "table" and old.d.retake == true) then
@@ -267,9 +299,41 @@ local function validateRecord(self, rec)
     -- MaybeSaveMonth stamps t = 2 * anchor - now with now >= anchor (anchor = d.to + GRACE, and
     -- d.to is the month end it computed from the same tz), so an honest save has t <= anchor.
     if rec.t > rec.d.to + GRACE then return false, "bad save time" end
-    return true
+    return true, left
   end
   return false, "unknown record kind"
+end
+
+-- The ids the version floor tracks (history ids are fixed at v1 and exempt).
+local function floorTracked(id)
+  if id == "weights" or id == "perms" then return true end
+  if id:match("^month:%d%d%d%d%-%d%d$") then return true end
+  return validRef(id:match("^exclude:(.*)$")) == true
+end
+
+-- Sync bucket, deterministic per id (rec.t of a month changes between versions, so it is not
+-- used). The time an exclusion or history id carries picks its month; anything malformed is "c".
+local function monthOfIdTime(s)
+  local T = tonumber(s)
+  if not T or T < 0 or T >= MAX_V or not (ns.Scoring and ns.Scoring.MonthKey) then return nil end
+  local ok, key = pcall(ns.Scoring.MonthKey, T, 0)
+  return ok and type(key) == "string" and key or nil
+end
+
+function Config.Bucket(rec)
+  local id = type(rec) == "table" and rec.id
+  if type(id) ~= "string" then return "c" end
+  local T = id:match("^exclude:bank:[^:]+:o(%d+)_%d+$")
+  if T then
+    local key = monthOfIdTime(T)
+    return key and ("x" .. key) or "c"
+  end
+  T = id:match("^history:[^:]+:(%d+):%d+$")
+  if T then
+    local key = monthOfIdTime(T)
+    return key and ("h" .. key) or "c"
+  end
+  return "c"
 end
 
 function Config.new(ctx)
@@ -279,6 +343,10 @@ function Config.new(ctx)
   self.roster, self.compat = ctx.roster, ctx.compat
   self.playerChar = ctx.playerChar
   self.historySeq = 0
+  -- Version floor: id -> highest version seen and not held (persisted when ctx.seenV is given).
+  self.seenV = ctx.seenV or {}
+  self.rejectLogged = {} -- record identity -> true: a rejection is logged once per session
+  self.hadRanks = ctx.roster ~= nil and ctx.roster.HasRanks ~= nil and ctx.roster:HasRanks() == true
   -- Permissions come through ctx (the Module builds them); a bare ctx gets its own.
   self.perms = ctx.perms or ns.Permissions.new({ roster = ctx.roster, profile = ctx.profile, now = ctx.now,
     compat = ctx.compat })
@@ -289,6 +357,18 @@ function Config.new(ctx)
   })
 
   local function logApplied(rec, status, old, sender, reason)
+    self:_noteVersion(rec)
+    if status == "invalid" then
+      -- the same record (id, v, t, author) re-offered at every sync is logged once
+      local key = table.concat({ tostring(rec.id), tostring(rec.v), tostring(rec.t), tostring(rec.char) }, "\0")
+      if self.rejectLogged[key] then return end
+      self.rejectLogged[key] = true
+    end
+    local fromPeer = sender ~= (ctx.playerChar or "self")
+    if status == "accepted" and rec.id == "perms" and fromPeer and self.sync then
+      -- records rejected for lack of a permission this record grants are offered again
+      self.sync:Start()
+    end
     local e = { t = self.now(), set = SET_NAME, id = rec.id, v = rec.v, author = rec.by,
       authorChar = rec.char, relayer = sender }
     if status == "accepted" then
@@ -306,6 +386,7 @@ function Config.new(ctx)
   self.sync = ns.Sync.new({
     comm = ctx.comm, set = self.set, module = SET_NAME,
     after = ctx.after, random = ctx.random, playerName = ctx.playerChar,
+    bucket = Config.Bucket,
     validate = function(rec) return validateRecord(self, rec) end,
     onApplied = logApplied,
   })
@@ -316,15 +397,58 @@ end
 
 function C:Start()
   self.set:Purge()
+  self:_pruneSeen()
   self.sync:Start()
+end
+
+-- Records rec.v in the version floor when it is above what the set holds for that id.
+function C:_noteVersion(rec)
+  local id, v = rec.id, rec.v
+  if type(id) ~= "string" or not finite(v) or v ~= math.floor(v) or v < 1 or v > MAX_V then return end
+  if not floorTracked(id) then return end
+  local held = self.set:Get(id)
+  local seen = self.seenV
+  if held and held.v >= v then
+    if seen[id] ~= nil and seen[id] <= held.v then seen[id] = nil end
+    return
+  end
+  if seen[id] ~= nil then
+    if v > seen[id] then seen[id] = v end
+    return
+  end
+  local n = 0
+  for _ in pairs(seen) do n = n + 1 end
+  if n < MAX_SEEN then seen[id] = v end
+end
+
+-- Drops floor entries the set has caught up with, or that are no longer tracked or valid.
+function C:_pruneSeen()
+  for id, v in pairs(self.seenV) do
+    local held = type(id) == "string" and self.set:Get(id)
+    if type(id) ~= "string" or not floorTracked(id) or not finite(v) or (held and held.v >= v) then
+      self.seenV[id] = nil
+    end
+  end
+end
+
+-- The roster finished loading: records rejected as "roster unknown" are offered again.
+function C:OnRosterRefreshed()
+  local r = self.roster
+  local has = r ~= nil and r.HasRanks ~= nil and r:HasRanks() == true
+  local was = self.hadRanks
+  self.hadRanks = has
+  if has and not was then self.sync:Start() end
 end
 
 function C:_isOfficer() return canAdminister(self.roster, self.playerChar) end
 function C:_can(key) return self.perms:Can(self.playerChar, key) end
 
-function C:_publish(id, d, exp, t)
+-- exactV: publish at NextVersion without the version floor (automatic month saves are always v1).
+function C:_publish(id, d, exp, t, exactV)
   t = t or self.now()
-  local rec = { id = id, v = self.set:NextVersion(id), t = t, exp = exp or (t + MONTH_RETENTION),
+  local v = self.set:NextVersion(id)
+  if not exactV then v = math.max(v, (self.seenV[id] or 0) + 1) end
+  local rec = { id = id, v = v, t = t, exp = exp or (t + MONTH_RETENTION),
     by = self.profile:Id(), char = self.playerChar, d = d }
   return self.sync:Publish(rec) == "accepted", rec
 end
@@ -483,7 +607,9 @@ local function top5(self, entries)
   local out = {}
   for i = 1, math.min(TOP_N, #entries) do
     local e = entries[i]
-    out[i] = { profile = e.profile, name = Config._displayName(self.profile, e.profile),
+    -- a hidden profile's name is not written into the synced record; the View shows "(hidden)"
+    local hidden = self.profile.IsHidden ~= nil and self.profile:IsHidden(e.profile) == true
+    out[i] = { profile = e.profile, name = hidden and "" or Config._displayName(self.profile, e.profile),
       value = e.value, rank = e.rank }
   end
   return out
@@ -531,7 +657,7 @@ function C:MaybeSaveMonth(ledger, now)
     local d = self:_monthData(e.ym, ledger, now)
     -- A month with no activity is not frozen: the ledger may simply not have synced yet.
     if #d.overall > 0 or d.goldKept > 0 then
-      if self:_publish("month:" .. e.ym, d, nil, 2 * e.anchor - now) then saved = true end
+      if self:_publish("month:" .. e.ym, d, nil, 2 * e.anchor - now, true) then saved = true end
     end
   end
   return saved

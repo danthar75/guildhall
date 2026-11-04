@@ -115,12 +115,12 @@ describe("Permissions", function()
 
   it("a rejected perms record is accepted once the roster knows the author is rank 0", function()
     local cfg, perms = build("Member-Realm")
-    ranks["Gm-Realm"] = nil -- the roster hasn't listed the guild master yet
+    known = false -- the roster hasn't loaded yet
     local r = prec(1, "Gm-Realm", { bankreview = grant({ 0, 1 }) })
     assert.equal("invalid", apply(cfg, r))
     assert.equal("roster unknown", lastReason(cfg))
     assert.is_nil(cfg.set:Get("perms"))
-    ranks["Gm-Realm"] = 0
+    known = true
     assert.equal("accepted", apply(cfg, r))
     assert.is_true(perms:Can("Off-Realm", "bankreview"))
   end)

@@ -246,15 +246,75 @@ describe("Boot", function()
     assert.equal(1, opened)
   end)
 
-  it("invalidates the ledger on observation, config and roster changes", function()
+  it("invalidates the ledger on observation and profile changes only (config and roster apply in Query)", function()
     local n = 0
     ns.leaderboard.ledger.Invalidate = function() n = n + 1 end
     ns.Events:Fire("ObservationsChanged")
-    ns.Events:Fire("LeaderboardConfigChanged")
+    ns.Events:Fire("ProfilesChanged")
     assert.equal(2, n)
-    fire("GUILD_ROSTER_UPDATE")
-    wait(3)
-    assert.is_true(n >= 3)
+    ns.Events:Fire("LeaderboardConfigChanged")
+    ns.Events:Fire("RosterRefreshed")
+    assert.equal(2, n)
+  end)
+
+  it("the roster loading (no ranks -> ranks) restarts the config sync once", function()
+    local cfg = ns.leaderboard.config
+    local starts, has = 0, false
+    cfg.sync.Start = function() starts = starts + 1 end
+    ns.services.roster.HasRanks = function() return has end
+    cfg.hadRanks = false
+    ns.Events:Fire("RosterRefreshed")
+    assert.equal(0, starts)
+    has = true
+    ns.Events:Fire("RosterRefreshed")
+    assert.equal(1, starts)
+    ns.Events:Fire("RosterRefreshed")
+    assert.equal(1, starts)
+  end)
+
+  it("the officer work waits until observations have been quiet for 60 s", function()
+    ns.services.roster.IsOfficer = function() return true end
+    local obs = ns.leaderboard.observations
+    wait(80)
+    obs.changes = obs.changes + 1 -- still syncing
+    wait(11)                       -- 91 s: changed 11 s ago
+    assert.equal(0, spies.saveMonth)
+    wait(30)                       -- 121 s: 41 s quiet
+    assert.equal(0, spies.saveMonth)
+    wait(30)                       -- 151 s: 71 s quiet
+    assert.equal(1, spies.saveMonth)
+    assert.equal(1, spies.refreshTz)
+    for _ = 1, 40 do wait(30) end
+    assert.equal(1, spies.saveMonth)
+  end)
+
+  it("the officer work waits for an empty send queue, and is skipped after 15 min of traffic", function()
+    ns.services.roster.IsOfficer = function() return true end
+    local pending = 3
+    ns.services.comm.Pending = function() return pending end
+    for _ = 1, 40 do wait(30) end -- 1200 s, never quiet
+    assert.equal(0, spies.saveMonth)
+    pending = 0
+    for _ = 1, 10 do wait(30) end
+    assert.equal(0, spies.saveMonth)
+  end)
+
+  it("the officer work runs once the queue empties within the window", function()
+    ns.services.roster.IsOfficer = function() return true end
+    local pending = 3
+    ns.services.comm.Pending = function() return pending end
+    wait(91)
+    assert.equal(0, spies.saveMonth)
+    pending = 0
+    wait(30)
+    assert.equal(1, spies.saveMonth)
+  end)
+
+  it("a weights holder below the officer threshold refreshes tz", function()
+    ns.services.roster.IsOfficer = function() return false end
+    ns.leaderboard.permissions.Can = function(_, _, key) return key == "weights" end
+    wait(91)
+    assert.equal(1, spies.refreshTz)
   end)
 
   it("saves months and refreshes tz only after the settle delay, and only as an officer", function()

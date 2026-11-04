@@ -179,6 +179,14 @@ describe("Leaderboard.View", function()
       assert.is_nil(view.rows[3].entry or nil)
     end)
 
+    it("an entry saved with an empty name (hidden at save time) shows (hidden) even if no longer hidden", function()
+      month.overall[1].name = ""
+      hidden.p2 = nil
+      view:Refresh()
+      assert.equal("(hidden)", view.rows[1].name.text)
+      assert.equal("Brakka", view.rows[2].name.text)
+    end)
+
     it("shows savedAt and never the record's rec.t", function()
       assert.is_true(hasLike("2023-10-05"))
       for _, t in ipairs(texts) do

@@ -43,6 +43,34 @@ describe("Ledger", function()
 
   local function add(t) table.insert(ctx.contribs, c(t)) end
 
+  it("Contributions lists the observations once and hands each deriver its kind", function()
+    local recs = { { id = "a", d = { kind = "fake" } }, { id = "b", d = { kind = "bank" } },
+      { id = "c", d = { kind = "fake" } } }
+    local calls = 0
+    ctx.observations = { changes = 0, List = function(_, kind)
+      calls = calls + 1
+      local out = {}
+      for _, r in ipairs(recs) do if kind == nil or r.d.kind == kind then out[#out + 1] = r end end
+      return out
+    end }
+    local seen = {}
+    ns.Activity.RegisterDeriver("fake", function(list, dctx)
+      seen.fake = list
+      seen.bankFromCtx = dctx.observations:List("bank")
+      seen.roster = dctx.roster
+      return {}
+    end)
+    ns.Activity.RegisterDeriver("bank", function(list) seen.bank = list; return {} end)
+    ledger = ns.Ledger.new(ctx)
+    ledger:Contributions()
+    assert.equal(1, calls)
+    assert.same({ "a", "c" }, { seen.fake[1].id, seen.fake[2].id })
+    assert.equal(2, #seen.fake)
+    assert.equal("b", seen.bank[1].id)
+    assert.equal("b", seen.bankFromCtx[1].id)
+    assert.equal(ctx.roster, seen.roster) -- the rest of ctx passes through
+  end)
+
   it("Query sums by profile and type inside [from, to)", function()
     add({ profile = "ann", at = 99 })
     add({ profile = "ann", at = 100 })

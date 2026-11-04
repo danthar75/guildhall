@@ -38,11 +38,31 @@ function L:Contributions()
   local changes = obs.changes
   if self.cache and not self.dirty and self.cacheChanges == changes then return self.cache end
   local activity = self.ctx.activity or ns.Activity
+  -- One List of every observation, grouped by kind. Derivers get a ctx whose observations
+  -- answer List(kind) from these groups, so a deriver that reads another kind doesn't re-sort.
+  local all, groups = obs:List(), {}
+  for _, rec in ipairs(all) do
+    local kind = type(rec) == "table" and type(rec.d) == "table" and rec.d.kind or nil
+    if kind ~= nil then
+      local g = groups[kind]
+      if not g then g = {}; groups[kind] = g end
+      g[#g + 1] = rec
+    end
+  end
+  local grouped = setmetatable({
+    List = function(_, kind)
+      local src = kind == nil and all or groups[kind] or {}
+      local copyOf = {}
+      for i, rec in ipairs(src) do copyOf[i] = rec end
+      return copyOf
+    end,
+  }, { __index = obs })
+  local dctx = setmetatable({ observations = grouped }, { __index = self.ctx })
   local out, failed = {}, false
   for _, kind in ipairs(kinds()) do
     local fn = activity.Deriver(kind)
     if fn then
-      local ok, list = pcall(fn, obs:List(kind), self.ctx)
+      local ok, list = pcall(fn, grouped:List(kind), dctx)
       if ok and type(list) == "table" then
         for _, c in ipairs(list) do out[#out + 1] = c end
       elseif not ok then

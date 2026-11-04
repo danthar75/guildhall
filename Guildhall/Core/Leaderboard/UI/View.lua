@@ -152,7 +152,8 @@ local function model()
       m.goldKept = rec.goldKept or 0
       local list = view.board == "overall" and rec.overall or (rec.boards or {})[view.board] or {}
       for _, e in ipairs(list) do
-        local hidden = profiles():IsHidden(e.profile) == true
+        -- a profile hidden when the month was saved has an empty name in the record
+        local hidden = profiles():IsHidden(e.profile) == true or e.name == ""
         m.entries[#m.entries + 1] = { profile = e.profile, value = e.value, rank = e.rank, hidden = hidden,
           name = hidden and "(hidden)" or Util.Escape(Util.DisplayName(e.name)), online = false }
       end
