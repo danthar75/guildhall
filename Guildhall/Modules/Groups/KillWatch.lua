@@ -76,7 +76,7 @@ function W:OnZone()
   self:_mark(key)
 end
 
-function W:OnSpecChanged() end   -- Task 7
+function W:OnSpecChanged() end   -- spec switches are handled by Flex:OnSpecChanged
 
 function W:OnEncounterStart(encounterId)
   local id = self.ctx.compat:Safe(encounterId)
