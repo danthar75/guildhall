@@ -1,6 +1,10 @@
 # Forever launch-day test list
 
-What to test when WoW Forever goes live. Split by whether you can test it alone or need a guildmate who also runs Guildhall.
+What to test when WoW Forever goes live. Split by whether you can test it on one account or need a second Guildhall client in the guild.
+
+**Plan (user):** the guild is created at launch. Jon runs a second WoW account in the same guild as the "other tester", so everything here can be done without outside help. The goal is to finish within 12 hours of launch, but it isn't a rush at the moment of launch.
+- Run both clients at once, each with a character in the guild and Guildhall installed.
+- The guild master (rank 0) counts as an officer. To test non-officer views, put the second account's character at a low rank.
 Full step-by-step details for each item are in `in-game-checklist.md`; this file is the short list and the order to do it in.
 
 Before starting: `/console scriptErrors 1` (or BugSack), and install Guildhall into `_forever_/Interface/AddOns/Guildhall`.
@@ -9,7 +13,7 @@ New files (like the logo) need a full game restart, not just `/reload`.
 ## Order on launch night
 
 1. Solo: **Loading**, then your half of `/gh names` (save the output).
-2. With a guildmate: the other half of `/gh names`. **This is the release blocker.** If it passes, the first release can go out (Jon confirms first).
+2. On the second account: the other half of `/gh names`. **This is the release blocker.** If it passes, the first release can go out (Jon confirms first).
 3. Everything else below, in any order.
 
 ## Solo (no other testers needed)
@@ -57,7 +61,7 @@ New files (like the logo) need a full game restart, not just `/reload`.
 ### Release zip (once built)
 - [ ] Install from the release zip into a clean `AddOns` folder. It loads, and the folder has no `Guildhall_Vanilla.toc`.
 
-## Needs another tester (a guildmate running Guildhall)
+## Needs a second client (your second account in the guild)
 
 ### Release blocker
 - [ ] **`/gh names` on both characters, at the same time.** Your sender name as the *other* client lists it under "Recent addon senders" must match what Guildhall uses (realm suffix aside), and the same in reverse. Save both outputs.
@@ -79,12 +83,12 @@ New files (like the logo) need a full game restart, not just `/reload`.
 
 ## Later: Leaderboard (once it's built)
 
-Needs Forever. Most of it needs another tester.
+Needs Forever. Most of it needs the second account.
 - [ ] Solo: the tab opens, the periods switch, your own row shows your breakdown, and opting out hides you.
-- [ ] Solo, if you have bank log access: your guild bank deposits appear as observations, and moves between tabs don't count.
-- [ ] With a guildmate: a trade-window deal matched to a listing pairs and counts for both of you.
-- [ ] With a guildmate: a CoD mail deal pairs and counts.
-- [ ] With a guildmate: "Record a deal" plus their confirmation counts.
-- [ ] With a guildmate: a listing still up after 24 hours gets witnessed and counts.
-- [ ] With a guildmate who is a non-officer: they see totals only, can open only their own breakdown, and their Log tab shows counts only.
-- [ ] With a second bank-log reader: bank entries pair. Excluded ranks and tabs don't count.
+- [ ] Solo, once the guild has a bank tab (it may need gold to buy one): your guild bank deposits appear as observations, and moves between tabs don't count.
+- [ ] With the second account: a trade-window deal matched to a listing pairs and counts for both of you.
+- [ ] With the second account: a CoD mail deal pairs and counts.
+- [ ] With the second account: "Record a deal" plus their confirmation counts.
+- [ ] With the second account: a listing still up after 24 hours gets witnessed and counts.
+- [ ] With the second account at a non-officer rank: they see totals only, can open only their own breakdown, and their Log tab shows counts only.
+- [ ] With the second account also reading the bank log: bank entries pair. Excluded ranks and tabs don't count.

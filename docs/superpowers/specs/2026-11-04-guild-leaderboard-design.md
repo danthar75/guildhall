@@ -266,12 +266,7 @@ Notes:
 ## Open questions for the user (to settle before planning)
 
 1. ~~What the UI may show~~. Decided: totals for everyone, your own breakdown for you, and everyone's breakdown for officers. See UI, and Privacy and trust.
-2. **Testing.** Classic Era has no guild bank, so the bank half and two-player pairing can only be tested on Forever. That needs:
-   - a guild with a bank
-   - log access
-   - a second Guildhall user
-
-   If that isn't available soon, the bank half is accepted on simulated tests only until it is.
+2. ~~Testing~~. Decided: Jon has several WoW accounts and will run two clients in the new Emergence guild on Forever. Pairing (trades, CoD, witnesses) and the bank log can therefore be tested in game, as soon as the guild has a bank tab. Simulated tests still cover every rule, so the build doesn't wait on the game. The in-game checks are listed in `docs/testing/forever-launch.md`.
 
 ## Left to the builder
 
