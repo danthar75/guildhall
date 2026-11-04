@@ -42,5 +42,6 @@ Modules/Exchange/UI/Form.lua
 Modules/Exchange/UI/Settings.lua
 Modules/Exchange/UI/Board.lua
 Modules/Exchange/UI/Details.lua
+Core/Leaderboard/UI/View.lua
 Core/Leaderboard/Module.lua
 Core/Boot.lua
