@@ -859,6 +859,19 @@ describe("Leaderboard Config", function()
       assert.equal(1, cfg.set:Get("perms").v)
     end)
 
+    it("a full floor still tracks weights and perms, and Start drops expired exclusion entries", function()
+      for i = 1, 600 do cfg.seenV["exclude:bank:pX:o" .. clock.now() .. "_" .. i] = 2 end
+      assert.equal("invalid", apply(rec("weights", 6, "Grunt-Realm", { weights = { sales = 1 } })))
+      assert.equal(6, cfg.seenV.weights)
+      assert.equal("invalid", apply(rec("perms", 3, "Grunt-Realm", { grants = {} })))
+      assert.equal(3, cfg.seenV.perms)
+      local old = "exclude:bank:pX:o" .. (clock.now() - 63072000 - 10) .. "_1"
+      cfg.seenV[old] = 2
+      cfg:Start()
+      assert.is_nil(cfg.seenV[old])
+      assert.equal(6, cfg.seenV.weights)
+    end)
+
     it("the floor ignores history ids, unknown ids and absurd versions", function()
       apply(rec("history:pX:1:1", 9, "Grunt-Realm", {}))
       apply(rec("nonsense", 9, "Grunt-Realm", {}))

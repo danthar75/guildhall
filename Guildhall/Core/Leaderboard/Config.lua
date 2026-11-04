@@ -416,16 +416,26 @@ function C:_noteVersion(rec)
     if v > seen[id] then seen[id] = v end
     return
   end
+  -- weights and perms are always tracked (two ids); the cap only bounds months and exclusions.
+  if id == "weights" or id == "perms" then seen[id] = v return end
   local n = 0
-  for _ in pairs(seen) do n = n + 1 end
+  for k in pairs(seen) do if k ~= "weights" and k ~= "perms" then n = n + 1 end end
   if n < MAX_SEEN then seen[id] = v end
+end
+
+-- The publish time an exclusion id carries (from its observation id), or nil.
+local function excludeIdTime(id)
+  local t = id:match("^exclude:bank:.*:o(%d+)_%d+$")
+  return t and tonumber(t) or nil
 end
 
 -- Drops floor entries the set has caught up with, or that are no longer tracked or valid.
 function C:_pruneSeen()
   for id, v in pairs(self.seenV) do
     local held = type(id) == "string" and self.set:Get(id)
-    if type(id) ~= "string" or not floorTracked(id) or not finite(v) or (held and held.v >= v) then
+    local xt = type(id) == "string" and excludeIdTime(id)
+    if type(id) ~= "string" or not floorTracked(id) or not finite(v) or (held and held.v >= v)
+      or (xt and xt + HISTORY_RETENTION < self.now()) then
       self.seenV[id] = nil
     end
   end
