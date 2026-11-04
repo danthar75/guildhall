@@ -1,0 +1,31 @@
+# Dev only. Check the value with /dump select(4, GetBuildInfo()) on Classic Era.
+## Interface: 11507
+## Title: Guildhall
+## SavedVariables: GuildhallDB
+## Version: 0.1.0
+
+Core/Init.lua
+Core/Util.lua
+Core/Serialize.lua
+Core/Compat.lua
+Core/DB.lua
+Core/Theme.lua
+Core/ReplicatedSet.lua
+Core/Comm.lua
+Core/Sync.lua
+Core/Log.lua
+Core/Roster.lua
+Core/Profile.lua
+Core/UI/Window.lua
+Core/UI/CopyBox.lua
+Core/UI/Launcher.lua
+Core/UI/LogView.lua
+Core/UI/SettingsView.lua
+Core/UI/Consent.lua
+Modules/Exchange/Listing.lua
+Modules/Exchange/Format.lua
+Modules/Exchange/MailDrafts.lua
+Modules/Exchange/Exchange.lua
+Modules/Exchange/UI/Form.lua
+Modules/Exchange/UI/Board.lua
+Core/Boot.lua

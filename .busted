@@ -1,0 +1,6 @@
+return {
+  _all = {
+    ROOT = { "spec" },
+    helper = "spec/helpers/load.lua",
+  },
+}
