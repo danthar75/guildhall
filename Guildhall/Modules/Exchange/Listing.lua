@@ -47,6 +47,11 @@ function Listing.New(d, profileId, char, now, idCounter)
   }
 end
 
+-- Listings from before d.created existed: the previous t is the best known post time.
+local function backfillCreated(n, rec)
+  if type(n.d) == "table" and n.d.created == nil and isInt(rec.t) then n.d.created = rec.t end
+end
+
 -- changes: shallow-merged into a copy of d. qty/note == false removes the field.
 -- The result is NOT validated; callers validate d before publishing.
 function Listing.Edit(rec, changes, char, now)
@@ -56,12 +61,14 @@ function Listing.Edit(rec, changes, char, now)
     if v == false and (k == "qty" or k == "note") then n.d[k] = nil else n.d[k] = v end
   end
   n.v, n.t, n.char = rec.v + 1, now, char
+  backfillCreated(n, rec)
   return n
 end
 
 function Listing.Renew(rec, char, now)
   local n = copy(rec)
   n.v, n.t, n.char, n.exp = rec.v + 1, now, char, now + WEEK
+  backfillCreated(n, rec)
   return n
 end
 

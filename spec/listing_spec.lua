@@ -64,6 +64,13 @@ describe("Exchange.Listing", function()
     assert.equals(1000, L.Edit(r, { qty = 5 }, "Bob-Realm", 6000).d.created)
   end)
 
+  it("Renew and Edit backfill created from the previous t on older listings", function()
+    local old = L.New(good(), "p1", "Bob-Realm", 1000, 1)
+    old.d.created = nil
+    assert.equals(1000, L.Renew(old, "Bob-Realm", 5000).d.created)
+    assert.equals(1000, L.Edit(old, { qty = 5 }, "Bob-Realm", 6000).d.created)
+  end)
+
   it("Validate accepts a missing or whole-number created, rejects anything else", function()
     assert.is_true((L.Validate(good())))
     assert.is_true((L.Validate(good({ created = 1700000000 }))))
