@@ -70,6 +70,18 @@ function ns.Groups.Create(ctx)
     return s
   end
 
+  self.checkPost = function(rec) return Post.CheckIncoming(rec, self.posts:Get(rec.id)) end
+  self.checkSignup = function(rec)
+    return Post.CheckIncomingSignup(rec, self.signups:Get(rec.id), {
+      now = self.now,
+      postExp = function(postId)
+        local p = self.posts:Get(postId)
+        return p and p.exp or nil
+      end,
+    })
+  end
+  self.checkReady = function(rec) return Post.CheckIncomingReady(rec, self.ready:Get(rec.id)) end
+
   self.postSync = newSync(self.posts, "groups.posts", function(rec, existing)
     return Post.CheckIncoming(rec, existing)
   end)
@@ -106,7 +118,13 @@ function G:_gate()
   if self.profile:IsExcluded(self.playerChar) then return "excluded" end
 end
 
-local function publish(sync, rec)
+-- Runs the same acceptance check peers run before publishing, so a record we would reject
+-- on arrival is refused locally with that reason.
+local function publish(sync, rec, check)
+  if check then
+    local ok, err = check(rec)
+    if not ok then return false, err end
+  end
   local status = sync:Publish(rec)
   if status ~= "accepted" then return false, status end
   return true, rec
@@ -121,7 +139,7 @@ function G:Post(d)
   if not ok then return false, verr end
   local now = self.now()
   local rec = ns.Groups.Post.New(d, self.profile:Id(), self.playerChar, now, ns.Groups.Post.NextN(now))
-  return publish(self.postSync, rec)
+  return publish(self.postSync, rec, self.checkPost)
 end
 
 function G:_mine(id)
@@ -135,7 +153,7 @@ function G:Close(id)
   if not rec then return false, "not owner" end
   local err = self:_gate()
   if err then return false, err end
-  return publish(self.postSync, ns.Groups.Post.Close(rec, self.playerChar, self.now()))
+  return publish(self.postSync, ns.Groups.Post.Close(rec, self.playerChar, self.now()), self.checkPost)
 end
 
 -- role nil removes the assignment.
@@ -147,7 +165,7 @@ function G:Assign(postId, profileId, role)
   local new = ns.Groups.Post.Assign(rec, profileId, role, self.playerChar, self.now())
   local ok, verr = ns.Groups.Post.Validate(new.d)
   if not ok then return false, verr end
-  return publish(self.postSync, new)
+  return publish(self.postSync, new, self.checkPost)
 end
 
 function G:Get(id) return self.posts:Get(id) end
@@ -204,7 +222,7 @@ function G:SignUp(postId, roles)
   local me = self.profile:Id()
   local old = self.signups:Get(ns.Groups.Post.SignupId(postId, me))
   local rec = ns.Groups.Post.NewSignup(postId, roles, me, self.playerChar, self.now(), post.exp, old)
-  return publish(self.signupSync, rec)
+  return publish(self.signupSync, rec, self.checkSignup)
 end
 
 function G:Withdraw(postId)
@@ -216,7 +234,7 @@ function G:Withdraw(postId)
   local new = copy(old)
   new.v, new.t, new.char = old.v + 1, self.now(), self.playerChar
   new.d.withdrawn = true
-  return publish(self.signupSync, new)
+  return publish(self.signupSync, new, self.checkSignup)
 end
 
 -- Live, not withdrawn signups for a post, oldest first.
@@ -226,7 +244,7 @@ function G:Signups(postId)
   for id, rec in pairs(self.signups.store) do
     if id:sub(1, #prefix) == prefix and rec.del ~= true and rec.exp > now and type(rec.d) == "table"
         and rec.d.withdrawn ~= true then
-      out[#out + 1] = { profile = rec.by, roles = copy(rec.d.roles), withdrawn = false, at = rec.d.at }
+      out[#out + 1] = { profile = rec.by, roles = copy(rec.d.roles), at = rec.d.at }
     end
   end
   table.sort(out, function(a, b)
@@ -247,7 +265,7 @@ function G:SetReady(roles, level, forSeconds)
   local me, now = self.profile:Id(), self.now()
   local rec = { id = me, v = self.ready:NextVersion(me), t = now, by = me, char = self.playerChar,
     exp = now + ns.Groups.Post.ClampReady(forSeconds), del = false, d = d }
-  return publish(self.readySync, rec)
+  return publish(self.readySync, rec, self.checkReady)
 end
 
 function G:ClearReady()
@@ -258,7 +276,7 @@ function G:ClearReady()
   if err then return false, err end
   local new = copy(old)
   new.v, new.t, new.char, new.del = old.v + 1, self.now(), self.playerChar, true
-  return publish(self.readySync, new)
+  return publish(self.readySync, new, self.checkReady)
 end
 
 function G:Ready()

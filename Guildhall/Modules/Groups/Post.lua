@@ -10,7 +10,7 @@ local NOW_TTL = 7200            -- a Now post lives 2 h
 local START_TTL = 21600         -- a scheduled post lives until 6 h after its start
 local MAX_START_AHEAD = 1209600 -- a post can be scheduled at most 14 days out
 local SIGNUP_SLACK = 86400      -- a signup may outlive its post by at most a day
-local SIGNUP_UNKNOWN = START_TTL + SIGNUP_SLACK
+local SIGNUP_UNKNOWN = MAX_START_AHEAD + START_TTL + SIGNUP_SLACK -- the post may be scheduled far out
 local READY_DEFAULT, READY_MAX = 7200, 21600
 local MAX_ASSIGN, MAX_PROFILE_BYTES = 40, 16
 
@@ -225,7 +225,7 @@ function Post.CheckIncomingSignup(rec, existing, ctx)
   local postExp = ctx and ctx.postExp and ctx.postExp(postId)
   local limit
   if postExp then limit = postExp + SIGNUP_SLACK
-  else limit = ((ctx and ctx.now) and ctx.now() or rec.t) + SIGNUP_UNKNOWN end
+  else limit = rec.t + SIGNUP_UNKNOWN end
   if rec.exp > limit then return false, "exp too far" end
   return true
 end
@@ -241,7 +241,11 @@ function Post.ValidateReady(d)
 end
 
 function Post.ClampReady(forSeconds)
-  if not isInt(forSeconds) then forSeconds = READY_DEFAULT end
+  if type(forSeconds) ~= "number" or forSeconds ~= forSeconds or forSeconds == math.huge
+      or forSeconds == -math.huge then
+    return READY_DEFAULT
+  end
+  forSeconds = math.floor(forSeconds)
   if forSeconds < 1 then return 1 end
   if forSeconds > READY_MAX then return READY_MAX end
   return forSeconds

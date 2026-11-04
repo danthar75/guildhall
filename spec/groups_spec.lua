@@ -162,6 +162,33 @@ describe("Groups", function()
     assert.same({ n2.id, n1.id, s1.id, s2.id }, ids)
   end)
 
+  it("local publishes run the peer check", function()
+    local a = node("Alice-Realm", { id = 1 })
+    local ok, err = a.g:Post(now({ start = 100000 + 86400 * 30 }))
+    assert.is_false(ok)
+    assert.matches("far", err)
+    assert.equal(0, #a.g:Posts())
+  end)
+
+  it("a signup for a post 3 days out is accepted before the post arrives", function()
+    local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+    local postId = a.profile:Id() .. ":g100000_1"
+    local rec = { id = postId .. "|" .. b.profile:Id(), v = 1, t = 100000, by = b.profile:Id(), char = "Bob-Realm",
+      exp = 100000 + 3 * 86400 + 21600, del = false, d = { roles = { d = true }, at = 100000 } }
+    assert.is_true((a.Post.CheckIncomingSignup(rec, nil, { now = clock.now })))
+  end)
+
+  it("ClampReady floors and clamps; junk gives the default", function()
+    local P = node("Alice-Realm").Post
+    assert.equal(1, P.ClampReady(0.5))
+    assert.equal(90, P.ClampReady(90.7))
+    assert.equal(21600, P.ClampReady(1e9))
+    assert.equal(7200, P.ClampReady(nil))
+    assert.equal(7200, P.ClampReady(0 / 0))
+    assert.equal(7200, P.ClampReady(math.huge))
+    assert.equal(7200, P.ClampReady("x"))
+  end)
+
   it("Close removes the post for everyone; only the poster may", function()
     local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
     local post = mustPost(a)
@@ -255,7 +282,7 @@ describe("Groups", function()
       end
       assert.is_false((a.Post.CheckIncomingSignup(with("junk|" .. me), nil, { now = clock.now })))
       assert.is_true((a.Post.CheckIncomingSignup(with("zz:g1_1|" .. me), nil, { now = clock.now })))
-      assert.is_false((a.Post.CheckIncomingSignup(with("zz:g1_1|" .. me, 100000 + 21600 + 86400 + 1), nil,
+      assert.is_false((a.Post.CheckIncomingSignup(with("zz:g1_1|" .. me, 100000 + 1209600 + 21600 + 86400 + 1), nil,
         { now = clock.now })))
       assert.is_false((a.Post.CheckIncomingSignup(with("zz:g1_1|" .. me, 100000 + 7200 + 86400 + 1), nil,
         { now = clock.now, postExp = function() return 100000 + 7200 end })))
