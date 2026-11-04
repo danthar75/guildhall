@@ -1,7 +1,7 @@
 local ADDON, ns = ...
 
 -- Settings tab, "Groups" sub-tab: the personal group finder options, saved account-wide in
--- GuildhallDB.personal.groups (the table Reminders reads on every check):
+-- GuildhearthDB.personal.groups (the table Reminders reads on every check):
 --   reminders  "Remind me 15 min before runs I signed up for" (false = off)
 --   sound      "Play a sound with reminders" (false = no sound)
 --   roles      "My usual roles" { t, h, d }, the defaults for Ready now and Sign up (read through

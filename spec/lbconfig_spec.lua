@@ -12,12 +12,12 @@ describe("Leaderboard Config", function()
   local function build(char)
     ns = {}
     for _, f in ipairs({ "Util", "DB", "ReplicatedSet", "Sync", "Log" }) do
-      loadAddonFile(ns, "Guildhall/Core/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Core/" .. f .. ".lua")
     end
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Scoring.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Config.lua")
-    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Scoring.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Config.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Permissions.lua")
     ns.Activity.Register({ id = "sales", label = "Sales", unit = "count", verify = "paired", weight = 5, order = 1 })
     ns.Activity.Register({ id = "gold.earned", label = "Gold earned", unit = "gold", verify = "paired", weight = 0.1, order = 2 })
     store = {}
@@ -578,7 +578,7 @@ describe("Leaderboard Config", function()
     end
     -- A real Ledger over fixed bank contributions, reading exclusions from cfg.
     local function realLedger()
-      loadAddonFile(ns, "Guildhall/Core/Leaderboard/Ledger.lua")
+      loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Ledger.lua")
       ns.Observations = { KINDS = { bank = true } }
       ns.Activity.Register({ id = "bank.gold", label = "Bank gold", unit = "gold", verify = "paired", weight = 0.2, order = 60 })
       ns.Activity.RegisterDeriver("bank", function() return contribs end)
@@ -989,12 +989,12 @@ describe("Leaderboard Config", function()
     end)
 
     it("weights, perms and exclusions behave the same once the group finder's kinds are added", function()
-      loadAddonFile(ns, "Guildhall/Modules/Groups/Perms.lua")
-      loadAddonFile(ns, "Guildhall/Modules/Groups/Instances.lua")
+      loadAddonFile(ns, "Guildhearth/Modules/Groups/Perms.lua")
+      loadAddonFile(ns, "Guildhearth/Modules/Groups/Instances.lua")
       ns.Groups = ns.Groups or {}
       ns.Observations = ns.Observations or { AddKind = function() end, KINDS = {} }
-      loadAddonFile(ns, "Guildhall/Modules/Groups/Credit.lua")
-      loadAddonFile(ns, "Guildhall/Modules/Groups/Checklist.lua")
+      loadAddonFile(ns, "Guildhearth/Modules/Groups/Credit.lua")
+      loadAddonFile(ns, "Guildhearth/Modules/Groups/Checklist.lua")
       assert.equal("invalid", apply(rec("weights", 1, "Grunt-Realm", { weights = { sales = 9 } })))
       assert.equal("accepted", apply(rec("weights", 1, "Boss-Realm", { weights = { sales = 9 } })))
       assert.equal("invalid", apply(rec("perms", 1, "Grunt-Realm", { grants = {} })))

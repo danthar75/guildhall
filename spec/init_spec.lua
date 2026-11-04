@@ -1,6 +1,6 @@
 describe("module registry", function()
   local ns
-  before_each(function() ns = {}; loadAddonFile(ns, "Guildhall/Core/Init.lua") end)
+  before_each(function() ns = {}; loadAddonFile(ns, "Guildhearth/Core/Init.lua") end)
   it("registers and returns modules in order", function()
     ns.RegisterModule("Exchange", { tab = { title = "Exchange" } })
     ns.RegisterModule("Later", {})

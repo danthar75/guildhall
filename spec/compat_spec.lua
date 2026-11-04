@@ -4,17 +4,17 @@ describe("Compat", function()
 
   before_each(function()
     local ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Compat.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Compat.lua")
     Compat = ns.Compat
   end)
 
   -- A Compat whose namespace also has the Instances table (InstanceKey matches against it).
   local function withInstances(env)
     local ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Compat.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Instances.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Compat.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Instances.lua")
     return ns.Compat.new(env)
   end
 
@@ -39,8 +39,8 @@ describe("Compat", function()
 
   it("loads and creates ns.compat without WoW APIs", function()
     local ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Compat.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Compat.lua")
     assert.is_table(ns.compat)
   end)
 

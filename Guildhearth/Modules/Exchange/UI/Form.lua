@@ -2,7 +2,7 @@ local ADDON, ns = ...
 
 -- New / edit listing form. Form.Open(existingRec?) shows it; Post or Save calls the
 -- Exchange module and reports errors inline. Never sends anything itself.
--- Named global: "GuildhallUIExchangeForm" (UISpecialFrames needs a name for ESC to close it).
+-- Named global: "GuildhearthUIExchangeForm" (UISpecialFrames needs a name for ESC to close it).
 -- Item input: shift-click (post-hook on ChatFrameUtil.InsertLink, Classic: ChatEdit_InsertLink),
 -- drag and drop onto the slot, or a typed name. Only the link (or the typed name) goes into d.item.
 -- Global: ns.ExchangeUI.OpenForm(prefill) (see below).
@@ -302,7 +302,7 @@ end
 
 local function submit()
   local ex = ns.exchange
-  if not ex then setError("Guildhall isn't ready yet. Try again in a moment."); return end
+  if not ex then setError("Guildhearth isn't ready yet. Try again in a moment."); return end
   local d = payload()
   local ok, res
   if f.editing then
@@ -353,8 +353,8 @@ end
 
 local function build()
   if frame then return end
-  frame = UI.CreatePanel("GuildhallUIExchangeForm", WIDTH, HEIGHT, "New listing")
-  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhallUIExchangeForm") end
+  frame = UI.CreatePanel("GuildhearthUIExchangeForm", WIDTH, HEIGHT, "New listing")
+  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhearthUIExchangeForm") end
 
   -- Kind
   f.lf = radio(frame, "Buying (LF)", 20, -46, "LF")

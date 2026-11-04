@@ -15,15 +15,15 @@ describe("Leaderboard demo", function()
 
   before_each(function()
     ns = { Events = { Fire = function() end } }
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Scoring.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Ledger.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/Deals.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Scoring.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Ledger.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/Deals.lua")
     ns.Observations = { KINDS = { trade = true, cod = true, manual = true, witness = true, bank = true } }
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Bank.lua")
-    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Demo.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Bank.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Permissions.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Demo.lua")
     Demo = ns.Leaderboard.Demo
     publishes, refreshed = 0, 0
     ns.Leaderboard.View = { Refresh = function() refreshed = refreshed + 1 end }
@@ -37,10 +37,10 @@ describe("Leaderboard demo", function()
     synced = {}
     ns.services = { profile = profileStub(), now = function() return NOW end, syncs = synced,
       comm = { Send = function() publishes = publishes + 1 end } }
-    GuildhallDB = { snapshot = { a = { 1, 2 } } }
+    GuildhearthDB = { snapshot = { a = { 1, 2 } } }
   end)
 
-  after_each(function() GuildhallDB = nil end)
+  after_each(function() GuildhearthDB = nil end)
 
   local function snapshot(t)
     local out = {}
@@ -70,7 +70,7 @@ describe("Leaderboard demo", function()
   end)
 
   it("demo mode publishes nothing and lbdemo off restores the real ledger", function()
-    local before = snapshot(GuildhallDB)
+    local before = snapshot(GuildhearthDB)
     Demo.Set(ns, true)
     assert.is_true(lb.demo)
     assert.not_equal(realLedger, lb.ledger)
@@ -80,7 +80,7 @@ describe("Leaderboard demo", function()
     assert.is_truthy(lb.config:Month(lb.config:Months()[1]))
     assert.equal(1, refreshed)
     assert.equal(0, publishes)
-    assert.equal(before, snapshot(GuildhallDB))
+    assert.equal(before, snapshot(GuildhearthDB))
     assert.equal(0, #synced)
     Demo.Set(ns, false)
     assert.is_falsy(lb.demo)
@@ -133,16 +133,16 @@ describe("Leaderboard demo never reaches the real guild", function()
     timers = fakes.timers(clock)
     local bus = fakes.bus(clock, timers)
     ns = { Events = { Fire = function() end, On = function() end }, OnError = function(e) error(e) end }
-    for _, f in ipairs({ "Util", "DB", "ReplicatedSet", "Sync", "Log" }) do loadAddonFile(ns, "Guildhall/Core/" .. f .. ".lua") end
-    for _, f in ipairs({ "Activity", "Scoring", "Ledger" }) do loadAddonFile(ns, "Guildhall/Core/Leaderboard/" .. f .. ".lua") end
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/Deals.lua")
+    for _, f in ipairs({ "Util", "DB", "ReplicatedSet", "Sync", "Log" }) do loadAddonFile(ns, "Guildhearth/Core/" .. f .. ".lua") end
+    for _, f in ipairs({ "Activity", "Scoring", "Ledger" }) do loadAddonFile(ns, "Guildhearth/Core/Leaderboard/" .. f .. ".lua") end
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/Deals.lua")
     ns.Observations = { KINDS = { trade = true, cod = true, manual = true, witness = true, bank = true } }
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Bank.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Config.lua")
-    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Demo.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Bank.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Config.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Permissions.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Demo.lua")
     ns.RegisterModule = function() end
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Module.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Module.lua")
     sent = 0
     local comm = bus:join("Boss-Realm")
     local realSend = comm.Send

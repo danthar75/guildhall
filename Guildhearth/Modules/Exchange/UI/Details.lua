@@ -5,8 +5,8 @@ local ADDON, ns = ...
 -- Loaded after Board.lua; Board.Build calls Details.Build(view, pane, innerWidth) and
 -- Board.Refresh calls Details.Show(rec).
 -- Also the "Record a deal" panel (Details.OpenRecordDeal), opened from the details pane.
--- Named global: "GuildhallUIRecordDeal" (UISpecialFrames needs a name for ESC to close it).
--- Global table entries: StaticPopupDialogs.GUILDHALL_REMOVE_LISTING / GUILDHALL_OFFICER_REMOVE.
+-- Named global: "GuildhearthUIRecordDeal" (UISpecialFrames needs a name for ESC to close it).
+-- Global table entries: StaticPopupDialogs.GUILDHEARTH_REMOVE_LISTING / GUILDHEARTH_OFFICER_REMOVE.
 ns.Exchange = ns.Exchange or {}
 local UI = ns.UI
 local Util = ns.Util
@@ -17,7 +17,7 @@ local setStatus, reportError, TAG = H.setStatus, H.reportError, H.TAG
 local Details = {}
 ns.Exchange.BoardDetails = Details
 
-local DRAFTED = "Saved as a mail draft. Guildhall will offer it next time you open a mailbox."
+local DRAFTED = "Saved as a mail draft. Guildhearth will offer it next time you open a mailbox."
 
 local view -- the board view this pane belongs to
 
@@ -175,13 +175,13 @@ function Board.DoRemove(id) act(ns.exchange.Remove, id, "Listing removed.") end
 function Board.DoOfficerRemove(id) act(ns.exchange.OfficerRemove, id, "Listing removed (officer).") end
 
 if StaticPopupDialogs then
-  StaticPopupDialogs["GUILDHALL_REMOVE_LISTING"] = {
+  StaticPopupDialogs["GUILDHEARTH_REMOVE_LISTING"] = {
     text = "Remove your listing for %s?",
     button1 = YES or "Yes", button2 = NO or "No",
     OnAccept = function(_, id) UI.Try(Board.DoRemove, id) end,
     timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
   }
-  StaticPopupDialogs["GUILDHALL_OFFICER_REMOVE"] = {
+  StaticPopupDialogs["GUILDHEARTH_OFFICER_REMOVE"] = {
     text = "Remove this member's listing for %s as an officer? This is logged.",
     button1 = YES or "Yes", button2 = NO or "No",
     OnAccept = function(_, id) UI.Try(Board.DoOfficerRemove, id) end,
@@ -278,8 +278,8 @@ end
 
 local function buildRecordPanel()
   rd = {}
-  rd.panel = UI.CreatePanel("GuildhallUIRecordDeal", 360, 250, "Record a deal")
-  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhallUIRecordDeal") end
+  rd.panel = UI.CreatePanel("GuildhearthUIRecordDeal", 360, 250, "Record a deal")
+  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhearthUIRecordDeal") end
   local p = rd.panel
   rd.item = UI.Text(p, "GameFontHighlight")
   rd.item:SetPoint("TOPLEFT", 16, -42)
@@ -369,11 +369,11 @@ local function buildButtons(det)
   end)
   b.remove = UI.Button(det, "Remove", 90, function()
     local rec = selected()
-    if rec and not confirm("GUILDHALL_REMOVE_LISTING", rec) then Board.DoRemove(rec.id) end
+    if rec and not confirm("GUILDHEARTH_REMOVE_LISTING", rec) then Board.DoRemove(rec.id) end
   end)
   b.officer = UI.Button(det, "Remove (officer)", 140, function()
     local rec = selected()
-    if rec and not confirm("GUILDHALL_OFFICER_REMOVE", rec) then Board.DoOfficerRemove(rec.id) end
+    if rec and not confirm("GUILDHEARTH_OFFICER_REMOVE", rec) then Board.DoOfficerRemove(rec.id) end
   end)
   b.removeImported = UI.Button(det, "Remove from my board", 170, function()
     local rec = selected()

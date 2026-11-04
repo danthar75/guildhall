@@ -10,8 +10,8 @@ describe("Ledger", function()
 
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Ledger.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Ledger.lua")
     ns.Observations = { KINDS = { fake = true, bank = true } }
     obsList, changes, ranks, config, owners, chars = {}, 0, {}, {}, {}, {}
     ctx = {

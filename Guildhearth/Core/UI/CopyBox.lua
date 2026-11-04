@@ -3,8 +3,8 @@ local ADDON, ns = ...
 -- One frame, two modes:
 --   Show(title, text):      read-only text, highlighted and focused, for Ctrl+C.
 --   Paste(title, onSubmit): empty editable box, OK calls onSubmit(text) then hides.
--- Named globals: "GuildhallUICopyBox" (UISpecialFrames needs a name for ESC to close it)
--- and "GuildhallUICopyBoxScroll" (scroll frame template needs a name on some clients).
+-- Named globals: "GuildhearthUICopyBox" (UISpecialFrames needs a name for ESC to close it)
+-- and "GuildhearthUICopyBoxScroll" (scroll frame template needs a name on some clients).
 local UI = ns.UI
 local CopyBox = {}
 UI.CopyBox = CopyBox
@@ -13,14 +13,14 @@ local frame, edit, hint, okButton
 
 local function build()
   if frame then return end
-  frame = UI.CreatePanel("GuildhallUICopyBox", 560, 380, "")
-  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhallUICopyBox") end
+  frame = UI.CreatePanel("GuildhearthUICopyBox", 560, 380, "")
+  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhearthUICopyBox") end
 
   hint = UI.Text(frame, "GameFontDisableSmall")
   hint:SetPoint("BOTTOMLEFT", 16, 18)
 
   local scroll
-  scroll, edit = UI.ScrollText(frame, "GuildhallUICopyBoxScroll")
+  scroll, edit = UI.ScrollText(frame, "GuildhearthUICopyBoxScroll")
   scroll:SetPoint("TOPLEFT", 16, -40)
   scroll:SetPoint("BOTTOMRIGHT", -34, 46)
   edit:SetScript("OnEscapePressed", function() frame:Hide() end)

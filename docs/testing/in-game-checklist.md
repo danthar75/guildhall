@@ -1,4 +1,4 @@
-# Guildhall in-game checklist
+# Guildhearth in-game checklist
 
 Manual checks for the WoW-facing parts (frames, events, slash commands). Tags:
 **[Era]** can be tested on Classic Era with the dev TOC. **[Forever]** needs the WoW Forever client.
@@ -7,22 +7,22 @@ For Forever launch day, the short list split into solo and needs-another-tester 
 
 ## How to install
 
-- [ ] Classic Era: copy or symlink the `Guildhall/` folder into `World of Warcraft/_classic_era_/Interface/AddOns/`. The game loads `Guildhall_Vanilla.toc`.
-- [ ] Forever: copy or symlink `Guildhall/` into `World of Warcraft/_forever_/Interface/AddOns/`.
-- [ ] Release zip: contains `Guildhall/Guildhall.toc` and all Lua files, and does NOT contain `Guildhall_Vanilla.toc`.
-- [ ] Symlink example (WSL/Linux): `ln -s ~/projects/guildhall/Guildhall "<WoW>/_classic_era_/Interface/AddOns/Guildhall"`. On Windows use `mklink /D`.
+- [ ] Classic Era: copy or symlink the `Guildhearth/` folder into `World of Warcraft/_classic_era_/Interface/AddOns/`. The game loads `Guildhearth_Vanilla.toc`.
+- [ ] Forever: copy or symlink `Guildhearth/` into `World of Warcraft/_forever_/Interface/AddOns/`.
+- [ ] Release zip: contains `Guildhearth/Guildhearth.toc` and all Lua files, and does NOT contain `Guildhearth_Vanilla.toc`.
+- [ ] Symlink example (WSL/Linux): `ln -s ~/projects/guildhearth/Guildhearth "<WoW>/_classic_era_/Interface/AddOns/Guildhearth"`. On Windows use `mklink /D`.
 
 ## Loading and shell
 
 - [ ] [Era] The addon loads with no Lua errors on login and after `/reload`.
-- [ ] [Forever] The addon loads with the release TOC (`Guildhall.toc`), with no Lua errors.
-- [ ] [Forever] **Launch blocker: character names.** Forever names are "Main Secondary" (space-separated) on a realmless client. With a guildmate who also runs Guildhall online, run `/gh names` on both characters and save the output. Check: (1) "Guildhall uses" includes the secondary name; (2) it matches "Guild roster (you)" and the sender the *other* client lists under "Recent addon senders" (realm suffix aside); (3) no API shows the "-" link form ("Dor-Ironhand"). If any check fails, name handling in `Compat:PlayerFullName` / `Util.FullName` / `Util.DisplayName` must change before the guild uses the addon.
-- [ ] [Era] Not in a guild: one friendly chat line ("not in a guild"), no errors. `/gh` opens the window and the Exchange and Log tabs say "Join a guild to use Guildhall".
+- [ ] [Forever] The addon loads with the release TOC (`Guildhearth.toc`), with no Lua errors.
+- [ ] [Forever] **Launch blocker: character names.** Forever names are "Main Secondary" (space-separated) on a realmless client. With a guildmate who also runs Guildhearth online, run `/gh names` on both characters and save the output. Check: (1) "Guildhearth uses" includes the secondary name; (2) it matches "Guild roster (you)" and the sender the *other* client lists under "Recent addon senders" (realm suffix aside); (3) no API shows the "-" link form ("Dor-Ironhand"). If any check fails, name handling in `Compat:PlayerFullName` / `Util.FullName` / `Util.DisplayName` must change before the guild uses the addon.
+- [ ] [Era] Not in a guild: one friendly chat line ("not in a guild"), no errors. `/gh` opens the window and the Exchange and Log tabs say "Join a guild to use Guildhearth".
 - [ ] [Era] `/gh` opens the window. `/gh` again closes it.
-- [ ] [Era] `/guildhall` does the same as `/gh`.
+- [ ] [Era] `/guildhearth` does the same as `/gh`.
 - [ ] [Era] `/gh log` opens the window on the Log tab.
 - [ ] [Era] `/gh help` prints the command list.
-- [ ] [Era] The window title reads "Guildhall" in the accent color. The border uses the theme color.
+- [ ] [Era] The window title reads "Guildhearth" in the accent color. The border uses the theme color.
 - [ ] [Era] Tabs appear in order: Exchange, Log, Settings. Clicking each one switches content.
 - [ ] [Era] The Exchange tab shows the board (sub-tabs, search box, list on the left, details on the right), not "This tab could not be loaded yet".
 - [ ] [Era] Drag the window by its background. `/reload`. It reopens at the same spot.
@@ -31,14 +31,14 @@ For Forever launch day, the short list split into solo and needs-another-tester 
 
 ## Minimap button
 
-- [ ] [Era] A round Guildhall button sits on the minimap edge.
-- [ ] [Era] Hovering shows a "Guildhall" tooltip.
+- [ ] [Era] A round Guildhearth button sits on the minimap edge.
+- [ ] [Era] Hovering shows a "Guildhearth" tooltip.
 - [ ] [Era] Left-click toggles the window.
 - [ ] [Era] Drag the button around the minimap edge. `/reload`. It keeps its new position.
 
 ## Consent
 
-- [ ] [Era] First login on a character in a guild shows the consent dialog with the text "Guildhall links your characters in <guild> so guildmates there can reach you on whichever one is online. Only characters in <guild> are listed. Uncheck any you don't want shared."
+- [ ] [Era] First login on a character in a guild shows the consent dialog with the text "Guildhearth links your characters in <guild> so guildmates there can reach you on whichever one is online. Only characters in <guild> are listed. Uncheck any you don't want shared."
 - [ ] [Era] The dialog lists the current character, checked.
 - [ ] [Era] Click OK. The dialog closes. The Log tab shows a `profile-link` entry.
 - [ ] [Era] Log in on a first alt in the same guild. The consent dialog appears again for that alt only.
@@ -52,15 +52,15 @@ For Forever launch day, the short list split into solo and needs-another-tester 
 ## Settings
 
 - [ ] [Era] Settings shows the guild key, profile id, officer threshold and linked characters.
-- [ ] [Era] The officer line shows the hint "Set by officers in Guild Info: [Guildhall officers=N]".
-- [ ] [Era] Add `[Guildhall officers=3]` to Guild Info, `/reload`. The threshold reads 3.
+- [ ] [Era] The officer line shows the hint "Set by officers in Guild Info: [Guildhearth officers=N]".
+- [ ] [Era] Add `[Guildhearth officers=3]` to Guild Info, `/reload`. The threshold reads 3.
 
 ## Log tab
 
 - [ ] [Era] The Log tab lists entries, newest first, in the export line format.
 - [ ] [Era] Typing in the filter box narrows the list by listing ID, profile id or character name (case-insensitive).
 - [ ] [Era] Typing into the log text does not change it.
-- [ ] [Era] Export opens the copy box titled "Guildhall log" with the text highlighted and the hint "Press Ctrl+C to copy".
+- [ ] [Era] Export opens the copy box titled "Guildhearth log" with the text highlighted and the hint "Press Ctrl+C to copy".
 - [ ] [Era] Ctrl+C copies it. Pasting elsewhere gives the same lines. ESC closes the copy box.
 
 ## Leaderboard (Era, demo data)
@@ -126,7 +126,7 @@ Era has no Forever bank or trade events, so these checks use `/gh lbdemo` fake d
 - [ ] [Era] The online dot is green for an online poster, grey when they log off.
 - [ ] [Era] Whisper on an online poster's listing opens chat pre-filled with `/w Name ...`. Nothing is sent.
 - [ ] [Era] Mail on an offline poster's listing while at a mailbox switches to Send Mail and fills To, Subject and Body. Nothing is sent.
-- [ ] [Era] Mail away from a mailbox shows "Saved as a mail draft...". At the next mailbox a popup asks "Fill in your Guildhall mail draft to Name?" with Fill in, Later and Dismiss.
+- [ ] [Era] Mail away from a mailbox shows "Saved as a mail draft...". At the next mailbox a popup asks "Fill in your Guildhearth mail draft to Name?" with Fill in, Later and Dismiss.
 - [ ] [Era] Fill in fills the Send Mail fields. Later keeps the draft for next time. Dismiss deletes it.
 - [ ] [Era] Copy for Discord opens the copy box with the formatted text.
 - [ ] [Era] An officer (rank below the threshold) can remove another member's listing. The log shows `officer-remove`.
@@ -170,8 +170,8 @@ Era has no Forever bank or trade events, so these checks use `/gh lbdemo` fake d
 
 ## Guild change and large boards
 
-- [ ] [Era] While logged in, leave the guild (or `/gquit` on a test alt). Within a few seconds one chat line says Guildhall has stopped and asks for `/reload`. No Lua errors. Guildmates no longer get replies from this client.
-- [ ] [Era] Join a different guild without reloading. One chat line asks you to `/reload` to switch Guildhall to the new guild. Nothing from the old guild's board is sent to the new guild. After `/reload` the board shows the new guild's listings only.
+- [ ] [Era] While logged in, leave the guild (or `/gquit` on a test alt). Within a few seconds one chat line says Guildhearth has stopped and asks for `/reload`. No Lua errors. Guildmates no longer get replies from this client.
+- [ ] [Era] Join a different guild without reloading. One chat line asks you to `/reload` to switch Guildhearth to the new guild. Nothing from the old guild's board is sent to the new guild. After `/reload` the board shows the new guild's listings only.
 - [ ] [Forever] Inside an instance, a guild name that reads as empty (secret) does not trigger the guild-change message.
 - [ ] [Era] With a large board (hundreds of listings, e.g. seeded on a test guild), a client that logs in catches up fully; the log shows no "too large" entries.
 

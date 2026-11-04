@@ -4,7 +4,7 @@ local Theme = {}
 ns.Theme = Theme
 
 local values = {
-  title = "Guildhall",
+  title = "Guildhearth",
   accent = { 1, 0.82, 0 },
   border = { 0.42, 0.35, 0.23 },
   logo = nil,

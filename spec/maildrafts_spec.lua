@@ -2,8 +2,8 @@ describe("Exchange.MailDrafts", function()
   local ns, M
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/MailDrafts.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/MailDrafts.lua")
     M = ns.Exchange.MailDrafts
   end)
 

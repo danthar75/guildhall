@@ -11,8 +11,8 @@ describe("LogView export", function()
 
   before_each(function()
     ns = { UI = {}, Util = { Trim = function(s) return s end } }
-    loadAddonFile(ns, "Guildhall/Core/Log.lua")
-    loadAddonFile(ns, "Guildhall/Core/UI/LogView.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Log.lua")
+    loadAddonFile(ns, "Guildhearth/Core/UI/LogView.lua")
     log = ns.Log.new({}, function() return 5000 end, fmt)
     -- newest first, as Log:Query returns them
     entries = {

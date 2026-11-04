@@ -2,5 +2,5 @@
 function loadAddonFile(ns, relPath)
   local f, err = loadfile(relPath)
   if not f then error(err, 2) end
-  return f("Guildhall", ns)
+  return f("Guildhearth", ns)
 end

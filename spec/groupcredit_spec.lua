@@ -42,10 +42,10 @@ describe("Groups Credit", function()
 
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Scoring.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Instances.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Credit.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Scoring.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Instances.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Credit.lua")
     Credit = ns.Groups.Credit
     seq, tz, unknownRoster, mixed = 0, 0, false, false
     guild = {}
@@ -219,9 +219,9 @@ describe("Groups Credit", function()
     assert.same({ ["A-R"] = true, ["C-R"] = true }, Credit.RaidLeaders("mc", day))
   end)
 
-  it("a guild member without Guildhall earns nothing, not even toward the guild total", function()
+  it("a guild member without Guildhearth earns nothing, not even toward the guild total", function()
     mixed = true -- "Count runs with non-guild players" on: the majority rule
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Ledger.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Ledger.lua")
     ns.Observations = { KINDS = { kill = true } }
     local members = { "A-R", "B-R", "C-R", "X-R", "Y-R" } -- C-R is guild but has no profile
     chars.p3 = nil
@@ -239,7 +239,7 @@ describe("Groups Credit", function()
     assert.equal(2, r.guild["groups.dungeon"])
     local why = {}
     for _, row in ipairs(r.rows) do why[row.char] = row.why or "ok" end
-    assert.same({ ["A-R"] = "ok", ["B-R"] = "ok", ["C-R"] = "not using Guildhall" }, why)
+    assert.same({ ["A-R"] = "ok", ["B-R"] = "ok", ["C-R"] = "not using Guildhearth" }, why)
   end)
 
   it("RaidLeaders caches per observations.changes and tz", function()

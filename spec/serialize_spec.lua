@@ -1,6 +1,6 @@
 describe("Serialize", function()
   local S
-  before_each(function() local ns = {}; loadAddonFile(ns, "Guildhall/Core/Serialize.lua"); S = ns.Serialize end)
+  before_each(function() local ns = {}; loadAddonFile(ns, "Guildhearth/Core/Serialize.lua"); S = ns.Serialize end)
   it("round-trips nested values", function()
     local v = { id = "p1:2", v = 3, del = false, d = { note = "a|b\n:{}\\", qty = -4.5, list = { 1, "two" } } }
     assert.same(v, S.Decode(S.Encode(v)))

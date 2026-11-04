@@ -3,7 +3,7 @@ local ADDON, ns = ...
 -- Welcome screen and About tab. Both build their content with UI.AboutContent, so they can't
 -- drift apart. Shows on the first open of the window on an account, and again when a version
 -- with a "What's new" entry arrives. Saved as personal.welcome = { seen = "<last version seen>" }.
--- Named global: "GuildhallWelcomeFrame" (so Esc closes it via UISpecialFrames).
+-- Named global: "GuildhearthWelcomeFrame" (so Esc closes it via UISpecialFrames).
 -- Only plain ASCII (plus the middle dot and multiplication sign) in any text here.
 local UI = ns.UI
 local Welcome = {}
@@ -17,7 +17,7 @@ local GNOME = "No gnomes were harmed during the creation of this add-on. I mean,
 function Welcome.Version()
   local getter = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
   if type(getter) == "function" then
-    local ok, v = pcall(getter, "Guildhall", "Version")
+    local ok, v = pcall(getter, "Guildhearth", "Version")
     if ok and type(v) == "string" and v ~= "" then return v end
   end
   local newest = ns.WhatsNew.ENTRIES[1]
@@ -78,7 +78,7 @@ function UI.AboutContent(parent, opts)
     tabard:SetPoint("TOPLEFT", frame, "TOPLEFT", 56, 0)
     if UI.ApplyTabard(tabard) then left = 112 end
   end
-  local title = UI.Text(frame, "GameFontNormalLarge", (guild and (ns.Util.Escape(guild) .. "  ") or "") .. "Guildhall")
+  local title = UI.Text(frame, "GameFontNormalLarge", (guild and (ns.Util.Escape(guild) .. "  ") or "") .. "Guildhearth")
   title:SetPoint("TOPLEFT", frame, "TOPLEFT", left, -4)
   local accent = ns.Theme and ns.Theme.Get and ns.Theme.Get("accent")
   if accent then title:SetTextColor(accent[1], accent[2], accent[3]) end
@@ -111,8 +111,8 @@ function UI.AboutContent(parent, opts)
     end
   end
 
-  -- What Guildhall does.
-  text("GameFontNormalLarge", "What Guildhall does", 14)
+  -- What Guildhearth does.
+  text("GameFontNormalLarge", "What Guildhearth does", 14)
   for _, s in ipairs(sections()) do
     text("GameFontNormal", s.title or "", 8)
     for _, line in ipairs(s.lines or {}) do text("GameFontHighlight", line, 2) end
@@ -139,9 +139,9 @@ end
 
 local function build()
   if panel then return end
-  local f = UI.CreatePanel("GuildhallWelcomeFrame", WIDTH + 70, 520, "Welcome to Guildhall")
-  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhallWelcomeFrame") end
-  local scroll = CreateFrame("ScrollFrame", "GuildhallWelcomeScroll", f, "UIPanelScrollFrameTemplate")
+  local f = UI.CreatePanel("GuildhearthWelcomeFrame", WIDTH + 70, 520, "Welcome to Guildhearth")
+  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhearthWelcomeFrame") end
+  local scroll = CreateFrame("ScrollFrame", "GuildhearthWelcomeScroll", f, "UIPanelScrollFrameTemplate")
   scroll:SetPoint("TOPLEFT", 14, -44)
   scroll:SetPoint("BOTTOMRIGHT", -34, 44)
   local close = UI.Button(f, "Close", 90, function() Welcome:Hide() end)
@@ -217,7 +217,7 @@ end
 
 -- About tab: the same content with every WhatsNew entry, plus a button to open the welcome screen.
 function Welcome.BuildAbout(parent)
-  local scroll = CreateFrame("ScrollFrame", "GuildhallAboutScroll", parent, "UIPanelScrollFrameTemplate")
+  local scroll = CreateFrame("ScrollFrame", "GuildhearthAboutScroll", parent, "UIPanelScrollFrameTemplate")
   scroll:SetPoint("TOPLEFT", 4, -34)
   scroll:SetPoint("BOTTOMRIGHT", -26, 4)
   local content = UI.AboutContent(scroll, { allNews = true })

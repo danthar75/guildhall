@@ -15,7 +15,7 @@ function Comm.new(opts)
   self.compat = opts.compat
   self.now = opts.now
   self.after = opts.after
-  self.prefix = opts.prefix or "Guildhall"
+  self.prefix = opts.prefix or "Guildhearth"
   self.maxBytes = opts.maxBytes or 255
   self.burst = opts.burst or 10
   self.refill = opts.refill or 1

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Renders the Guildhall logo ("The Hall") with no image libraries.
+"""Renders the Guildhearth logo ("The Hall") with no image libraries.
 
     python3 tools/make-logo.py <out-dir>
 

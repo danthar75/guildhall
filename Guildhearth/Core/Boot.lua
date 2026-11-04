@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local Boot = {}
 ns.Boot = Boot
 
-local PREFIX = "Guildhall"
+local PREFIX = "Guildhearth"
 local PROFILE_REFRESH = 7 * 86400 -- republish our profile when it expires within this window
 local GUILD_RETRIES = 10           -- GuildKey retries, 1 s apart
 
@@ -144,7 +144,7 @@ local rosterCompat = setmetatable({
 }, { __index = compat })
 
 local function buildServices(guildKey)
-  local sv = GuildhallDB
+  local sv = GuildhearthDB
   local now = function() return compat:Now() end
   local random = fastrandom or math.random
   local playerChar = compat:PlayerFullName()
@@ -228,10 +228,10 @@ local function halt(state, newKey)
   ns.groups = nil
   if ns.Groups and ns.Groups.Credit then ns.Groups.Credit.Attach(nil) end
   if state == "changed" then
-    print("|cffffd200Guildhall|r: you changed guild. Type /reload to switch Guildhall to "
+    print("|cffffd200Guildhearth|r: you changed guild. Type /reload to switch Guildhearth to "
       .. ns.Util.DisplayName(newKey) .. ".")
   else
-    print("|cffffd200Guildhall|r: you left your guild, so Guildhall has stopped. Type /reload to reset it.")
+    print("|cffffd200Guildhearth|r: you left your guild, so Guildhearth has stopped. Type /reload to reset it.")
   end
   refreshUI()
 end
@@ -319,7 +319,7 @@ end
 -- One lookup. Returns true when there is nothing left to wait for.
 local function attemptNow()
   if booted then return true end
-  if type(GuildhallDB) ~= "table" then return false end
+  if type(GuildhearthDB) ~= "table" then return false end
   local key = compat:GuildKey()
   if not key then return false end
   start(key)
@@ -341,7 +341,7 @@ local function retryLoop(attempt)
     -- and roster updates keep retrying.
     if not noGuildNotified and not compat:IsRestricted("Map") and not compat:IsRestricted("Chat") then
       noGuildNotified = true
-      print("|cffffd200Guildhall|r: you're not in a guild, so Guildhall is resting. Join a guild to use it.")
+      print("|cffffd200Guildhearth|r: you're not in a guild, so Guildhearth is resting. Join a guild to use it.")
     end
     return
   end
@@ -379,8 +379,8 @@ end
 
 -- Mail -----------------------------------------------------------------------------
 
-if StaticPopupDialogs then StaticPopupDialogs["GUILDHALL_MAIL_DRAFT"] = {
-  text = "Fill in your Guildhall mail draft to %s?",
+if StaticPopupDialogs then StaticPopupDialogs["GUILDHEARTH_MAIL_DRAFT"] = {
+  text = "Fill in your Guildhearth mail draft to %s?",
   button1 = "Fill in",
   button2 = "Later",
   button3 = "Dismiss",
@@ -402,7 +402,7 @@ if StaticPopupDialogs then StaticPopupDialogs["GUILDHALL_MAIL_DRAFT"] = {
 
 handlers.ADDON_LOADED = function(name)
   if name ~= ADDON then return end
-  GuildhallDB = ns.DB.Init(GuildhallDB)
+  GuildhearthDB = ns.DB.Init(GuildhearthDB)
 end
 
 handlers.PLAYER_LOGIN = function()
@@ -437,7 +437,7 @@ handlers.MAIL_SHOW = function()
   if not ns.exchange then return end
   local draft = ns.exchange:OnMailShow()
   if draft and StaticPopup_Show then
-    StaticPopup_Show("GUILDHALL_MAIL_DRAFT", tostring(draft.to), nil, draft)
+    StaticPopup_Show("GUILDHEARTH_MAIL_DRAFT", tostring(draft.to), nil, draft)
   end
 end
 

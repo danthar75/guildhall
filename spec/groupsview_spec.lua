@@ -42,11 +42,11 @@ describe("Groups.View", function()
     canKey, night, flexStatus, assigned, confirmed, asked = {}, {}, {}, {}, {}, {}
     searched, formOpened = nil, nil
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Scoring.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Instances.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Credit.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Scoring.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Instances.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Credit.lua")
     ns.OnError = function(e) errors[#errors + 1] = e end
     ns.Events = { On = function(_, event, fn) handlers[#handlers + 1] = { event, fn } end }
     ns.UI = {
@@ -93,7 +93,7 @@ describe("Groups.View", function()
       after = function(_, cb) cb() end,
     }
     personal = { groups = { roles = { d = true } } }
-    _G.GuildhallDB = { personal = personal }
+    _G.GuildhearthDB = { personal = personal }
     ns.leaderboard = {
       permissions = { Can = function(_, _, key) return canKey[key] == true end },
       config = { Tz = function() return 0 end },
@@ -130,13 +130,13 @@ describe("Groups.View", function()
       },
       credit = { Bosses = function() return 0 end },
     }
-    loadAddonFile(ns, "Guildhall/Modules/Groups/UI/Details.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/UI/View.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/UI/Details.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/UI/View.lua")
   end)
 
   after_each(function()
     for _, k in ipairs(GLOBALS) do _G[k] = saved[k] end
-    _G.GuildhallDB = nil
+    _G.GuildhearthDB = nil
   end)
 
   local function build()
@@ -415,7 +415,7 @@ describe("Groups.View", function()
     click(buttons["History"])
     assert.is_true(has("Your last runs"))
     local line = view.hist.lines[1]
-    assert.equal("Cleared RFC, no second Guildhall player saw it", line.text.text)
+    assert.equal("Cleared RFC, no second Guildhearth player saw it", line.text.text)
     assert.is_not_nil(line.text.calls.SetTextColor)
     local c = line.text.calls.SetTextColor[#line.text.calls.SetTextColor]
     assert.same({ 0.62, 0.62, 0.62 }, { c[1], c[2], c[3] })

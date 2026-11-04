@@ -3,7 +3,7 @@ describe("Boot", function()
   local fakes = require("spec.helpers.fakes")
   local ns, clock, timers, env, script, printed, sent, guild, restricted, inGuild
   local saved = {}
-  local GLOBALS = { "CreateFrame", "C_Timer", "GuildhallDB", "print", "GetNormalizedRealmName", "Enum" }
+  local GLOBALS = { "CreateFrame", "C_Timer", "GuildhearthDB", "print", "GetNormalizedRealmName", "Enum" }
   local registered, probeCalls, probeEarly, spies
 
   local function fire(event, ...) script(nil, event, ...) end
@@ -24,7 +24,7 @@ describe("Boot", function()
       }
     end
     _G.C_Timer = { After = function(d, cb) timers.after(d, cb) end }
-    _G.GuildhallDB = nil
+    _G.GuildhearthDB = nil
     _G.print = function(msg) printed[#printed + 1] = tostring(msg) end
     _G.GetNormalizedRealmName = function() return "Realm" end
 
@@ -43,28 +43,28 @@ describe("Boot", function()
       C_RestrictedActions = { GetAddOnRestrictionState = function() return restricted end },
     })
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Init.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Init.lua")
     for _, f in ipairs({ "Util", "Serialize", "DB", "ReplicatedSet", "Comm", "Sync", "Log", "Roster", "Profile" }) do
-      loadAddonFile(ns, "Guildhall/Core/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Core/" .. f .. ".lua")
     end
     ns.compat = compat
     ns.UI = {
       Launcher = { Init = function() end },
       Window = { Refresh = function() end },
       Consent = { Show = function() end },
-      Personal = function() return GuildhallDB and GuildhallDB.personal end,
+      Personal = function() return GuildhearthDB and GuildhearthDB.personal end,
     }
     for _, f in ipairs({ "Activity", "Observations", "Ledger", "Scoring", "Bank", "Config" }) do
-      loadAddonFile(ns, "Guildhall/Core/Leaderboard/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Core/Leaderboard/" .. f .. ".lua")
     end
-    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Permissions.lua")
     for _, f in ipairs({ "Category", "Listing", "Format", "MailDrafts", "Exchange", "Deals", "DealWatch" }) do
-      loadAddonFile(ns, "Guildhall/Modules/Exchange/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Modules/Exchange/" .. f .. ".lua")
     end
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Module.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Module.lua")
     for _, f in ipairs({ "Perms", "Instances", "Post", "Groups", "KillWatch", "Credit", "Checklist", "Flex",
       "Calendar", "Reminders", "Module" }) do
-      loadAddonFile(ns, "Guildhall/Modules/Groups/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Modules/Groups/" .. f .. ".lua")
     end
     -- count the calls the ordering/hook rules are about, on the instances Module/Exchange build
     local cfgNew = ns.LbConfig.new
@@ -82,13 +82,13 @@ describe("Boot", function()
     end
     ns.RegisterModule("Thrower", { events = { PROBE = function() error("boom") end } })
     ns.RegisterModule("Probe", { events = { PROBE = function(n, ...) probeCalls[#probeCalls + 1] = { n, ... } end } })
-    loadAddonFile(ns, "Guildhall/Core/Boot.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Boot.lua")
     fire("PROBE", "early") -- before ADDON_LOADED / login: module events must not fire yet
     probeEarly = #probeCalls
-    fire("ADDON_LOADED", "Guildhall")
+    fire("ADDON_LOADED", "Guildhearth")
     -- consent already given for this character in GuildA, so login publishes and syncs
-    GuildhallDB.personal.profile.consented = true
-    GuildhallDB.personal.profile.chars["Me-Realm"] = { guild = "GuildA-Realm", included = true }
+    GuildhearthDB.personal.profile.consented = true
+    GuildhearthDB.personal.profile.chars["Me-Realm"] = { guild = "GuildA-Realm", included = true }
     fire("PLAYER_LOGIN")
   end)
 
@@ -145,7 +145,7 @@ describe("Boot", function()
   it("tab order is Exchange, Leaderboard, Groups, Log, Settings, About", function()
     local real = ns.UI
     ns.UI = nil
-    loadAddonFile(ns, "Guildhall/Core/UI/Window.lua")
+    loadAddonFile(ns, "Guildhearth/Core/UI/Window.lua")
     local keys = ns.UI.Window:TabKeys()
     ns.UI = real
     assert.same({ "Exchange", "Leaderboard", "Groups", "Log", "Settings", "About" }, keys)
@@ -164,7 +164,7 @@ describe("Boot", function()
       if sync == g.svc.postSync or sync == g.svc.signupSync or sync == g.svc.readySync then has = has + 1 end
     end
     assert.equal(3, has)
-    assert.same({ reminders = true, sound = true, roles = { d = true } }, GuildhallDB.personal.groups)
+    assert.same({ reminders = true, sound = true, roles = { d = true } }, GuildhearthDB.personal.groups)
   end)
 
   it("the kill watch gets the guarded timer, the random source, the profile and the player", function()
@@ -530,7 +530,7 @@ describe("Boot", function()
   it("halts on a guild change: no answers, no stores touched, asks for /reload (I3)", function()
     local ok, rec = ns.exchange:Post({ kind = "WTS", item = "Linen Cloth", mats = false, cod = false })
     assert.is_true(ok)
-    local storeA = GuildhallDB.guilds["GuildA-Realm"].modules.Exchange.listings
+    local storeA = GuildhearthDB.guilds["GuildA-Realm"].modules.Exchange.listings
     guild = "GuildB"
     fire("PLAYER_GUILD_UPDATE")
     wait(3)
@@ -538,14 +538,14 @@ describe("Boot", function()
     assert.truthy(printed[#printed]:find("/reload", 1, true))
     assert.truthy(printed[#printed]:find("GuildB", 1, true))
     local before = #sent
-    fire("CHAT_MSG_ADDON", "Guildhall", peerLine({ have = {} }), "GUILD", "Peer-Realm")
+    fire("CHAT_MSG_ADDON", "Guildhearth", peerLine({ have = {} }), "GUILD", "Peer-Realm")
     wait(10)
     assert.equal(before, #sent) -- A's listings are not served to B
     assert.is_not_nil(storeA[rec.id])
-    assert.is_nil(GuildhallDB.guilds["GuildB-Realm"])
-    local logs = #GuildhallDB.guilds["GuildA-Realm"].log
-    fire("CHAT_MSG_ADDON", "Guildhall", "junk", "GUILD", "Peer-Realm")
-    assert.equal(logs, #GuildhallDB.guilds["GuildA-Realm"].log)
+    assert.is_nil(GuildhearthDB.guilds["GuildB-Realm"])
+    local logs = #GuildhearthDB.guilds["GuildA-Realm"].log
+    fire("CHAT_MSG_ADDON", "Guildhearth", "junk", "GUILD", "Peer-Realm")
+    assert.equal(logs, #GuildhearthDB.guilds["GuildA-Realm"].log)
     fire("GUILD_ROSTER_UPDATE"); wait(3)
     assert.equal(1, #printed) -- said once
   end)

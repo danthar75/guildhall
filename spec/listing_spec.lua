@@ -13,9 +13,9 @@ describe("Exchange.Listing", function()
 
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/Category.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/Listing.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/Category.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/Listing.lua")
     L = ns.Exchange.Listing
   end)
 

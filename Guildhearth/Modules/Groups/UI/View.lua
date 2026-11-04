@@ -28,8 +28,8 @@ local READY_WINDOWS = { 3600, 7200, 14400 }
 
 -- Ledger and credit reasons, in plain words.
 local WHY = {
-  ["not verified"] = "no second Guildhall player saw it",
-  ["not using Guildhall"] = "that character isn't linked to Guildhall",
+  ["not verified"] = "no second Guildhearth player saw it",
+  ["not using Guildhearth"] = "that character isn't linked to Guildhearth",
   ["not a guild group"] = "not mostly guild members",
   ["waiting for the switch"] = "waiting for the spec switch",
   ["not permitted"] = "asked by someone without permission",

@@ -3,10 +3,10 @@ describe("Exchange.Board", function()
   local Board
   before_each(function()
     local ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
     ns.UI = {}
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/Category.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/UI/Board.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/Category.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/UI/Board.lua")
     Board = ns.Exchange.Board
     _G.GetItemInfoInstant = function(l)
       local id = tonumber(tostring(l):match("item:(%d+)"))
@@ -118,7 +118,7 @@ describe("Exchange.Board", function()
 
     local function load(withWindow)
       local ns = {}
-      loadAddonFile(ns, "Guildhall/Core/Util.lua")
+      loadAddonFile(ns, "Guildhearth/Core/Util.lua")
       shown = nil
       ns.UI = {
         Try = function(fn, ...) return fn(...) end,
@@ -130,8 +130,8 @@ describe("Exchange.Board", function()
         ItemIcon = function() end,
       }
       if withWindow then ns.UI.Window = { Show = function(_, key) shown = key end } end
-      loadAddonFile(ns, "Guildhall/Modules/Exchange/Category.lua")
-      loadAddonFile(ns, "Guildhall/Modules/Exchange/UI/Board.lua")
+      loadAddonFile(ns, "Guildhearth/Modules/Exchange/Category.lua")
+      loadAddonFile(ns, "Guildhearth/Modules/Exchange/UI/Board.lua")
       ns.Exchange.BoardDetails = { Build = function() end, Show = function() end }
       return ns
     end

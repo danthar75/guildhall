@@ -1,7 +1,7 @@
 local ADDON, ns = ...
 
 -- Exchange settings section: edits the personal message templates
--- (GuildhallDB.personal.templates, the table ns.services.templates points at).
+-- (GuildhearthDB.personal.templates, the table ns.services.templates points at).
 -- A field equal to the default is stored as nil so future default changes apply.
 -- Newlines are shown and typed as "\n" because the edit boxes are single-line.
 ns.Exchange = ns.Exchange or {}

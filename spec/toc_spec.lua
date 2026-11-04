@@ -11,8 +11,8 @@ describe("TOC files", function()
     return out
   end
 
-  local forever = files("Guildhall/Guildhall.toc")
-  local vanilla = files("Guildhall/Guildhall_Vanilla.toc")
+  local forever = files("Guildhearth/Guildhearth.toc")
+  local vanilla = files("Guildhearth/Guildhearth_Vanilla.toc")
 
   it("list the same files in the same order", function()
     assert.is_true(#forever > 0)
@@ -24,7 +24,7 @@ describe("TOC files", function()
     for _, rel in ipairs(forever) do
       assert.is_nil(seen[rel], "listed twice: " .. rel)
       seen[rel] = true
-      local f = io.open("Guildhall/" .. rel:gsub("\\", "/"))
+      local f = io.open("Guildhearth/" .. rel:gsub("\\", "/"))
       assert.is_not_nil(f, "missing: " .. rel)
       if f then f:close() end
     end
@@ -33,7 +33,7 @@ describe("TOC files", function()
   it("list every Lua file in the addon, with Init first and Boot last", function()
     local listed = {}
     for _, rel in ipairs(forever) do listed[rel] = true end
-    local p = assert(io.popen("cd Guildhall && find . -name '*.lua' | sort"))
+    local p = assert(io.popen("cd Guildhearth && find . -name '*.lua' | sort"))
     for path in p:lines() do
       local rel = path:gsub("^%./", "")
       assert.is_true(listed[rel] == true, "not in the TOC: " .. rel)

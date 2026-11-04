@@ -11,12 +11,12 @@ describe("Leaderboard Config sync between clients", function()
   local function client(char, ranks, loaded)
     local ns = {}
     for _, f in ipairs({ "Util", "DB", "ReplicatedSet", "Sync", "Log" }) do
-      loadAddonFile(ns, "Guildhall/Core/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Core/" .. f .. ".lua")
     end
     for _, f in ipairs({ "Activity", "Scoring", "Config" }) do
-      loadAddonFile(ns, "Guildhall/Core/Leaderboard/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Core/Leaderboard/" .. f .. ".lua")
     end
-    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Permissions.lua")
     ns.Activity.Register({ id = "sales", label = "Sales", unit = "count", verify = "paired", weight = 5, order = 1 })
     local roster = {
       HasRanks = function() if loaded then return loaded() end return next(ranks) ~= nil end,

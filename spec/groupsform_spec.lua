@@ -34,12 +34,12 @@ describe("Groups.Form", function()
     texts, buttons, picked, errors, posted, saved, refreshed, hook = {}, {}, nil, {}, nil, {}, 0, nil
     offset, canKey, stored = 0, { checklists = true }, {}
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Scoring.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Instances.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Post.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Credit.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Scoring.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Instances.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Post.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Credit.lua")
     ns.OnError = function(e) errors[#errors + 1] = e end
     ns.UI = {
       Try = function(fn, ...)
@@ -71,7 +71,7 @@ describe("Groups.Form", function()
         Safe = function(_, v) return v end,
       },
     }
-    _G.GuildhallDB = { personal = { groups = { roles = { d = true } } } }
+    _G.GuildhearthDB = { personal = { groups = { roles = { d = true } } } }
     ns.leaderboard = {
       permissions = { Can = function(_, _, key) return canKey[key] == true end },
       config = { Tz = function() return offset end },
@@ -95,14 +95,14 @@ describe("Groups.Form", function()
       },
     }
     ns.Groups.View = { Refresh = function() refreshed = refreshed + 1 end }
-    loadAddonFile(ns, "Guildhall/Modules/Groups/UI/Details.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/UI/Form.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/UI/ChecklistEditor.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/UI/Details.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/UI/Form.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/UI/ChecklistEditor.lua")
   end)
 
   after_each(function()
     for _, k in ipairs(GLOBALS) do _G[k] = keep[k] end
-    _G.GuildhallDB = nil
+    _G.GuildhearthDB = nil
   end)
 
   local function form() return ns.Groups.Form end
@@ -270,7 +270,7 @@ describe("Groups.Form", function()
     end)
 
     it("uses no glyph above U+00FF", function()
-      for _, path in ipairs({ "Guildhall/Modules/Groups/UI/Form.lua", "Guildhall/Modules/Groups/UI/ChecklistEditor.lua" }) do
+      for _, path in ipairs({ "Guildhearth/Modules/Groups/UI/Form.lua", "Guildhearth/Modules/Groups/UI/ChecklistEditor.lua" }) do
         local src = assert(io.open(path)):read("*a")
         -- UTF-8 lead bytes C4..F4 start code points >= U+0100
         assert.is_nil(src:find("[\196-\244]"), path)

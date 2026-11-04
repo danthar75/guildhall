@@ -36,13 +36,13 @@ describe("Groups KillWatch", function()
 
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Scoring.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Observations.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Instances.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/KillWatch.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Credit.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Scoring.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Observations.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Instances.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/KillWatch.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Credit.lua")
     pubStatus = "accepted"
     published, opts, timers, now, secret, instKey, store = {}, {}, {}, 10000, {}, 409, {}
     jitter = function(lo) return lo end

@@ -7,7 +7,7 @@ describe("Log", function()
 
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Log.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Log.lua")
     clock = fakes.clock(1700000000)
     store = {}
     log = ns.Log.new(store, clock.now, fmt)

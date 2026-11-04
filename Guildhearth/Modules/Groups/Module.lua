@@ -138,9 +138,9 @@ local function build(n, s)
   local G = n.Groups
   local observations, config = lb.observations, lb.realConfig or lb.config
   local perms = lb.realPermissions or lb.permissions
-  local personal = GuildhallDB.personal
+  local personal = GuildhearthDB.personal
   G.Reminders.Defaults(personal)
-  local db = n.DB.Module(GuildhallDB, s.guildKey, "Groups")
+  local db = n.DB.Module(GuildhearthDB, s.guildKey, "Groups")
 
   local g = { pending = {}, now = s.now, observations = observations, config = config, profile = s.profile }
   -- timers of this module stop with a halt (or a rebuilt ns.groups)

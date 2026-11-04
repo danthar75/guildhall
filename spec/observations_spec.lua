@@ -6,9 +6,9 @@ describe("Observations", function()
     o = o or {}
     local ns = {}
     for _, f in ipairs({ "Util", "DB", "ReplicatedSet", "Sync", "Log", "Profile" }) do
-      loadAddonFile(ns, "Guildhall/Core/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Core/" .. f .. ".lua")
     end
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Observations.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Observations.lua")
     local n = { name = name, ns = ns }
     n.roster = { IsOnline = function() end, IsOfficer = function() end }
     local personal = ns.DB.Init().personal

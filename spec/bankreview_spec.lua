@@ -34,14 +34,14 @@ describe("Leaderboard.BankReview", function()
         why = "rank excluded" },
     }
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Scoring.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Config.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Scoring.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Config.lua")
     ns.OnError = function(e) errors[#errors + 1] = e end
     ns.Events = { On = function(_, event, fn) handlers[#handlers + 1] = { event, fn } end }
     ns.UI = {
-      NO_GUILD_TEXT = "Join a guild to use Guildhall",
+      NO_GUILD_TEXT = "Join a guild to use Guildhearth",
       Try = function(fn, ...)
         local ok, res = pcall(fn, ...)
         if not ok then ns.OnError(res); return nil end
@@ -93,7 +93,7 @@ describe("Leaderboard.BankReview", function()
         end,
       },
     }
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/UI/BankReview.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/UI/BankReview.lua")
     BR = ns.Leaderboard.BankReview
   end)
 
@@ -215,10 +215,10 @@ describe("Leaderboard.BankReview", function()
     click(check)
     assert.is_true(check.checked) -- stays ticked until the prompt is accepted
     assert.equal(1, #popups)
-    assert.equal("GUILDHALL_BANK_EXCLUDE", popups[1].which)
+    assert.equal("GUILDHEARTH_BANK_EXCLUDE", popups[1].which)
     assert.equal("bank:o1", popups[1].data)
     assert.same({}, setCalls())
-    local dlg = StaticPopupDialogs.GUILDHALL_BANK_EXCLUDE
+    local dlg = StaticPopupDialogs.GUILDHEARTH_BANK_EXCLUDE
     assert.equal("Why doesn't this count? (optional)", dlg.text)
     assert.equal(80, dlg.maxLetters)
     -- Cancel
@@ -242,7 +242,7 @@ describe("Leaderboard.BankReview", function()
 
   it("Enter in the reason box excludes and closes the prompt", function()
     BR.Open()
-    local dlg = StaticPopupDialogs.GUILDHALL_BANK_EXCLUDE
+    local dlg = StaticPopupDialogs.GUILDHEARTH_BANK_EXCLUDE
     local parent = W.new("Frame")
     local box = W.new("EditBox")
     box.GetParent = function() return parent end
@@ -265,7 +265,7 @@ describe("Leaderboard.BankReview", function()
     BR.Open()
     local p = BR._panel()
     assert.is_true(p.empty.shown)
-    assert.equal("No guild bank activity recorded yet. Entries appear after someone with Guildhall opens the guild bank.",
+    assert.equal("No guild bank activity recorded yet. Entries appear after someone with Guildhearth opens the guild bank.",
       p.empty:GetText())
     assert.same({}, shownRefs())
   end)
@@ -318,15 +318,15 @@ describe("Leaderboard.BankReview", function()
   it("UI strings use allowed glyphs only", function()
     BR.Open()
     for _, t in ipairs(texts) do assert.is_true(isAllowed(tostring(t.text)), tostring(t.text)) end
-    for _, path in ipairs({ "Guildhall/Core/Leaderboard/UI/BankReview.lua", "Guildhall/Core/Leaderboard/UI/View.lua",
-      "Guildhall/Core/Leaderboard/Config.lua", "Guildhall/Core/Leaderboard/Ledger.lua" }) do
+    for _, path in ipairs({ "Guildhearth/Core/Leaderboard/UI/BankReview.lua", "Guildhearth/Core/Leaderboard/UI/View.lua",
+      "Guildhearth/Core/Leaderboard/Config.lua", "Guildhearth/Core/Leaderboard/Ledger.lua" }) do
       local f = assert(io.open(path)); local src = f:read("*a"); f:close()
       for str in src:gmatch('"([^"\n]*)"') do assert.is_true(isAllowed(str), path .. ": " .. str) end
     end
   end)
 
   it("a member's excluded and unpaired rows appear under one player entry (real Ledger)", function()
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Ledger.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Ledger.lua")
     ns.Observations = { KINDS = { bank = true } }
     ns.Activity.Register({ id = "bank.gold", label = "Bank gold", unit = "gold", verify = "paired", weight = 0.2, order = 60 })
     local contribs = {

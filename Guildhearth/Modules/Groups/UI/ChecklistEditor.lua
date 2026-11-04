@@ -6,7 +6,7 @@ local ADDON, ns = ...
 -- ns.groups.checklist:Save, which checks the "checklists" permission and the lines; its refusal is
 -- shown in the editor. Without the permission tonight the editor says so and Save is off.
 -- Items: shift-click (Form.ListenLinks), drag onto the item box's slot, or a typed item ID.
--- Named global frame: "GuildhallUIChecklistEditor".
+-- Named global frame: "GuildhearthUIChecklistEditor".
 ns.Groups = ns.Groups or {}
 local UI = ns.UI
 local Util = ns.Util
@@ -137,7 +137,7 @@ end
 local function save()
   local g = ns.groups
   local cl = g and g.checklist
-  if not cl then setError("Guildhall isn't ready yet. Try again in a moment."); return end
+  if not cl then setError("Guildhearth isn't ready yet. Try again in a moment."); return end
   local lines = {}
   for i, l in ipairs(f.lines) do lines[i] = Util.DeepCopy(l) end
   local ok, res = cl:Save({ id = f.id, instance = f.instance, name = Util.Trim(f.name:GetText() or ""),
@@ -175,9 +175,9 @@ end
 
 local function build()
   if frame then return end
-  frame = UI.CreatePanel("GuildhallUIChecklistEditor", WIDTH, HEIGHT, "Checklist")
+  frame = UI.CreatePanel("GuildhearthUIChecklistEditor", WIDTH, HEIGHT, "Checklist")
   f.frame = frame
-  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhallUIChecklistEditor") end
+  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhearthUIChecklistEditor") end
 
   label("Name:", 20, -50)
   f.name = input(240)

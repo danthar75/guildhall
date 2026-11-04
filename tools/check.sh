@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 LUAC=.tools/lua/bin/luac
 while IFS= read -r f; do
   "$LUAC" -p "$f"
-done < <(find Guildhall -name '*.lua' | sort)
+done < <(find Guildhearth -name '*.lua' | sort)
 if [ -n "$(find spec -name '*_spec.lua' 2>/dev/null)" ]; then
   .tools/lua/bin/busted
 else

@@ -14,10 +14,10 @@ describe("Profile", function()
 
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/DB.lua")
-    loadAddonFile(ns, "Guildhall/Core/ReplicatedSet.lua")
-    loadAddonFile(ns, "Guildhall/Core/Profile.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/DB.lua")
+    loadAddonFile(ns, "Guildhearth/Core/ReplicatedSet.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Profile.lua")
     now = 1000
     store, online = {}, {}
     personal = ns.DB.Init().personal

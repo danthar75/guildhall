@@ -2,7 +2,7 @@ describe("Activity", function()
   local ns
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
   end)
 
   local function def(id, order)

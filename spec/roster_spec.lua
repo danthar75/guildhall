@@ -4,9 +4,9 @@ describe("Roster", function()
 
   local function make(rows, overrides, cache)
     local ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Compat.lua")
-    loadAddonFile(ns, "Guildhall/Core/Roster.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Compat.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Roster.lua")
     Roster = ns.Roster
     local e = {
       UnitName = function() return "Me" end,
@@ -16,7 +16,7 @@ describe("Roster", function()
         local r = rows[i]
         return r.name, "Rank", r.rank, 80, "Mage", "Zone", "", "", r.online
       end,
-      C_GuildInfo = { GetInfoText = function() return "Hello [Guildhall officers=3]" end, GuildRoster = function() end },
+      C_GuildInfo = { GetInfoText = function() return "Hello [Guildhearth officers=3]" end, GuildRoster = function() end },
     }
     for k, v in pairs(overrides or {}) do e[k] = v end
     local c = fakes.compat(e)
@@ -26,16 +26,16 @@ describe("Roster", function()
 
   it("ParseTag reads officers=3", function()
     local ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Roster.lua")
-    local r = ns.Roster.ParseTag("x [Guildhall officers=3 mode=fast] y")
+    loadAddonFile(ns, "Guildhearth/Core/Roster.lua")
+    local r = ns.Roster.ParseTag("x [Guildhearth officers=3 mode=fast] y")
     assert.equal(3, r.officers)
     assert.equal("fast", r.mode)
   end)
 
   it("ParseTag tolerates spaces after commas", function()
     local ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Roster.lua")
-    local r = ns.Roster.ParseTag("[Guildhall donations=3, 4 bankexclude=0 ,1 officers=2]")
+    loadAddonFile(ns, "Guildhearth/Core/Roster.lua")
+    local r = ns.Roster.ParseTag("[Guildhearth donations=3, 4 bankexclude=0 ,1 officers=2]")
     assert.equal("3,4", r.donations)
     assert.equal("0,1", r.bankexclude)
     assert.equal(2, r.officers)
@@ -43,29 +43,29 @@ describe("Roster", function()
 
   it("ParseTag keeps settings separated by a comma", function()
     local ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Roster.lua")
-    local r = ns.Roster.ParseTag("[Guildhall donations=3,4, officers=2]")
+    loadAddonFile(ns, "Guildhearth/Core/Roster.lua")
+    local r = ns.Roster.ParseTag("[Guildhearth donations=3,4, officers=2]")
     assert.equal("3,4", r.donations)
     assert.equal(2, r.officers)
-    local r2 = ns.Roster.ParseTag("[Guildhall officers=2, mode=fast]")
+    local r2 = ns.Roster.ParseTag("[Guildhearth officers=2, mode=fast]")
     assert.equal(2, r2.officers)
     assert.equal("fast", r2.mode)
-    assert.equal("3,4", ns.Roster.ParseTag("[Guildhall donations=3, 4]").donations)
+    assert.equal("3,4", ns.Roster.ParseTag("[Guildhearth donations=3, 4]").donations)
   end)
 
   it("ParseTag ignores text without tag", function()
     local ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Roster.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Roster.lua")
     assert.same({}, ns.Roster.ParseTag("no tag here"))
-    assert.same({}, ns.Roster.ParseTag("[guildhall officers=3]"))
+    assert.same({}, ns.Roster.ParseTag("[guildhearth officers=3]"))
     assert.same({}, ns.Roster.ParseTag(nil))
     assert.same({}, ns.Roster.ParseTag(42))
   end)
 
   it("ParseTag merges two tags; ConfigList parses lists", function()
     local ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Roster.lua")
-    local text = "[Guildhall officers=3] notes [Guildhall donations=3,4 bankexclude=0]"
+    loadAddonFile(ns, "Guildhearth/Core/Roster.lua")
+    local text = "[Guildhearth officers=3] notes [Guildhearth donations=3,4 bankexclude=0]"
     local t = ns.Roster.ParseTag(text)
     assert.equal(3, t.officers)
     assert.equal("3,4", t.donations)

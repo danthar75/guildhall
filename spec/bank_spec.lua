@@ -26,10 +26,10 @@ describe("Bank log reader", function()
 
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Ledger.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Bank.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Ledger.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Bank.lua")
     now = 10 * H + 1200   -- 10:20
     published, logs, money, secrets, owners, timers, queried, db = {}, {}, {}, {}, {}, {}, {}, {}
     status = "accepted"
@@ -338,8 +338,8 @@ describe("Bank log reader", function()
     local V
     before_each(function()
       local n = {}
-      loadAddonFile(n, "Guildhall/Core/Util.lua")
-      loadAddonFile(n, "Guildhall/Core/Leaderboard/Observations.lua")
+      loadAddonFile(n, "Guildhearth/Core/Util.lua")
+      loadAddonFile(n, "Guildhearth/Core/Leaderboard/Observations.lua")
       V = n.Observations.Validate
     end)
     local function it_(o) local d = { kind = "bank", type = "dep", player = "Ann", tab = 1, item = 2589, count = 20, at = 3600 }

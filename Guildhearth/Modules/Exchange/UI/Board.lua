@@ -4,8 +4,8 @@ local ADDON, ns = ...
 -- list on the left; the selected listing's details and action buttons on the right.
 -- Board.Build(parent) -> view {refresh}; Board.Refresh() re-reads ns.exchange:List(filter).
 -- Global: ns.ExchangeUI.Search(text) (see below).
--- Named global: "GuildhallUIExchangeListScroll" (FauxScrollFrameTemplate needs a name).
--- Global table entries: StaticPopupDialogs.GUILDHALL_REMOVE_LISTING / GUILDHALL_OFFICER_REMOVE.
+-- Named global: "GuildhearthUIExchangeListScroll" (FauxScrollFrameTemplate needs a name).
+-- Global table entries: StaticPopupDialogs.GUILDHEARTH_REMOVE_LISTING / GUILDHEARTH_OFFICER_REMOVE.
 ns.Exchange = ns.Exchange or {}
 local UI = ns.UI
 local Util = ns.Util
@@ -578,7 +578,7 @@ function Board.Build(parent)
   view.faux = FauxScrollFrame_Update and FauxScrollFrame_GetOffset and FauxScrollFrame_OnVerticalScroll
     and FauxScrollFrame_SetOffset and true or false
   if view.faux then
-    view.scroll = CreateFrame("ScrollFrame", "GuildhallUIExchangeListScroll", listPanel, "FauxScrollFrameTemplate")
+    view.scroll = CreateFrame("ScrollFrame", "GuildhearthUIExchangeListScroll", listPanel, "FauxScrollFrameTemplate")
     view.scroll:SetPoint("TOPLEFT", 2, -2)
     view.scroll:SetPoint("BOTTOMRIGHT", -26, 2)
     on(view.scroll, "OnVerticalScroll", function(self, value)

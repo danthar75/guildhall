@@ -1,6 +1,6 @@
 local ADDON, ns = ...
 
--- Exchange deals: matches a completed transfer (trade, CoD, manual) to a Guildhall listing,
+-- Exchange deals: matches a completed transfer (trade, CoD, manual) to a Guildhearth listing,
 -- builds the observation both sides publish, and derives paired Contributions from those
 -- observations. Pure: no WoW API use. Gold values are copper.
 --

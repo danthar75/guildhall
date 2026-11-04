@@ -10,15 +10,15 @@ describe("Exchange.Format", function()
 
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/Format.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/Format.lua")
     F = ns.Exchange.Format
   end)
 
   it("Discord matches pinned format for LF", function()
     local out = F.Discord(rec({ note = "have the cloth, need a tailor. Tipping 20g." }))
     assert.are.equal("LF Robe of the Archmage\nI will provide materials\nI am open to CoD\n"
-      .. "Note: have the cloth, need a tailor. Tipping 20g.\n(Thalwyn, in game via Guildhall)", out)
+      .. "Note: have the cloth, need a tailor. Tipping 20g.\n(Thalwyn, in game via Guildhearth)", out)
   end)
 
   it("Discord WTS with qty and no note", function()
@@ -34,7 +34,7 @@ describe("Exchange.Format", function()
     r.d.mats = nil
     local out = F.Discord(r)
     assert.is_nil(out:find("provide materials", 1, true))
-    assert.equal("WTS Runecloth x40\nI am open to CoD\n(Thalwyn, in game via Guildhall)", out)
+    assert.equal("WTS Runecloth x40\nI am open to CoD\n(Thalwyn, in game via Guildhearth)", out)
   end)
 
   it("Whisper keeps item link", function()
@@ -44,7 +44,7 @@ describe("Exchange.Format", function()
 
   it("Mail subject is plain name", function()
     local s, b = F.Mail(rec())
-    assert.are.equal("Guildhall: Robe of the Archmage", s)
+    assert.are.equal("Guildhearth: Robe of the Archmage", s)
     assert.is_nil(b:find("|H", 1, true))
     assert.is_truthy(b:find("Robe of the Archmage", 1, true))
   end)
@@ -52,8 +52,8 @@ describe("Exchange.Format", function()
   it("custom template overrides one key", function()
     local out = F.Whisper(rec(), { whisperLF = "yo {item}" })
     assert.are.equal("yo " .. LINK, out)
-    assert.are.equal("Guildhall: Robe of the Archmage", (F.Mail(rec(), { whisperLF = "x" })))
-    assert.are.equal("Guildhall: Robe of the Archmage", (F.Mail(rec(), { mailSubject = 5 })))
+    assert.are.equal("Guildhearth: Robe of the Archmage", (F.Mail(rec(), { whisperLF = "x" })))
+    assert.are.equal("Guildhearth: Robe of the Archmage", (F.Mail(rec(), { mailSubject = 5 })))
   end)
 
   it("note with % and {item} appears literally", function()

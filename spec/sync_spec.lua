@@ -32,9 +32,9 @@ describe("Sync", function()
 
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/ReplicatedSet.lua")
-    loadAddonFile(ns, "Guildhall/Core/Sync.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/ReplicatedSet.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Sync.lua")
     clock = fakes.clock(1000)
     timers = fakes.timers(clock)
     bus = fakes.bus(clock, timers)

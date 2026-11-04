@@ -244,7 +244,7 @@ end
 local function svc() return ns.groups and ns.groups.svc end
 
 local function personalRoles()
-  local db = GuildhallDB
+  local db = GuildhearthDB
   local g = type(db) == "table" and type(db.personal) == "table" and db.personal.groups
   return type(g) == "table" and type(g.roles) == "table" and g.roles or { d = true }
 end

@@ -29,9 +29,9 @@ describe("Exchange.Form", function()
     _G.hooksecurefunc = function(tbl, name, fn) hook = fn end
     _G.ChatFrameUtil = { InsertLink = function() end }
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/Category.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/Listing.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/Category.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/Listing.lua")
     ns.compat = fakes.compat({ issecretvalue = function(v) return v == SECRET end })
     ns.OnError = function(e) errors[#errors + 1] = e end
     ns.UI = {
@@ -53,7 +53,7 @@ describe("Exchange.Form", function()
         return panel
       end,
     }
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/UI/Form.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/UI/Form.lua")
     ns.Exchange.Form.Open()
   end)
 

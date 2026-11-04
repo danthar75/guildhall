@@ -15,8 +15,8 @@ describe("ReplicatedSet", function()
 
   before_each(function()
     local ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/ReplicatedSet.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/ReplicatedSet.lua")
     RS = ns.ReplicatedSet
     clock = fakes.clock(1000)
     store, changes = {}, {}

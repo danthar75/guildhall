@@ -2,9 +2,9 @@ describe("DB", function()
   local ns
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/DB.lua")
-    loadAddonFile(ns, "Guildhall/Core/Theme.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/DB.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Theme.lua")
   end)
 
   it("DB.Init fills defaults without clobbering existing", function()
@@ -29,7 +29,7 @@ describe("DB", function()
   end)
 
   it("Theme returns copies and merges overrides", function()
-    assert.equal("Guildhall", ns.Theme.Get("title"))
+    assert.equal("Guildhearth", ns.Theme.Get("title"))
     ns.Theme.Get("accent")[1] = 0
     assert.equal(1, ns.Theme.Get("accent")[1])
     ns.Theme.Set({ title = "Emergence" })

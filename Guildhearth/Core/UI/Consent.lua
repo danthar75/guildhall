@@ -10,14 +10,14 @@ local Consent = {}
 UI.Consent = Consent
 
 local ROW = 24
-local TEXT = "Guildhall links your characters so guildmates can reach you on whichever one is online. Uncheck any you don't want shared."
-local GUILD_TEXT = "Guildhall links your characters in %s so guildmates there can reach you on whichever one is online. Only characters in %s are listed. Uncheck any you don't want shared."
+local TEXT = "Guildhearth links your characters so guildmates can reach you on whichever one is online. Uncheck any you don't want shared."
+local GUILD_TEXT = "Guildhearth links your characters in %s so guildmates there can reach you on whichever one is online. Only characters in %s are listed. Uncheck any you don't want shared."
 
 local frame, rows, onDone, names
 
 local function build()
   if frame then return end
-  frame = UI.CreatePanel(nil, 420, 200, "Guildhall: link your characters")
+  frame = UI.CreatePanel(nil, 420, 200, "Guildhearth: link your characters")
   frame.close:Hide() -- only OK finishes the dialog
   frame:SetFrameStrata("FULLSCREEN_DIALOG")
 

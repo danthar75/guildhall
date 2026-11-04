@@ -2,7 +2,7 @@
 -- column for the group finder keys, and the Groups settings.
 local fakes = require("spec.helpers.fakes")
 
-local GLOBALS = { "CreateFrame", "GuildhallDB", "GetItemInfo" }
+local GLOBALS = { "CreateFrame", "GuildhearthDB", "GetItemInfo" }
 
 local function handler(w, event)
   local h
@@ -31,7 +31,7 @@ local function fakeUI(ns, W, texts, buttons, errors)
       local b = W.new("Button"); b.onClick = onClick; b.shown = true; buttons[text] = b; return b
     end,
     Personal = function()
-      local sv = _G.GuildhallDB
+      local sv = _G.GuildhearthDB
       if type(sv) ~= "table" or type(sv.personal) ~= "table" then return nil end
       return sv.personal
     end,
@@ -48,7 +48,7 @@ describe("Settings sub-tabs", function()
     _G.CreateFrame = W.CreateFrame
     texts, buttons, errors, built = {}, {}, {}, {}
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
     fakeUI(ns, W, texts, buttons, errors)
     local function section(name)
       return function(parent)
@@ -66,7 +66,7 @@ describe("Settings sub-tabs", function()
     ns.GetModule = function(name) return mods[name] end
     ns.UI.PermissionsView = { Build = section("Permissions") }
     ns.UI.HistoryView = { Build = section("Change history") }
-    loadAddonFile(ns, "Guildhall/Core/UI/SettingsView.lua")
+    loadAddonFile(ns, "Guildhearth/Core/UI/SettingsView.lua")
   end)
 
   after_each(function()
@@ -129,11 +129,11 @@ describe("Change history view", function()
     ranks = { ["Boss-Realm"] = 0, ["Dor-Realm"] = 1, ["Vet-Realm"] = 2, ["Me-Realm"] = 3 }
     officer = {}
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
     ns.Activity.Register({ id = "exchange.sales", label = "Sales", unit = "count", verify = "paired", weight = 5, order = 20 })
-    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Perms.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Permissions.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Perms.lua")
     fakeUI(ns, W, texts, buttons, errors)
     ns.services = {
       playerChar = "Me-Realm",
@@ -151,7 +151,7 @@ describe("Change history view", function()
         HistoryAuthorPermitted = function(_, e) return e.by ~= "Gone-Realm" end,
       },
     }
-    loadAddonFile(ns, "Guildhall/Core/UI/HistoryView.lua")
+    loadAddonFile(ns, "Guildhearth/Core/UI/HistoryView.lua")
   end)
 
   after_each(function()
@@ -343,9 +343,9 @@ describe("Permissions grid with the group finder keys", function()
     _G.CreateFrame = W.CreateFrame
     texts, buttons, errors = {}, {}, {}
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Perms.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Permissions.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Perms.lua")
     fakeUI(ns, W, texts, buttons, errors)
     local roster = {
       RankIndex = function(_, name) return ({ ["Gm-Realm"] = 0 })[name] end,
@@ -354,8 +354,8 @@ describe("Permissions grid with the group finder keys", function()
     }
     ns.services = { playerChar = "Gm-Realm", roster = roster }
     ns.leaderboard = { permissions = ns.Permissions.new({ roster = roster, playerChar = "Gm-Realm" }) }
-    loadAddonFile(ns, "Guildhall/Core/UI/HistoryView.lua")
-    loadAddonFile(ns, "Guildhall/Core/UI/PermissionsView.lua")
+    loadAddonFile(ns, "Guildhearth/Core/UI/HistoryView.lua")
+    loadAddonFile(ns, "Guildhearth/Core/UI/PermissionsView.lua")
   end)
 
   after_each(function()
@@ -389,11 +389,11 @@ describe("Groups settings", function()
     _G.CreateFrame = W.CreateFrame
     texts, buttons, errors = {}, {}, {}
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
     fakeUI(ns, W, texts, buttons, errors)
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Reminders.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/UI/Details.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/UI/SettingsView.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Reminders.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/UI/Details.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/UI/SettingsView.lua")
   end)
 
   after_each(function()
@@ -415,7 +415,7 @@ describe("Groups settings", function()
   end
 
   it("shows the three settings with their defaults when nothing is saved yet", function()
-    _G.GuildhallDB = nil
+    _G.GuildhearthDB = nil
     build()
     for _, s in ipairs({ "Remind me 15 min before runs I signed up for", "Play a sound with reminders",
       "My usual roles", "Tank", "Healer", "DPS" }) do
@@ -434,9 +434,9 @@ describe("Groups settings", function()
   end)
 
   it("fills a missing personal.groups and saves each change", function()
-    _G.GuildhallDB = { personal = {} }
+    _G.GuildhearthDB = { personal = {} }
     build()
-    local g = _G.GuildhallDB.personal.groups
+    local g = _G.GuildhearthDB.personal.groups
     assert.same({ reminders = true, sound = true, roles = { d = true } }, g)
     toggle(section.sound, false)
     assert.is_false(g.sound)
@@ -451,9 +451,9 @@ describe("Groups settings", function()
   end)
 
   it("keeps saved choices, and the last role can't be unticked", function()
-    _G.GuildhallDB = { personal = { groups = { reminders = false, roles = { h = true } } } }
+    _G.GuildhearthDB = { personal = { groups = { reminders = false, roles = { h = true } } } }
     build()
-    local g = _G.GuildhallDB.personal.groups
+    local g = _G.GuildhearthDB.personal.groups
     assert.is_false(section.reminders:GetChecked())
     assert.same({ h = true }, g.roles) -- Defaults never adds DPS to a saved choice
     assert.is_true(section.roles.h:GetChecked())
@@ -467,7 +467,7 @@ describe("Groups settings", function()
   describe("the guild section", function()
     local state, gm, sets
     before_each(function()
-      _G.GuildhallDB = { personal = {} }
+      _G.GuildhearthDB = { personal = {} }
       state, gm, sets = { calendar = true, other = false }, false, {}
       ns.leaderboard = { config = {} }
       ns.Groups.Credit = {
@@ -536,7 +536,7 @@ describe("Groups settings", function()
   end)
 
   it("My usual roles feed Ready now and Sign up", function()
-    _G.GuildhallDB = { personal = {} }
+    _G.GuildhearthDB = { personal = {} }
     build()
     toggle(section.roles.t, true)
     toggle(section.roles.h, true)

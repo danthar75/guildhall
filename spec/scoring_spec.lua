@@ -12,8 +12,8 @@ describe("Scoring", function()
 
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Scoring.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Scoring.lua")
     S = ns.Scoring
     local A = ns.Activity
     A.Register({ id = "sales", label = "Sales", unit = "count", verify = "paired", weight = 5, order = 1 })

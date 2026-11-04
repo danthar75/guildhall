@@ -17,9 +17,9 @@ describe("Exchange deals", function()
 
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/Deals.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/Deals.lua")
     Deals = ns.Exchange.Deals
   end)
 
@@ -234,7 +234,7 @@ describe("Exchange deals", function()
     end
 
     before_each(function()
-      loadAddonFile(ns, "Guildhall/Modules/Exchange/DealWatch.lua")
+      loadAddonFile(ns, "Guildhearth/Modules/Exchange/DealWatch.lua")
       published, now, hooks, scripts = {}, 5000, {}, {}
       money = 1000000
       env = { SendMail = function() end, TakeInboxItem = function() end, AutoLootMailItem = function() end,
@@ -390,8 +390,8 @@ describe("Exchange deals", function()
 
     local function realCompat(env2)
       local cns = {}
-      loadAddonFile(cns, "Guildhall/Core/Util.lua")
-      loadAddonFile(cns, "Guildhall/Core/Compat.lua")
+      loadAddonFile(cns, "Guildhearth/Core/Util.lua")
+      loadAddonFile(cns, "Guildhearth/Core/Compat.lua")
       return cns.Compat.new(env2)
     end
 
@@ -683,8 +683,8 @@ describe("Exchange deals", function()
 
     it("a secret sender is ignored (real Compat)", function()
       local cns = {}
-      loadAddonFile(cns, "Guildhall/Core/Util.lua")
-      loadAddonFile(cns, "Guildhall/Core/Compat.lua")
+      loadAddonFile(cns, "Guildhearth/Core/Util.lua")
+      loadAddonFile(cns, "Guildhearth/Core/Compat.lua")
       local real = cns.Compat.new({
         GetInboxNumItems = function() return 1 end,
         GetInboxHeaderInfo = function() return nil, nil, "SECRET", "s", 0, 50000 end,

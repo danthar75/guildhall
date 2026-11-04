@@ -91,7 +91,7 @@ function ns.Leaderboard.ScheduleOfficerWork(s, observations)
 end
 
 local function build(n, s)
-  local db = n.DB.Module(GuildhallDB, s.guildKey, "Leaderboard")
+  local db = n.DB.Module(GuildhearthDB, s.guildKey, "Leaderboard")
   db.observations = db.observations or {}
   db.config = db.config or {}
   db.configSeen = db.configSeen or {} -- core.config version floor (LbConfig seenV)

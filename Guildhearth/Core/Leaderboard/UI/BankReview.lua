@@ -10,8 +10,8 @@ local ADDON, ns = ...
 -- BankReview.Filter(rows, filters, exclusions, tz) -> rows matching filters { player, tab,
 --   month, excludedOnly } (player = BankReview.PlayerKey(row), tab = number or "money").
 -- BankReview.DoExclude(ref, reason) / BankReview.DoInclude(ref): the checkbox actions.
--- Named globals: "GuildhallBankReview" (so Esc closes it through UISpecialFrames) and the
--- StaticPopupDialogs.GUILDHALL_BANK_EXCLUDE entry.
+-- Named globals: "GuildhearthBankReview" (so Esc closes it through UISpecialFrames) and the
+-- StaticPopupDialogs.GUILDHEARTH_BANK_EXCLUDE entry.
 ns.Leaderboard = ns.Leaderboard or {}
 local UI = ns.UI
 local Util = ns.Util
@@ -23,7 +23,7 @@ local WIDTH, HEIGHT = 740, 470
 local LIST_TOP = 92
 local TYPES = { ["bank.gold"] = true, ["bank.items"] = true }
 local REFUSED = "Your rank can't review bank contributions. The guild master sets this under Settings > Permissions."
-local EMPTY_TEXT = "No guild bank activity recorded yet. Entries appear after someone with Guildhall opens the guild bank."
+local EMPTY_TEXT = "No guild bank activity recorded yet. Entries appear after someone with Guildhearth opens the guild bank."
 local NO_MATCH_TEXT = "No entries match these filters."
 local PROMPT_TEXT = "Why doesn't this count? (optional)"
 local NOTE_TEXT = "Unticked entries don't count toward the member's score. They still count toward the guild's bank totals."
@@ -254,7 +254,7 @@ local function editBoxOf(dialog)
 end
 
 if StaticPopupDialogs then
-  StaticPopupDialogs["GUILDHALL_BANK_EXCLUDE"] = {
+  StaticPopupDialogs["GUILDHEARTH_BANK_EXCLUDE"] = {
     text = PROMPT_TEXT,
     button1 = OKAY or "OK", button2 = CANCEL or "Cancel",
     hasEditBox = 1, maxLetters = 80,
@@ -284,8 +284,8 @@ end
 
 -- Unticking asks for a reason first; the box stays ticked until the prompt is accepted.
 local function askExclude(ref)
-  if StaticPopup_Show and StaticPopupDialogs and StaticPopupDialogs["GUILDHALL_BANK_EXCLUDE"] then
-    StaticPopup_Show("GUILDHALL_BANK_EXCLUDE", nil, nil, ref)
+  if StaticPopup_Show and StaticPopupDialogs and StaticPopupDialogs["GUILDHEARTH_BANK_EXCLUDE"] then
+    StaticPopup_Show("GUILDHEARTH_BANK_EXCLUDE", nil, nil, ref)
   else
     BankReview.DoExclude(ref, nil)
   end
@@ -419,8 +419,8 @@ local function makeLine(parent, i)
 end
 
 local function build()
-  local f = UI.CreatePanel("GuildhallBankReview", WIDTH, HEIGHT, "Bank review")
-  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhallBankReview") end
+  local f = UI.CreatePanel("GuildhearthBankReview", WIDTH, HEIGHT, "Bank review")
+  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhearthBankReview") end
   local p = { frame = f, filters = {}, offset = 0, lines = {}, rows = {}, shown = {}, excl = {}, tz = 0 }
   panel = p
 
@@ -502,7 +502,7 @@ local function build()
 end
 
 function BankReview.Open()
-  if not (services() and lb()) then return false, UI.NO_GUILD_TEXT or "Join a guild to use Guildhall" end
+  if not (services() and lb()) then return false, UI.NO_GUILD_TEXT or "Join a guild to use Guildhearth" end
   if not canReview() then return false, REFUSED end
   if not panel then build() end
   panel.status:SetText("")

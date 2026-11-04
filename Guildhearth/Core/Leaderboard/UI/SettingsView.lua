@@ -17,7 +17,7 @@ local MAX_WEIGHT = 1000 -- the same limit the Config validator applies
 local ROW_H = 26
 local WIDTH = 660
 local PRIVACY_TEXT = "When this is off, your name isn't listed, but your deals and donations still count toward the guild total. "
-  .. "Guildhall only shows totals to members, and each breakdown only to its player and officers. "
+  .. "Guildhearth only shows totals to members, and each breakdown only to its player and officers. "
   .. "The records still travel between guildmates' clients so deals can be checked, so someone reading their "
   .. "own SavedVariables file could see them."
 local BAD_WEIGHT_TEXT = "Use a number from 0 to 1000."
@@ -166,7 +166,7 @@ function SettingsView.Build(parent)
   local help = UI.Text(parent, "GameFontDisableSmall",
     "Weight 0 removes an activity from the overall score; its own board still shows.\n"
     .. "Changes reach every member's client and apply to all periods, including past ones.\n"
-    .. "Bank rules come from Guild Info: [Guildhall donations=3,4] and [Guildhall bankexclude=0,1].")
+    .. "Bank rules come from Guild Info: [Guildhearth donations=3,4] and [Guildhearth bankexclude=0,1].")
   help:SetPoint("TOPLEFT", 4, y)
   help:SetWidth(WIDTH)
   help:SetJustifyH("LEFT")

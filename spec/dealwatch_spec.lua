@@ -26,10 +26,10 @@ describe("Exchange DealWatch", function()
 
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/Deals.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/DealWatch.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/Deals.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/DealWatch.lua")
     published, timers, now = {}, {}, 5000
     env = { ERR_TRADE_COMPLETE = "Trade complete." }
     snap = { give = { { id = 2589, n = 20 } }, get = {}, giveCopper = 0, getCopper = 50000 }
@@ -67,8 +67,8 @@ describe("Exchange DealWatch", function()
 
   it("a secret trade money value gives no snapshot and no observation (Review Focus 1)", function()
     local cns = {}
-    loadAddonFile(cns, "Guildhall/Core/Util.lua")
-    loadAddonFile(cns, "Guildhall/Core/Compat.lua")
+    loadAddonFile(cns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(cns, "Guildhearth/Core/Compat.lua")
     local real = cns.Compat.new({
       GetTradePlayerItemLink = function(i) if i == 1 then return LINK end end,
       GetTradePlayerItemInfo = function(i) if i == 1 then return "x", 1, 20 end end,

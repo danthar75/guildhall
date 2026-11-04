@@ -8,8 +8,8 @@ describe("UI item icon helpers", function()
     saved = {}
     for _, k in ipairs(G) do saved[k] = _G[k] end
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/UI/Window.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/UI/Window.lua")
     UI = ns.UI
   end)
   after_each(function() for _, k in ipairs(G) do _G[k] = saved[k] end end)

@@ -1,7 +1,7 @@
 local ADDON, ns = ...
 
 -- Main window plus small shared UI helpers used by the other Core/UI files.
--- Named globals: "GuildhallMainFrame" and "GuildhallUIPickList" (both required so ESC can close
+-- Named globals: "GuildhearthMainFrame" and "GuildhearthUIPickList" (both required so ESC can close
 -- them via UISpecialFrames).
 local UI = ns.UI or {}
 ns.UI = UI
@@ -16,7 +16,7 @@ local BACKDROP = {
   insets = { left = 4, right = 4, top = 4, bottom = 4 },
 }
 
-UI.NO_GUILD_TEXT = "Join a guild to use Guildhall"
+UI.NO_GUILD_TEXT = "Join a guild to use Guildhearth"
 
 -- Helpers ------------------------------------------------------------------
 
@@ -28,7 +28,7 @@ function UI.Try(fn, ...)
 end
 
 function UI.Personal()
-  local sv = GuildhallDB
+  local sv = GuildhearthDB
   if type(sv) ~= "table" or type(sv.personal) ~= "table" then return nil end
   return sv.personal
 end
@@ -57,7 +57,7 @@ end
 
 -- Icon texture for a listing's item: the item's own icon for an item link, otherwise a
 -- question mark (typed names, Discord imports, items the client hasn't cached).
-UI.LOGO = "Interface\\AddOns\\Guildhall\\Media\\Logo"
+UI.LOGO = "Interface\\AddOns\\Guildhearth\\Media\\Logo"
 UI.UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 function UI.ItemIcon(item)
   local id = ns.Util.IsItemLink(item) and ns.Util.ItemIdFromLink(item) or nil
@@ -129,7 +129,7 @@ local function pickBuild()
   catcher:Hide()
   -- Named only so Esc can close it through UISpecialFrames. A keyboard-catching frame would
   -- need SetPropagateKeyboardInput, which is blocked in combat and could swallow movement keys.
-  local frame = CreateFrame("Frame", "GuildhallUIPickList", UIParent, BACKDROP_TEMPLATE)
+  local frame = CreateFrame("Frame", "GuildhearthUIPickList", UIParent, BACKDROP_TEMPLATE)
   frame:SetFrameStrata("FULLSCREEN_DIALOG")
   frame:SetClampedToScreen(true)
   frame:EnableMouse(true)
@@ -139,7 +139,7 @@ local function pickBuild()
   pick = { catcher = catcher, frame = frame, rows = {}, items = {}, offset = 0 }
   catcher:SetScript("OnClick", function() UI.Try(pickClose) end)
   frame:SetScript("OnHide", function() UI.Try(function() catcher:Hide() end) end)
-  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhallUIPickList") end
+  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhearthUIPickList") end
   frame:SetScript("OnMouseWheel", function(_, delta)
     UI.Try(function() pick.offset = pick.offset - delta; pickRender() end)
   end)
@@ -390,7 +390,7 @@ end
 
 local function build()
   if frame then return end
-  frame = CreateFrame("Frame", "GuildhallMainFrame", UIParent, BACKDROP_TEMPLATE)
+  frame = CreateFrame("Frame", "GuildhearthMainFrame", UIParent, BACKDROP_TEMPLATE)
   frame:SetSize(WIDTH, HEIGHT)
   frame:SetFrameStrata("HIGH")
   frame:SetToplevel(true)
@@ -405,11 +405,11 @@ local function build()
   end)
   UI.ApplyBackdrop(frame)
   frame:Hide()
-  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhallMainFrame") end
+  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhearthMainFrame") end
 
   tabard = UI.Tabard(frame, 44)
   tabard:SetPoint("TOPLEFT", 12, -10)
-  -- Guildhall's own logo takes the tabard's place outside a guild.
+  -- Guildhearth's own logo takes the tabard's place outside a guild.
   logo = frame:CreateTexture(nil, "ARTWORK")
   logo:SetTexture(UI.LOGO)
   logo:SetSize(44, 44)
@@ -466,7 +466,7 @@ function Window:IsShown()
   return frame ~= nil and frame:IsShown()
 end
 
--- Header: in a guild, the guild's tabard plus "<Guild>  Guildhall"; otherwise plain "Guildhall".
+-- Header: in a guild, the guild's tabard plus "<Guild>  Guildhearth"; otherwise plain "Guildhearth".
 local function applyTitle()
   local guild = ns.compat and ns.compat:GuildName()
   local branded = guild ~= nil and UI.Try(UI.ApplyTabard, tabard) == true
@@ -475,7 +475,7 @@ local function applyTitle()
   local left = 64
   titleText:ClearAllPoints()
   titleText:SetPoint("TOPLEFT", left, -14)
-  local base = ns.Theme.Get("title") or "Guildhall"
+  local base = ns.Theme.Get("title") or "Guildhearth"
   if guild then
     titleText:SetText(ns.Util.Escape(guild) .. "  |cff9d9d9d" .. base .. "|r")
   else

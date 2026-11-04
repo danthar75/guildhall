@@ -35,9 +35,9 @@ describe("Reminders", function()
 
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Instances.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Reminders.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Instances.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Reminders.lua")
     clock = fakes.clock(DAY + 16 * 3600)
     timers = fakes.timers(clock)
     printed, sounds, db = {}, 0, {}
@@ -70,7 +70,7 @@ describe("Reminders", function()
     assert.equal(1, #printed)
     assert.equal(START - 900, clock.now())          -- 19:45 server time
     assert.equal(START + LOCAL - 900, _G.time())    -- 22:45 on the local clock
-    assert.equal("Guildhall: Molten Core starts in 15 min (3 of 40 signed up, 2 online).", printed[1])
+    assert.equal("Guildhearth: Molten Core starts in 15 min (3 of 40 signed up, 2 online).", printed[1])
     assert.equal(1, sounds)
     for _ = 1, 40 do step(30) end
     assert.equal(1, #printed)

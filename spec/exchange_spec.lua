@@ -5,12 +5,12 @@ describe("Exchange", function()
   local function mkns()
     local ns = {}
     for _, f in ipairs({ "Util", "DB", "ReplicatedSet", "Sync", "Log", "Profile" }) do
-      loadAddonFile(ns, "Guildhall/Core/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Core/" .. f .. ".lua")
     end
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Observations.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Observations.lua")
     for _, f in ipairs({ "Listing", "Format", "MailDrafts", "Deals", "Exchange" }) do
-      loadAddonFile(ns, "Guildhall/Modules/Exchange/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Modules/Exchange/" .. f .. ".lua")
     end
     return ns
   end
@@ -379,7 +379,7 @@ describe("Exchange", function()
   it("registers the module and OnLogin guards missing services", function()
     local ns = mkns()
     ns.RegisterModule = function(name, def) ns.reg = { name = name, def = def } end
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/Exchange.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/Exchange.lua")
     assert.equal("Exchange", ns.reg.name)
     assert.equal("Exchange", ns.reg.def.tab.title)
     ns.reg.def.OnLogin(ns)

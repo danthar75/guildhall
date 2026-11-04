@@ -20,11 +20,11 @@ describe("Leaderboard.View", function()
     retakeResult, retakeErr = true, nil
     officer, hidden, month = false, {}, nil
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Scoring.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Config.lua")
-    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Scoring.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Config.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Permissions.lua")
     ns.OnError = function(e) errors[#errors + 1] = e end
     ns.Events = { On = function(_, event, fn) handlers[#handlers + 1] = { event, fn } end }
     ns.UI = {
@@ -49,7 +49,7 @@ describe("Leaderboard.View", function()
     ns.Activity.Register({ id = "exchange.purchases", label = "Purchases", unit = "count", verify = "paired", weight = 5, order = 30 })
     ns.Activity.Register({ id = "bank.items", label = "Bank items", unit = "items", verify = "paired", weight = 0.05, order = 70 })
     ns.Activity.Register({ id = "exchange.gold.earned", label = "Gold earned", unit = "gold", verify = "paired", weight = 0.1, order = 40 })
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/UI/View.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/UI/View.lua")
 
     -- 14 profiles; p14 is "me" and ranks last.
     local byProfile = {}
@@ -201,7 +201,7 @@ describe("Leaderboard.View", function()
       view:Refresh()
       assert.is_true(buttons["Retake"].shown)
       buttons["Retake"].onClick()
-      assert.equal("GUILDHALL_LB_RETAKE", popups[1][1])
+      assert.equal("GUILDHEARTH_LB_RETAKE", popups[1][1])
       assert.equal("2023-10", popups[1][3])
       assert.is_nil(retaken)
       ns.Leaderboard.View.DoRetake("2023-10")
@@ -291,7 +291,7 @@ describe("Leaderboard.View", function()
       if l.toggle == "uncounted" then click(l) end
     end
     assert.is_true(hasLike("the other player's client hasn't confirmed it yet"))
-    assert.is_true(hasLike("no second guildmate with Guildhall has seen this in the bank log yet"))
+    assert.is_true(hasLike("no second guildmate with Guildhearth has seen this in the bank log yet"))
   end)
 
   it("describes items like the mockup and groups collapsed headers on one line", function()

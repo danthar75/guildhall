@@ -3,7 +3,7 @@ local ADDON, ns = ...
 -- Beta: the addon is being tested in Emergence before it goes public. Set to false (and drop
 -- "(Beta)" from both TOC titles) to remove the label everywhere it shows.
 ns.BETA = true
-ns.BETA_NOTE = "Guildhall is in beta: we are testing it in Emergence, so expect rough edges. Please report problems to Dor in game or on the guild Discord."
+ns.BETA_NOTE = "Guildhearth is in beta: we are testing it in Emergence, so expect rough edges. Please report problems to Dor in game or on the guild Discord."
 
 -- Module registry ----------------------------------------------------------
 local modules, order = {}, {}

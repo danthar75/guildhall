@@ -1,6 +1,6 @@
 describe("Util", function()
   local U
-  before_each(function() local ns = {}; loadAddonFile(ns, "Guildhall/Core/Util.lua"); U = ns.Util end)
+  before_each(function() local ns = {}; loadAddonFile(ns, "Guildhearth/Core/Util.lua"); U = ns.Util end)
   it("Hash is deterministic and spreads", function()
     assert.equal(U.Hash("abc"), U.Hash("abc"))
     assert.are_not.equal(U.Hash("abc"), U.Hash("abd"))

@@ -11,7 +11,7 @@ local ADDON, ns = ...
 -- Item input: shift-click (post-hook on ChatFrameUtil.InsertLink, Classic: ChatEdit_InsertLink),
 -- drag and drop onto the slot, or a typed name. A link posts as its item id, a name as typed.
 -- Form.ListenLinks(fn) shares that hook with the checklist editor.
--- Named global frame: "GuildhallUIGroupsForm" (UISpecialFrames needs a name for ESC to close it).
+-- Named global frame: "GuildhearthUIGroupsForm" (UISpecialFrames needs a name for ESC to close it).
 ns.Groups = ns.Groups or {}
 local UI = ns.UI
 local Util = ns.Util
@@ -326,7 +326,7 @@ end
 
 local function submit()
   local g = ns.groups
-  if not (g and g.svc) then setError("Guildhall isn't ready yet. Try again in a moment."); return end
+  if not (g and g.svc) then setError("Guildhearth isn't ready yet. Try again in a moment."); return end
   local d, perr = payload()
   if not d then setError(perr); return end
   local ok, res = g.svc:Post(d)
@@ -382,9 +382,9 @@ end
 
 local function build()
   if frame then return end
-  frame = UI.CreatePanel("GuildhallUIGroupsForm", WIDTH, HEIGHT, "New group post")
+  frame = UI.CreatePanel("GuildhearthUIGroupsForm", WIDTH, HEIGHT, "New group post")
   f.frame = frame
-  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhallUIGroupsForm") end
+  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhearthUIGroupsForm") end
 
   label("Run:", 20, -50)
   f.runBtn = UI.Button(frame, "Pick a run", 240, function()

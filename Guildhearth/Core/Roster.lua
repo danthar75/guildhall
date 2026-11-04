@@ -10,12 +10,12 @@ ns.Roster = Roster
 
 local DEFAULT_OFFICERS = 2
 
--- "[Guildhall key=val key2=val]" -> { key = val, ... }. Numbers converted. Never raises.
+-- "[Guildhearth key=val key2=val]" -> { key = val, ... }. Numbers converted. Never raises.
 function Roster.ParseTag(text)
   local out = {}
   if type(text) ~= "string" then return out end
-  -- Every [Guildhall ...] tag counts; keys merge (a later tag wins a repeated key).
-  for body in text:gmatch("%[Guildhall%s+([^%]]*)%]") do
+  -- Every [Guildhearth ...] tag counts; keys merge (a later tag wins a repeated key).
+  for body in text:gmatch("%[Guildhearth%s+([^%]]*)%]") do
     body = body:gsub("%s*,%s*(%d)", ",%1") -- "donations=3, 4" reads like "donations=3,4"
     for k, v in body:gmatch("([%w_]+)=(%S+)") do
       v = v:gsub(",+$", "") -- a comma between two settings belongs to neither

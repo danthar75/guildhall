@@ -32,10 +32,10 @@ end
 -- the env exposes env.sent (count of C_ChatInfo.SendAddonMessage calls).
 function M.compat(overrides)
   local ns = {}
-  loadAddonFile(ns, "Guildhall/Core/Util.lua")
-  loadAddonFile(ns, "Guildhall/Core/Compat.lua")
+  loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+  loadAddonFile(ns, "Guildhearth/Core/Compat.lua")
   -- the addon shares one namespace: Compat:InstanceKey matches map ids against ns.Instances
-  loadAddonFile(ns, "Guildhall/Modules/Groups/Instances.lua")
+  loadAddonFile(ns, "Guildhearth/Modules/Groups/Instances.lua")
   local env = { sent = 0, GetServerTime = function() return 1000 end }
   for k, v in pairs(overrides or {}) do env[k] = v end
   return ns.Compat.new(env), env
@@ -49,9 +49,9 @@ function M.bus(clock, timers, commOpts)
   local bus = { members = {}, order = {} }
   function bus:join(name)
     local ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Serialize.lua")
-    loadAddonFile(ns, "Guildhall/Core/Comm.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Serialize.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Comm.lua")
     local compat = M.compat({
       C_ChatInfo = { SendAddonMessage = function(prefix, line, channel)
         for _, other in ipairs(bus.order) do

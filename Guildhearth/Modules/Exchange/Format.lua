@@ -1,18 +1,18 @@
 local ADDON, ns = ...
 
 -- Pure text formatting for Exchange listings: Discord copy text, whisper text
--- and mail subject/body. Guildhall never sends anything; callers only pre-fill.
+-- and mail subject/body. Guildhearth never sends anything; callers only pre-fill.
 ns.Exchange = ns.Exchange or {}
 
 local Format = {}
 
 Format.DEFAULTS = {
-  whisperLF = "Hi! Saw your Guildhall listing for {item}. Are you still looking?",
-  whisperWTS = "Hi! Saw your Guildhall listing for {item}. Is it still available?",
-  mailSubject = "Guildhall: {itemName}",
-  mailBodyLF = "Hi! Saw your Guildhall listing for {itemName}. Are you still looking?",
-  mailBodyWTS = "Hi! Saw your Guildhall listing for {itemName}. Is it still available?",
-  discord = "{kind} {itemName}{qtySuffix}{matsLine}\nI am {codWord} to CoD{noteLine}\n({char}, in game via Guildhall)",
+  whisperLF = "Hi! Saw your Guildhearth listing for {item}. Are you still looking?",
+  whisperWTS = "Hi! Saw your Guildhearth listing for {item}. Is it still available?",
+  mailSubject = "Guildhearth: {itemName}",
+  mailBodyLF = "Hi! Saw your Guildhearth listing for {itemName}. Are you still looking?",
+  mailBodyWTS = "Hi! Saw your Guildhearth listing for {itemName}. Is it still available?",
+  discord = "{kind} {itemName}{qtySuffix}{matsLine}\nI am {codWord} to CoD{noteLine}\n({char}, in game via Guildhearth)",
 }
 
 local function usable(s)

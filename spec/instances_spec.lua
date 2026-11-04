@@ -3,7 +3,7 @@ describe("Instances", function()
 
   before_each(function()
     local ns = {}
-    loadAddonFile(ns, "Guildhall/Modules/Groups/Instances.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Groups/Instances.lua")
     Instances = ns.Instances
   end)
 

@@ -10,7 +10,7 @@ local ADDON, ns = ...
 -- tie-breaking and is never shown; "Saved <date> by <name>" uses d.savedAt and d.savedBy.
 -- Refreshes when the tab is shown and, debounced to once a second while visible, when the data
 -- behind the ledger changes.
--- Global table entry: StaticPopupDialogs.GUILDHALL_LB_RETAKE.
+-- Global table entry: StaticPopupDialogs.GUILDHEARTH_LB_RETAKE.
 ns.Leaderboard = ns.Leaderboard or {}
 local UI = ns.UI
 local Util = ns.Util
@@ -35,7 +35,7 @@ local WHY = {
 }
 local UNPAIRED = {
   exchange = "the other player's client hasn't confirmed it yet",
-  bank = "no second guildmate with Guildhall has seen this in the bank log yet",
+  bank = "no second guildmate with Guildhearth has seen this in the bank log yet",
 }
 -- "Excluded by an officer: <reason>"; officers also see who: "Excluded by an officer (Name)".
 local EXCLUDED = "excluded by an officer"
@@ -574,7 +574,7 @@ function View.DoRetake(ym)
 end
 
 if StaticPopupDialogs then
-  StaticPopupDialogs["GUILDHALL_LB_RETAKE"] = {
+  StaticPopupDialogs["GUILDHEARTH_LB_RETAKE"] = {
     text = "Retake %s? This saves the month again from the numbers your client has now, replaces the "
       .. "saved list for everyone, and is logged.",
     button1 = YES or "Yes", button2 = NO or "No",
@@ -585,8 +585,8 @@ end
 
 local function askRetake()
   if not view.pastMonth then return end
-  if StaticPopup_Show and StaticPopupDialogs and StaticPopupDialogs["GUILDHALL_LB_RETAKE"] then
-    StaticPopup_Show("GUILDHALL_LB_RETAKE", monthLabel(view.pastMonth), nil, view.pastMonth)
+  if StaticPopup_Show and StaticPopupDialogs and StaticPopupDialogs["GUILDHEARTH_LB_RETAKE"] then
+    StaticPopup_Show("GUILDHEARTH_LB_RETAKE", monthLabel(view.pastMonth), nil, view.pastMonth)
   end
 end
 

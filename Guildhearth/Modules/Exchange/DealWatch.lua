@@ -1,7 +1,7 @@
 local ADDON, ns = ...
 
 -- DealWatch: watches the trade window and CoD mail, and publishes one "trade" / "cod" observation
--- per completed deal that matches a Guildhall listing. Wiring: Task 10 registers the events through the
+-- per completed deal that matches a Guildhearth listing. Wiring: Task 10 registers the events through the
 -- module's def.events and calls DealWatch.new with the real objects.
 --
 -- ctx: { compat, exchange, observations, profile, roster, now, after, env?, hooksecurefunc? }.

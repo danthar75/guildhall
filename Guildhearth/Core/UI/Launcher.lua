@@ -1,7 +1,7 @@
 local ADDON, ns = ...
 
--- Slash commands (/gh, /guildhall) and the minimap button.
--- Globals: SLASH_GUILDHALL1, SLASH_GUILDHALL2, SlashCmdList.GUILDHALL (required by the slash system).
+-- Slash commands (/gh, /guildhearth) and the minimap button.
+-- Globals: SLASH_GUILDHEARTH1, SLASH_GUILDHEARTH2, SlashCmdList.GUILDHEARTH (required by the slash system).
 local UI = ns.UI
 local Launcher = {}
 UI.Launcher = Launcher
@@ -9,8 +9,8 @@ UI.Launcher = Launcher
 local DEFAULT_ANGLE = 200
 
 local function help()
-  print("|cffffd200Guildhall|r commands:")
-  print("  /gh  - open or close the Guildhall window")
+  print("|cffffd200Guildhearth|r commands:")
+  print("  /gh  - open or close the Guildhearth window")
   print("  /gh log  - open the Log tab")
   print("  /gh names  - show how the game reports character names (for troubleshooting)")
   print("  /gh welcome  - show the welcome screen again")
@@ -22,17 +22,17 @@ end
 function Launcher.LeaderboardDemo(on)
   local demo = ns.Leaderboard and ns.Leaderboard.Demo
   if not (demo and demo.Set(ns, on)) then
-    print("|cffffd200Guildhall|r the Leaderboard isn't running (are you in a guild?).")
+    print("|cffffd200Guildhearth|r the Leaderboard isn't running (are you in a guild?).")
   elseif on then
-    print("|cffffd200Guildhall|r showing fake leaderboard data. Type /gh lbdemo off to go back.")
+    print("|cffffd200Guildhearth|r showing fake leaderboard data. Type /gh lbdemo off to go back.")
   else
-    print("|cffffd200Guildhall|r back to the real leaderboard.")
+    print("|cffffd200Guildhearth|r back to the real leaderboard.")
   end
 end
 
-SLASH_GUILDHALL1 = "/gh"
-SLASH_GUILDHALL2 = "/guildhall"
-SlashCmdList.GUILDHALL = function(msg)
+SLASH_GUILDHEARTH1 = "/gh"
+SLASH_GUILDHEARTH2 = "/guildhearth"
+SlashCmdList.GUILDHEARTH = function(msg)
   UI.Try(function()
     local cmd = string.lower(ns.Util.Trim(msg or ""))
     if cmd == "" then
@@ -80,7 +80,7 @@ local function try(label, f, ...)
 end
 
 function Launcher.PrintNames()
-  print("|cffffd200Guildhall|r name check (please copy this to Dor):")
+  print("|cffffd200Guildhearth|r name check (please copy this to Dor):")
   try("UnitName", UnitName, "player")
   try("UnitFullName", UnitFullName, "player")
   try("GetUnitName(full)", GetUnitName, "player", true)
@@ -102,7 +102,7 @@ function Launcher.PrintNames()
   end
   if not found then show("Guild roster (you)", "(not found yet - open the guild window and try again)") end
   local s = ns.services
-  show("Guildhall uses", s and s.playerChar or "(not started)")
+  show("Guildhearth uses", s and s.playerChar or "(not started)")
   local rs = s and s.comm and s.comm.recentSenders or {}
   show("Recent addon senders", #rs > 0 and table.concat(rs, " | ") or "(none yet)")
 end
@@ -156,7 +156,7 @@ function Launcher:Init()
   button:SetScript("OnClick", function() UI.Try(UI.Window.Toggle, UI.Window) end)
   button:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("Guildhall")
+    GameTooltip:SetText("Guildhearth")
     GameTooltip:AddLine("Click to open. Drag to move.", 1, 1, 1)
     GameTooltip:Show()
   end)

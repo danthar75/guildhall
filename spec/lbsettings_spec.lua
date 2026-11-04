@@ -14,8 +14,8 @@ describe("Leaderboard.SettingsView", function()
     weights = { ["exchange.sales"] = 5, ["exchange.gold.earned"] = 0.1 }
     info = { char = "Dor-Realm", at = 1699999999 }
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/Activity.lua")
     ns.Activity.Register({ id = "exchange.sales", label = "Sales", unit = "count", verify = "paired", weight = 5, order = 20 })
     ns.Activity.Register({ id = "exchange.gold.earned", label = "Gold earned", unit = "gold", verify = "paired", weight = 0.1, order = 40 })
     ns.OnError = function(e) errors[#errors + 1] = e end
@@ -57,8 +57,8 @@ describe("Leaderboard.SettingsView", function()
       HistoryAuthorPermitted = function(_, e) return e.by ~= "Gone-Realm" end,
       PublishWeights = function(_, map) pubMap = map; return pubResult, (not pubResult) and "not accepted" or nil end,
     } }
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/UI/SettingsView.lua")
-    loadAddonFile(ns, "Guildhall/Core/UI/HistoryView.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Leaderboard/UI/SettingsView.lua")
+    loadAddonFile(ns, "Guildhearth/Core/UI/HistoryView.lua")
     section = ns.Leaderboard.SettingsView.Build(W.new("Frame"))
   end)
 
@@ -205,7 +205,7 @@ describe("Leaderboard.SettingsView", function()
       if t.text and t.text:find("^When this is off, your name isn't listed") then found = t.text end
     end
     assert.equal("When this is off, your name isn't listed, but your deals and donations still count toward the guild total. "
-      .. "Guildhall only shows totals to members, and each breakdown only to its player and officers. "
+      .. "Guildhearth only shows totals to members, and each breakdown only to its player and officers. "
       .. "The records still travel between guildmates' clients so deals can be checked, so someone reading their "
       .. "own SavedVariables file could see them.", found)
   end)

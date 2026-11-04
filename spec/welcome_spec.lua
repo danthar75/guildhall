@@ -9,8 +9,8 @@ describe("WhatsNew", function()
   local ns
   before_each(function()
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/WhatsNew.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/WhatsNew.lua")
   end)
 
   it("compares versions numerically by dotted parts", function()
@@ -96,7 +96,7 @@ end)
 describe("Welcome", function()
   local fakes = require("spec.helpers.fakes")
   local ns, W, personal, version, errors
-  local GLOBALS = { "CreateFrame", "UIParent", "UISpecialFrames", "GuildhallDB", "GetAddOnMetadata" }
+  local GLOBALS = { "CreateFrame", "UIParent", "UISpecialFrames", "GuildhearthDB", "GetAddOnMetadata" }
   local saved = {}
 
   local function allText()
@@ -114,12 +114,12 @@ describe("Welcome", function()
     version = "0.1.0"
     _G.GetAddOnMetadata = function() return version end
     personal = {}
-    _G.GuildhallDB = { personal = personal }
+    _G.GuildhearthDB = { personal = personal }
     errors = {}
     ns = { texts = {} }
     ns.OnError = function(e) errors[#errors + 1] = e end
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Core/WhatsNew.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/WhatsNew.lua")
     ns.UI = {
       Try = function(fn, ...)
         local ok, res = pcall(fn, ...)
@@ -147,7 +147,7 @@ describe("Welcome", function()
     }
     ns.GetModule = function(n) return defs[n] end
     ns.CoreAbout = { { title = "Linked characters", order = 20, lines = { "Reach you anywhere." } } }
-    loadAddonFile(ns, "Guildhall/Core/UI/Welcome.lua")
+    loadAddonFile(ns, "Guildhearth/Core/UI/Welcome.lua")
   end)
 
   after_each(function()
@@ -249,7 +249,7 @@ describe("Welcome", function()
   it("shows the beta label and note while ns.BETA is set, and neither once it is off", function()
     -- The real values come from Init.lua; check them there, then render with them.
     local init = {}
-    loadAddonFile(init, "Guildhall/Core/Init.lua")
+    loadAddonFile(init, "Guildhearth/Core/Init.lua")
     assert.is_true(init.BETA)
     assert.is_true(isAllowed(init.BETA_NOTE))
     ns.BETA, ns.BETA_NOTE = init.BETA, init.BETA_NOTE
@@ -275,7 +275,7 @@ describe("Welcome", function()
 
   it("registers for Esc", function()
     ns.UI.Welcome:Show()
-    assert.equal("GuildhallWelcomeFrame", _G.UISpecialFrames[#_G.UISpecialFrames])
+    assert.equal("GuildhearthWelcomeFrame", _G.UISpecialFrames[#_G.UISpecialFrames])
   end)
 end)
 
@@ -309,7 +309,7 @@ describe("real about text", function()
     for str in src:gmatch('"([^"\n]*)"') do assert.is_true(isAllowedReal(str), path .. ": " .. str) end
   end
   it("Init, Exchange, Leaderboard and Welcome sources use allowed glyphs only", function()
-    for _, p in ipairs({ "Guildhall/Core/Init.lua", "Guildhall/Core/UI/Welcome.lua", "Guildhall/Core/WhatsNew.lua",
-      "Guildhall/Modules/Exchange/Exchange.lua", "Guildhall/Core/Leaderboard/Module.lua" }) do check(p) end
+    for _, p in ipairs({ "Guildhearth/Core/Init.lua", "Guildhearth/Core/UI/Welcome.lua", "Guildhearth/Core/WhatsNew.lua",
+      "Guildhearth/Modules/Exchange/Exchange.lua", "Guildhearth/Core/Leaderboard/Module.lua" }) do check(p) end
   end)
 end)

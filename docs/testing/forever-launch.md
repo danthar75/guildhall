@@ -1,13 +1,13 @@
 # Forever launch-day test list
 
-What to test when WoW Forever goes live. Split by whether you can test it on one account or need a second Guildhall client in the guild.
+What to test when WoW Forever goes live. Split by whether you can test it on one account or need a second Guildhearth client in the guild.
 
 **Plan (user):** the guild is created at launch. Dor runs a second WoW account in the same guild as the "other tester", so everything here can be done without outside help. The goal is to finish within 12 hours of launch, but it isn't a rush at the moment of launch.
-- Run both clients at once, each with a character in the guild and Guildhall installed.
+- Run both clients at once, each with a character in the guild and Guildhearth installed.
 - The guild master (rank 0) counts as an officer. To test non-officer views, put the second account's character at a low rank.
 Full step-by-step details for each item are in `in-game-checklist.md`; this file is the short list and the order to do it in.
 
-Before starting: `/console scriptErrors 1` (or BugSack), and install Guildhall into `_forever_/Interface/AddOns/Guildhall`.
+Before starting: `/console scriptErrors 1` (or BugSack), and install Guildhearth into `_forever_/Interface/AddOns/Guildhearth`.
 New files (like the logo) need a full game restart, not just `/reload`.
 
 ## Order on launch night
@@ -19,11 +19,11 @@ New files (like the logo) need a full game restart, not just `/reload`.
 ## Solo (no other testers needed)
 
 ### Loading and look
-- [ ] Loads with the release TOC (`Guildhall.toc`) with no Lua errors, on login and after `/reload`.
-- [ ] Your half of `/gh names`. "Guildhall uses" includes your secondary name (the "Main Secondary" form), and no line shows the "-" link form ("Dor-Ironhand").
-- [ ] The Guildhall logo shows on the minimap button and next to Guildhall in the AddOns list.
-- [ ] With a guild tabard: the header shows the tabard and "<Guild>  Guildhall". With no tabard yet: the placeholder emblem.
-- [ ] Not in a guild yet: one friendly chat line, and the header shows the Guildhall logo instead of a tabard.
+- [ ] Loads with the release TOC (`Guildhearth.toc`) with no Lua errors, on login and after `/reload`.
+- [ ] Your half of `/gh names`. "Guildhearth uses" includes your secondary name (the "Main Secondary" form), and no line shows the "-" link form ("Dor-Ironhand").
+- [ ] The Guildhearth logo shows on the minimap button and next to Guildhearth in the AddOns list.
+- [ ] With a guild tabard: the header shows the tabard and "<Guild>  Guildhearth". With no tabard yet: the placeholder emblem.
+- [ ] Not in a guild yet: one friendly chat line, and the header shows the Guildhearth logo instead of a tabard.
 - [ ] Popups (form, pick lists, consent, copy box) are solid, not see-through.
 
 ### Welcome screen and About tab
@@ -64,12 +64,12 @@ New files (like the logo) need a full game restart, not just `/reload`.
 - [ ] Inside a dungeon: no Lua errors, the window opens, and no false "guild changed" message.
 
 ### Release zip (once built)
-- [ ] Install from the release zip into a clean `AddOns` folder. It loads, and the folder has no `Guildhall_Vanilla.toc`.
+- [ ] Install from the release zip into a clean `AddOns` folder. It loads, and the folder has no `Guildhearth_Vanilla.toc`.
 
 ## Needs a second client (your second account in the guild)
 
 ### Release blocker
-- [ ] **`/gh names` on both characters, at the same time.** Your sender name as the *other* client lists it under "Recent addon senders" must match what Guildhall uses (realm suffix aside), and the same in reverse. Save both outputs.
+- [ ] **`/gh names` on both characters, at the same time.** Your sender name as the *other* client lists it under "Recent addon senders" must match what Guildhearth uses (realm suffix aside), and the same in reverse. Save both outputs.
 
 ### Sync between players
 - [ ] Their listing reaches you within a few seconds, and yours reaches them. The same goes for edits, renews and removes.
@@ -84,11 +84,11 @@ New files (like the logo) need a full game restart, not just `/reload`.
 - [ ] Mail on their listing fills To with a name the mail system accepts.
 
 ### Officers
-- [ ] An officer (`[Guildhall officers=N]` in Guild Info) sees "Remove (officer)" on the other person's listing, and it works. A non-officer never sees it.
+- [ ] An officer (`[Guildhearth officers=N]` in Guild Info) sees "Remove (officer)" on the other person's listing, and it works. A non-officer never sees it.
 
 ## Leaderboard
 
-Needs Forever. Account A and account B are your two accounts, both in the guild with Guildhall. Give B a low rank (not an officer) unless a step says otherwise. Run `/console scriptErrors 1` on both. After each step, open the Leaderboard tab and use `/gh log` to see what happened.
+Needs Forever. Account A and account B are your two accounts, both in the guild with Guildhearth. Give B a low rank (not an officer) unless a step says otherwise. Run `/console scriptErrors 1` on both. After each step, open the Leaderboard tab and use `/gh log` to see what happened.
 
 ### Solo
 
@@ -101,7 +101,7 @@ Needs Forever. Account A and account B are your two accounts, both in the guild 
 - [ ] **Rank names from the game (`GuildControlGetRankName` on Forever).** Open Settings > Permissions. Expected: the columns are your guild's rank names in rank order, Guild Master first, with no "Rank N" placeholders. If you see "Rank N", run `/dump GuildControlGetNumRanks(), GuildControlGetRankName(1)` and note what it prints (nil or a secret value means the fallback to roster rank names is in use).
 - [ ] **Guild master only by default.** Before anyone has saved permissions: as the guild master, every Permissions checkbox outside the Guild Master column is enabled and unticked, and the Guild Master column is ticked and greyed out. As an officer on the same account's alt (or any non-guild-master), the grid is read-only, there are no Save or Reset buttons, the weight boxes in Leaderboard settings are read-only, and the past month view has no Retake button.
 - [ ] **Bank review list.** As the guild master, open Settings > Leaderboard and press "Bank review". Expected: every recorded bank deposit and withdrawal, newest first, with server-time dates; the player, tab and month filters and "Show excluded only" narrow it; the mouse wheel scrolls it 14 rows at a time; all text renders (no empty boxes). On a rank without "Review bank contributions" the button isn't there.
-- [ ] **Guild Info tags.** In Guild Info, write `[Guildhall donations=3,4]` (and `[Guildhall bankexclude=0,1]`). Expected after `/reload`: tabs 3 and 4 count, and ranks 0 and 1 never count. A space after a comma (`donations=3, 4`) is also read correctly, but write tags without spaces to be safe. No tag means all tabs count.
+- [ ] **Guild Info tags.** In Guild Info, write `[Guildhearth donations=3,4]` (and `[Guildhearth bankexclude=0,1]`). Expected after `/reload`: tabs 3 and 4 count, and ranks 0 and 1 never count. A space after a comma (`donations=3, 4`) is also read correctly, but write tags without spaces to be safe. No tag means all tabs count.
 
 ### Needs a second client (your second account)
 
@@ -118,18 +118,18 @@ Needs Forever. Account A and account B are your two accounts, both in the guild 
 - [ ] **Bank review: the reason reaches the member.** After unticking B's deposit on A, open B's own breakdown on B. Expected: under "Not counted" the deposit reads "... · Excluded by an officer: moving guild funds", with no officer name on B (a non-officer). An officer viewing it also sees who excluded it.
 - [ ] **A non-officer's Log hides bank reviews.** After A unticks B's deposit, open the Log tab on B (non-officer). Expected: the exclusion and its history entry each read "<time> | bank review | received", with no officer name, profile id or reason; typing A's name in the filter does not find them. On A (officer) the full entries show.
 - [ ] **Month save waits for sync to settle.** On A (guild master or officer), stay offline for a few days of a finished month, then log in at least 3 days after the month ends while B is online. Expected: the month is not saved at 90 s while observations are still arriving; it is saved once the Log has been quiet for a minute (within 15 min of login), and Past months then matches what B shows. If sync never goes quiet within 15 min, nothing is saved that session.
-- [ ] **Fresh install catches up on permission-dependent records.** With a rank granted "Review bank contributions" and an exclusion made by that rank, install Guildhall fresh on B (delete its SavedVariables) and log in. Expected: within about two minutes B shows the exclusion (the member's score drops on B too) with no /reload, and B's Log shows at most one "author lacks permission" line for it.
-- [ ] **Long message check (later).** In a test guild (or later, once the real guild has 5 or more saved months), install Guildhall fresh on one account and log in. Expected: it receives every saved month, with none missing from Past months.
+- [ ] **Fresh install catches up on permission-dependent records.** With a rank granted "Review bank contributions" and an exclusion made by that rank, install Guildhearth fresh on B (delete its SavedVariables) and log in. Expected: within about two minutes B shows the exclusion (the member's score drops on B too) with no /reload, and B's Log shows at most one "author lacks permission" line for it.
+- [ ] **Long message check (later).** In a test guild (or later, once the real guild has 5 or more saved months), install Guildhearth fresh on one account and log in. Expected: it receives every saved month, with none missing from Past months.
 
 ### Beta label
 
-- [ ] **Beta label shows.** On the character screen's AddOns list the addon reads "Guildhall (Beta)". The welcome screen and About tab show "Version 0.1.0 (beta)" and the orange beta note.
+- [ ] **Beta label shows.** On the character screen's AddOns list the addon reads "Guildhearth (Beta)". The welcome screen and About tab show "Version 0.1.0 (beta)" and the orange beta note.
 
 ## Groups
 
 ### Solo
 
-- [ ] **Which BFD encounter ids fire.** Run `/etrace` filtered to ENCOUNTER_END, then kill bosses in Blackfathom Deeps. Expected: the first value is in 2761-2767 (Aku'mai 2767) or in 2910-2916 (Aku'mai 2910). Note which set fires; Guildhall accepts both, and the unused set can be dropped later.
+- [ ] **Which BFD encounter ids fire.** Run `/etrace` filtered to ENCOUNTER_END, then kill bosses in Blackfathom Deeps. Expected: the first value is in 2761-2767 (Aku'mai 2767) or in 2910-2916 (Aku'mai 2910). Note which set fires; Guildhearth accepts both, and the unused set can be dropped later.
 - [ ] **Optional bosses map to the right wing.** With `/etrace` filtered to ENCOUNTER_END, kill Postmaster Malown (2798) and Skul (2799) in Stratholme, and Tsu'zee (2794) and Lord Hel'nurath (2793) in Dire Maul. Expected: Malown and Skul are on the Live side (Strat Live), Tsu'zee and Hel'nurath in Dire Maul West. If a boss was in the other wing, move its id in `Modules/Groups/Instances.lua`.
 - [ ] **Calendar reads with another month open.** Open the calendar UI on next month and leave it there, then `/dump C_Calendar.GetMonthInfo(0)` and refresh the Groups tab (zone or `/reload` with the calendar still on that month). Expected: GetMonthInfo shows the month you opened (not secret), and guild events for today through 14 days ahead still show on the right days.
 - [ ] **Instance type in and out of instances.** `/dump GetInstanceInfo()` in Elwynn Forest, in Kalimdor, inside a dungeon and inside a raid. Expected: the 2nd value is "none" in the open world (8th value 0 or 1) and "party" / "raid" inside (8th value the map id in `Modules/Groups/Instances.lua`), and none of them is secret. Then leave the dungeon: the Groups tab shows the guild calendar events again within a few seconds.
@@ -151,7 +151,7 @@ Needs Forever. Account A and account B are your two accounts, both in the guild 
 ### Needs a second client (your second account)
 
 - [ ] **Boss kill pairs.** Both clients kill a boss together (with a third and fourth player for the 3-of-5 majority on a dungeon). Expected: the kill pairs, the 3-of-5 majority applies, and credit shows on the leaderboard.
-- [ ] **Kill reports wait, then publish.** In a group of 5, kill a boss. Expected: each client's kill report reaches the other within about 30 s plus sync time (`/gh debug` shows the observe line), and with fewer than 3 other Guildhall users in the group every client still publishes. Kill a dungeon's last boss: credit still shows. The non-final boss reports are gone from the log 2 days later; the dungeon credit stays.
+- [ ] **Kill reports wait, then publish.** In a group of 5, kill a boss. Expected: each client's kill report reaches the other within about 30 s plus sync time (`/gh debug` shows the observe line), and with fewer than 3 other Guildhearth users in the group every client still publishes. Kill a dungeon's last boss: credit still shows. The non-final boss reports are gone from the log 2 days later; the dungeon credit stays.
 - [ ] **A kill report survives a quick /reload.** Kill a boss with B and `/reload` on A within 10 s. Expected: after the reload, A's kill report appears in `/gh debug` within a few seconds (published at login), and the kill still pairs.
 - [ ] **Guild settings for non-guild players.** As the guild master, open Settings > Groups. Expected: "Guild settings (guild master)" with "Raids on the guild calendar count with non-guild players" ticked and "Other runs count with non-guild players" unticked; on B (not the GM) the same state shows as text. Run a dungeon with one non-guild player: no credit, the history line reads "not an all-guild group", and the dungeon footnote says "Credit when an all-guild group kills the last boss.". Put an MC raid on the guild calendar, open the calendar on A once, and kill a boss with pugs along: the guild members get raid boss credit on both clients, also on a client that never opened the calendar. The raid footnote's last sentence fits without overlapping the buttons. Tick "Other runs..." on A: B's text changes to "count" and Settings > Change history shows "Groups: other runs count with non-guild players".
 - [ ] **Raid assistant before the first kill.** Give a rank Prepared and Ask to switch with "raid leaders and assistants" only. Before any boss dies, make B (that rank) an assistant in A's raid. Expected: B sees the Prepared ticks and "Ask to switch", and both work; with B demoted to a plain raid member they are refused ("You don't have permission for that."). After the first kill B leads or assists, the credit shows on the leaderboard.

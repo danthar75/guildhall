@@ -30,8 +30,8 @@ describe("Exchange.Category", function()
       return id, "t", "s", "", 1, it[1], it[2]
     end
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/Category.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/Category.lua")
     C = ns.Exchange.Category
   end)
   after_each(function() for _, k in ipairs(GLOBALS) do _G[k] = saved[k] end end)

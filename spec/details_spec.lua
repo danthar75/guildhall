@@ -25,7 +25,7 @@ describe("Exchange board deal UI", function()
       { id = "pGone", exp = 9e9, del = true }, { id = "pOld", exp = 5 }, { id = "pHidden", exp = 9e9 },
     }
     ns = {}
-    loadAddonFile(ns, "Guildhall/Core/Util.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Util.lua")
     ns.OnError = function(e) errors[#errors + 1] = e end
     ns.UI = {
       BACKDROP_TEMPLATE = nil,
@@ -47,10 +47,10 @@ describe("Exchange board deal UI", function()
     local names = { pZed = "Zed", pBrakka = "Brakka", pHidden = "Hidden", pMe = "Dor", pOld = "Old", pGone = "Gone" }
     ns.LbConfig = { _displayName = function(_, id) return names[id] or id end }
     ns.Exchange = { Form = { HandleError = function(e) return "ERR " .. tostring(e) end } }
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/Category.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/Listing.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/UI/Board.lua")
-    loadAddonFile(ns, "Guildhall/Modules/Exchange/UI/Details.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/Category.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/Listing.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/UI/Board.lua")
+    loadAddonFile(ns, "Guildhearth/Modules/Exchange/UI/Details.lua")
     Board, Details = ns.Exchange.Board, ns.Exchange.BoardDetails
     ns.services = {
       now = function() return 1000 end, playerChar = "Dor-Realm",

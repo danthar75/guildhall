@@ -116,7 +116,7 @@ function R:_remind(post, me, now)
     if ctx.profile.OnlineChar and ctx.profile:OnlineChar(pid) ~= nil then online = online + 1 end
   end
   local mins = math.max(1, math.ceil((post.d.start - now) / 60))
-  self.print(string.format("Guildhall: %s starts in %d min (%d of %d signed up, %d online).", name, mins,
+  self.print(string.format("Guildhearth: %s starts in %d min (%d of %d signed up, %d online).", name, mins,
     #people, size, online))
   if opts(ctx).sound ~= false and ctx.playSound then ctx.playSound() end
   return true

@@ -183,7 +183,7 @@ end
 --   calendar  "Raids on the guild calendar count with non-guild players": a verified raid kill that
 --             matches a guild calendar raid (synced "guildraid" notices of that instance from 2
 --             linked profiles, start - 1800 <= kill.at <= start + 21600) needs no guild share; pugs earn nothing
---             anyway (they aren't Guildhall users). OFF: calendar raids follow `other`.
+--             anyway (they aren't Guildhearth users). OFF: calendar raids follow `other`.
 --   other     "Other runs count with non-guild players" (dungeons, and raids not on the calendar):
 --             OFF = every name on every report is a guild member; ON = a guild majority on every
 --             report (I1).

@@ -7,7 +7,7 @@ local ADDON, ns = ...
 -- history (which scrolls its own list) sits in a scroll frame; a section builder may set its
 -- parent's height, the default is 120. Only the shown sub-tab refreshes.
 -- SettingsView.Build(parent) -> view { refresh, select(key), tabKeys, panes, info, chars }.
--- Named globals: "GuildhallUISettingsScroll" (General) and "GuildhallUISettingsScroll2", 3, ... for
+-- Named globals: "GuildhearthUISettingsScroll" (General) and "GuildhearthUISettingsScroll2", 3, ... for
 -- the other sub-tabs (the scroll frame template needs a name on some clients).
 local UI = ns.UI
 local SettingsView = {}
@@ -29,7 +29,7 @@ local function coreLines()
   lines[#lines + 1] = "Profile id: " .. tostring(s.profile:Id())
   local n = s.roster:OfficerThreshold()
   lines[#lines + 1] = "Officer ranks: rank index below " .. tostring(n)
-    .. "  |cff888888(Set by officers in Guild Info: [Guildhall officers=N])|r"
+    .. "  |cff888888(Set by officers in Guild Info: [Guildhearth officers=N])|r"
 
   local p = UI.Personal()
   local chars = p and p.profile and p.profile.chars or {}
@@ -57,7 +57,7 @@ local function scrollPane(pane, name)
 end
 
 local function buildGeneral(view, content)
-  local header = UI.Text(content, "GameFontNormalLarge", "Guildhall")
+  local header = UI.Text(content, "GameFontNormalLarge", "Guildhearth")
   header:SetPoint("TOPLEFT", 4, -4)
 
   local welcome = UI.Button(content, "Show welcome screen", 160, function() UI.Welcome:Show() end)
@@ -146,13 +146,13 @@ function SettingsView.Build(parent)
     view.panes[key] = pane
 
     if key == GENERAL then
-      view.refreshGeneral = buildGeneral(view, scrollPane(pane, "GuildhallUISettingsScroll"))
+      view.refreshGeneral = buildGeneral(view, scrollPane(pane, "GuildhearthUISettingsScroll"))
     else
       local sec = { key = key, build = d.build }
       if d.noScroll then
         sec.host = pane
       else
-        sec.host = scrollPane(pane, "GuildhallUISettingsScroll" .. i)
+        sec.host = scrollPane(pane, "GuildhearthUISettingsScroll" .. i)
         sec.content = sec.host
       end
       buildSection(sec)

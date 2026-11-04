@@ -5,10 +5,10 @@ describe("Groups", function()
   local function mkns()
     local ns = {}
     for _, f in ipairs({ "Util", "DB", "ReplicatedSet", "Sync", "Log", "Profile" }) do
-      loadAddonFile(ns, "Guildhall/Core/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Core/" .. f .. ".lua")
     end
     for _, f in ipairs({ "Instances", "Post", "Groups" }) do
-      loadAddonFile(ns, "Guildhall/Modules/Groups/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Modules/Groups/" .. f .. ".lua")
     end
     return ns
   end
@@ -430,7 +430,7 @@ describe("Groups", function()
   end)
 
   it("both new files are in the TOCs right after Instances", function()
-    for _, toc in ipairs({ "Guildhall/Guildhall.toc", "Guildhall/Guildhall_Vanilla.toc" }) do
+    for _, toc in ipairs({ "Guildhearth/Guildhearth.toc", "Guildhearth/Guildhearth_Vanilla.toc" }) do
       local lines = {}
       for l in io.lines(toc) do lines[#lines + 1] = l end
       for i, l in ipairs(lines) do

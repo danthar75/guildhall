@@ -1,7 +1,7 @@
 local ADDON, ns = ...
 
 -- Log tab: filter box, scrolling read-only text of Log:Export lines, Export button.
--- Named global: "GuildhallUILogScroll" (scroll frame template needs a name on some clients).
+-- Named global: "GuildhearthUILogScroll" (scroll frame template needs a name on some clients).
 local UI = ns.UI
 local LogView = {}
 UI.LogView = LogView
@@ -112,7 +112,7 @@ function LogView.Build(parent)
 
   local export = UI.Button(parent, "Export", 90, function()
     local list = filtered(view) or {}
-    UI.CopyBox:Show("Guildhall log", LogView.Export(ns.services.log, list, canSeeDetail()))
+    UI.CopyBox:Show("Guildhearth log", LogView.Export(ns.services.log, list, canSeeDetail()))
   end)
   export:SetPoint("TOPRIGHT", -4, -2)
 
@@ -120,7 +120,7 @@ function LogView.Build(parent)
   view.count:SetPoint("BOTTOMLEFT", 4, 2)
 
   local scroll
-  scroll, view.edit = UI.ScrollText(parent, "GuildhallUILogScroll")
+  scroll, view.edit = UI.ScrollText(parent, "GuildhearthUILogScroll")
   scroll:SetPoint("TOPLEFT", 4, -34)
   scroll:SetPoint("BOTTOMRIGHT", -26, 18)
 

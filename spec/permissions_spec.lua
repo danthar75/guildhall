@@ -10,12 +10,12 @@ describe("Permissions", function()
   local function build(char)
     ns = {}
     for _, f in ipairs({ "Util", "DB", "ReplicatedSet", "Sync", "Log" }) do
-      loadAddonFile(ns, "Guildhall/Core/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Core/" .. f .. ".lua")
     end
     for _, f in ipairs({ "Activity", "Scoring", "Config" }) do
-      loadAddonFile(ns, "Guildhall/Core/Leaderboard/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Core/Leaderboard/" .. f .. ".lua")
     end
-    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Permissions.lua")
     ns.Activity.Register({ id = "sales", label = "Sales", unit = "count", verify = "paired", weight = 5, order = 1 })
     local roster = {
       RankIndex = function(_, name) return ranks[name] end,
@@ -357,7 +357,7 @@ describe("Permissions", function()
   describe("group keys", function()
     it("the three groups keys appear after the leaderboard keys and default to the guild master only", function()
       local _, perms = build("Gm-Realm")
-      loadAddonFile(ns, "Guildhall/Modules/Groups/Perms.lua")
+      loadAddonFile(ns, "Guildhearth/Modules/Groups/Perms.lua")
       local got = {}
       for _, k in ipairs(ns.Permissions.KEYS) do got[#got + 1] = { k.key, k.label, k.raidlead } end
       assert.same({ { "weights", "Edit leaderboard weights", false }, { "retake", "Retake a month", false },
@@ -373,7 +373,7 @@ describe("Permissions", function()
 
     it("a raidlead grant needs a matching raidLeaders set", function()
       local _, perms = build("Gm-Realm")
-      loadAddonFile(ns, "Guildhall/Modules/Groups/Perms.lua")
+      loadAddonFile(ns, "Guildhearth/Modules/Groups/Perms.lua")
       assert.is_true((perms:Publish({ checklists = { ranks = { 0 }, raidlead = true } })))
       assert.is_false(perms:Can("Member-Realm", "checklists"))
       assert.is_false(perms:Can("Member-Realm", "checklists", { raidLeaders = { ["Vet-Realm"] = true } }))
@@ -435,7 +435,7 @@ describe("Permissions", function()
 
     it("follows the checklists permission for the no-permission-now mark", function()
       local cfg = build("Gm-Realm")
-      loadAddonFile(ns, "Guildhall/Modules/Groups/Perms.lua")
+      loadAddonFile(ns, "Guildhearth/Modules/Groups/Perms.lua")
       assert.is_true(cfg:HistoryAuthorPermitted({ what = "checklist", by = "Gm-Realm" }))
       assert.is_false(cfg:HistoryAuthorPermitted({ what = "checklist", by = "Off-Realm" }))
     end)
@@ -460,12 +460,12 @@ describe("PermissionsView", function()
     local bus = fakes.bus(clock, timers)
     ns = {}
     for _, f in ipairs({ "Util", "DB", "ReplicatedSet", "Sync", "Log" }) do
-      loadAddonFile(ns, "Guildhall/Core/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Core/" .. f .. ".lua")
     end
     for _, f in ipairs({ "Activity", "Scoring", "Config" }) do
-      loadAddonFile(ns, "Guildhall/Core/Leaderboard/" .. f .. ".lua")
+      loadAddonFile(ns, "Guildhearth/Core/Leaderboard/" .. f .. ".lua")
     end
-    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
+    loadAddonFile(ns, "Guildhearth/Core/Permissions.lua")
     ns.OnError = function(e) errors[#errors + 1] = e end
     ns.UI = {
       Try = function(fn, ...)
@@ -495,8 +495,8 @@ describe("PermissionsView", function()
     })
     ns.services = { playerChar = char, roster = roster }
     ns.leaderboard = { config = cfg, permissions = perms }
-    loadAddonFile(ns, "Guildhall/Core/UI/HistoryView.lua")
-    loadAddonFile(ns, "Guildhall/Core/UI/PermissionsView.lua")
+    loadAddonFile(ns, "Guildhearth/Core/UI/HistoryView.lua")
+    loadAddonFile(ns, "Guildhearth/Core/UI/PermissionsView.lua")
     view = ns.UI.PermissionsView.Build(W.new("Frame"))
     return view
   end
@@ -634,9 +634,9 @@ describe("PermissionsView", function()
   it("UI strings use allowed glyphs only", function()
     build("Gm-Realm")
     for _, t in ipairs(texts) do assert.is_true(isAllowed(tostring(t.text)), tostring(t.text)) end
-    for _, path in ipairs({ "Guildhall/Core/Permissions.lua", "Guildhall/Core/UI/PermissionsView.lua",
-      "Guildhall/Core/Leaderboard/UI/SettingsView.lua", "Guildhall/Core/UI/SettingsView.lua",
-      "Guildhall/Core/UI/HistoryView.lua", "Guildhall/Modules/Groups/UI/SettingsView.lua" }) do
+    for _, path in ipairs({ "Guildhearth/Core/Permissions.lua", "Guildhearth/Core/UI/PermissionsView.lua",
+      "Guildhearth/Core/Leaderboard/UI/SettingsView.lua", "Guildhearth/Core/UI/SettingsView.lua",
+      "Guildhearth/Core/UI/HistoryView.lua", "Guildhearth/Modules/Groups/UI/SettingsView.lua" }) do
       local f = assert(io.open(path)); local src = f:read("*a"); f:close()
       for str in src:gmatch('"([^"\n]*)"') do assert.is_true(isAllowed(str), path .. ": " .. str) end
     end
