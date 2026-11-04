@@ -356,10 +356,16 @@ describe("Groups Calendar", function()
       assert.same({ kind = "guildraid", instance = "mc", start = start, title = "MC night", at = clock.now() },
         list[1].d)
       assert.equal(start + 21600 + DAY + RETENTION, list[1].exp)
-      -- another client that already holds it, or a second refresh, doesn't add one
-      b.cal:Refresh()
+      -- a second refresh adds none; a second profile adds one (2 linked profiles are needed);
+      -- after that nobody adds more
       a.cal:Refresh()
-      assert.equal(1, #b.obs:List("guildraid"))
+      assert.equal(1, #a.obs:List("guildraid"))
+      b.cal:Refresh()
+      assert.equal(2, #b.obs:List("guildraid"))
+      local c = client("Raider-R")
+      c.events = evs
+      c.cal:Refresh()
+      assert.equal(2, #c.obs:List("guildraid"))
     end)
 
     it("a calendar match seen by only one client gives the same credit on every client", function()
@@ -367,8 +373,11 @@ describe("Groups Calendar", function()
       local start = clock.now() + 600
       a.events = { { title = "MC pug night", start = start, instance = "mc", myStatus = "accepted" } }
       b.events = {}
+      local r = client("Raider-R")          -- a second member who saw the event
+      r.events = a.events
       a.cal:Refresh()
       b.cal:Refresh()
+      r.cal:Refresh()
       local pugs = { "A-R", "B-R", "Raider-R" }
       for i = 1, 12 do pugs[#pugs + 1] = "Pug" .. i .. "-X" end
       verifiedKill(start + 3600, pugs)

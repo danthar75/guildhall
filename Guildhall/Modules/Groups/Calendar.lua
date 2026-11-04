@@ -68,7 +68,8 @@ end
 
 -- guildraid { instance (a raid), start, title? (<= 64), at }: "this raid is on the guild calendar".
 -- Any member's client publishes one from cal:Refresh for each guild calendar event that maps to a
--- raid, unless the store already holds one for (instance, start). Credit reads only these synced
+-- raid, until the store holds notices of that (instance, start) from 2 distinct linked profiles
+-- (Credit counts a raid only then, Ruling F7); a profile never publishes twice. Credit reads only these synced
 -- notices (Ruling U1b), never the local calendar, so every client decides a kill the same way. It
 -- lives until 400 days after the raid's window ends (start + 6 h + 1 day slack), so it outlives
 -- every kill it can match: exp = start + 21600 + 86400 + 400 days, inside the kind's retention.
@@ -242,10 +243,21 @@ function C:Refresh()
 end
 
 function C:_announceRaids(list, now)
-  local have = {}
+  local p = self.profile
+  local me = p and p.Id and p:Id() or nil
+  local seen, have = {}, {}
   for _, rec in ipairs(self.obs:List("guildraid")) do
     local d = type(rec) == "table" and rec.d
-    if type(d) == "table" then have[tostring(d.instance) .. "|" .. tostring(d.start)] = true end
+    if type(d) == "table" and type(rec.by) == "string" then
+      local key = tostring(d.instance) .. "|" .. tostring(d.start)
+      local linked = type(rec.char) == "string" and p and p.OwnerOf and p:OwnerOf(rec.char) == rec.by
+      if rec.by == me then have[key] = true end
+      if linked then
+        seen[key] = seen[key] or { n = 0 }
+        if not seen[key][rec.by] then seen[key][rec.by] = true; seen[key].n = seen[key].n + 1 end
+        if seen[key].n >= 2 then have[key] = true end
+      end
+    end
   end
   for _, ev in ipairs(list) do
     local entry = ev.instance and ns.Instances.Get(ev.instance)

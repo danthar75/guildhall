@@ -181,8 +181,8 @@ end
 -- on arrival an unknown roster rejects for now and an author who left the guild is accepted (the
 -- Leaderboard's model, as for perms). Without a record: calendar ON, other OFF.
 --   calendar  "Raids on the guild calendar count with non-guild players": a verified raid kill that
---             matches a guild calendar raid (a synced "guildraid" observation of that instance with
---             start - 1800 <= kill.at <= start + 21600) needs no guild share; pugs earn nothing
+--             matches a guild calendar raid (synced "guildraid" notices of that instance from 2
+--             linked profiles, start - 1800 <= kill.at <= start + 21600) needs no guild share; pugs earn nothing
 --             anyway (they aren't Guildhall users). OFF: calendar raids follow `other`.
 --   other     "Other runs count with non-guild players" (dungeons, and raids not on the calendar):
 --             OFF = every name on every report is a guild member; ON = a guild majority on every
@@ -250,16 +250,29 @@ function Credit.SetSetting(config, key, on)
 end
 
 -- The rules a derivation uses: the settings plus the guild calendar raids seen in the synced
--- "guildraid" observations, by instance (start times). observations: anything with List(kind).
-function Credit.Rules(config, observations)
+-- "guildraid" observations, by instance (start times). A raid counts only once notices of it come
+-- from at least 2 distinct linked profiles (profile:OwnerOf(rec.char) == rec.by, Ruling F7), so one
+-- member can't put a raid on the calendar alone. observations: anything with List(kind).
+function Credit.Rules(config, observations, profile)
   local rules = Credit.Settings(config)
-  local raids = {}
+  local raids, by = {}, {}
   local list = observations and observations.List and observations:List("guildraid") or {}
   for _, rec in ipairs(list) do
     local d = type(rec) == "table" and rec.d
-    if type(d) == "table" and d.kind == "guildraid" and finite(d.start) and type(d.instance) == "string" then
-      raids[d.instance] = raids[d.instance] or {}
-      raids[d.instance][#raids[d.instance] + 1] = d.start
+    if type(d) == "table" and d.kind == "guildraid" and finite(d.start) and type(d.instance) == "string"
+        and type(rec.by) == "string" and type(rec.char) == "string"
+        and profile ~= nil and profile.OwnerOf ~= nil and profile:OwnerOf(rec.char) == rec.by then
+      local key = d.instance .. "|" .. d.start
+      local set = by[key] or { n = 0 }
+      by[key] = set
+      if not set[rec.by] then
+        set[rec.by] = true
+        set.n = set.n + 1
+        if set.n == 2 then
+          raids[d.instance] = raids[d.instance] or {}
+          raids[d.instance][#raids[d.instance] + 1] = d.start
+        end
+      end
     end
   end
   rules.raids = raids
@@ -331,7 +344,7 @@ end
 function Credit.Derive(list, ctx)
   local clock = clockOf(ctx)
   local roster, profile = ctx and ctx.roster, profileOf(ctx)
-  local rules = Credit.Rules(ctx and ctx.config, ctx and ctx.observations)
+  local rules = Credit.Rules(ctx and ctx.config, ctx and ctx.observations, profile)
   local Scoring, Instances = ns.Scoring, ns.Instances
   local out, seen = {}, {}
 

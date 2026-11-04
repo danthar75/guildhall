@@ -268,9 +268,14 @@ describe("Groups Credit", function()
     local PUG1 = { "A-R", "B-R", "C-R", "D-R", "X-P" }
     local THREE = { "A-R", "B-R", "C-R", "X-P", "Y-P" }
     local raids
-    local function raidNight(start)
-      raids[#raids + 1] = { id = "gr" .. #raids, by = "p3", char = "C-R",
+    -- a notice of the event from one profile (default: two linked profiles, p3 and p2)
+    local function notice(by, char, start)
+      raids[#raids + 1] = { id = "gr" .. #raids, by = by, char = char,
         d = { kind = "guildraid", instance = "mc", start = start, at = start - DAY } }
+    end
+    local function raidNight(start)
+      notice("p3", "C-R", start)
+      notice("p2", "B-R", start)
     end
     -- 5 guild members and 15 pugs
     local function mcPug()
@@ -302,13 +307,29 @@ describe("Groups Credit", function()
       assert.same({}, charsOf(derive(list), "groups.raidboss"))             -- no calendar event
       raidNight(start)
       assert.same(FIVE, charsOf(derive(list), "groups.raidboss"))           -- pugs earn nothing
-      local rules = Credit.Rules(ctx.config, ctx.observations)
+      local rules = Credit.Rules(ctx.config, ctx.observations, ctx.profile)
       local k = Credit.Verified(list, ctx.profile)[1]
       assert.is_true(select(2, Credit.GuildMembers(k, ctx.roster, rules)))
       -- the window is start - 30 min .. start + 6 h, and the event must be that raid
       assert.same({}, charsOf(derive(pair({}, "mc", 664, mcPug(), start + 6 * HOUR + 1)), "groups.raidboss"))
       assert.same(FIVE, charsOf(derive(pair({}, "mc", 665, mcPug(), start - 30 * 60)), "groups.raidboss"))
       assert.same({}, charsOf(derive(pair({}, "bwl", 610, mcPug(), start + HOUR)), "groups.raidboss"))
+    end)
+
+    it("a calendar notice counts only once 2 distinct linked profiles published it", function()
+      local start = T0 + 20 * HOUR
+      local list = pair({}, "mc", 663, mcPug(), start + HOUR)
+      notice("p3", "C-R", start)
+      assert.same({}, charsOf(derive(list), "groups.raidboss"))   -- one profile: not enough
+      notice("p3", "C-R", start)
+      assert.same({}, charsOf(derive(list), "groups.raidboss"))   -- the same profile twice: still one
+      notice("p9", "Ghost-R", start)                               -- not linked
+      notice("p1", "B-R", start)                                   -- a char p1 doesn't own
+      assert.same({}, charsOf(derive(list), "groups.raidboss"))
+      notice("p2", "B-R", start)
+      assert.same(FIVE, charsOf(derive(list), "groups.raidboss"))  -- two linked profiles
+      -- without a profile service no notice counts
+      assert.is_false(Credit.OnCalendar(Credit.Rules(ctx.config, ctx.observations), Credit.Verified(list, ctx.profile)[1]))
     end)
 
     it("calendar off: calendar raids follow 'other'", function()
@@ -327,7 +348,7 @@ describe("Groups Credit", function()
       mixed = { calendar = true, other = true }
       local list = pair({}, "rfc", RFC_FINAL, THREE, T0)
       assert.same({ "A-R", "B-R", "C-R" }, charsOf(derive(list), "groups.dungeon"))
-      local rules = Credit.Rules(ctx.config, ctx.observations)
+      local rules = Credit.Rules(ctx.config, ctx.observations, ctx.profile)
       assert.equal(1, #Credit.Clears(list, ctx.roster, nil, ctx.profile, rules))
       assert.same({}, Credit.Clears(list, ctx.roster, nil, ctx.profile))
       assert.same({}, charsOf(derive(pair({}, "rfc", RFC_FINAL, { "A-R", "B-R", "X-P", "Y-P", "Z-P" }, T0 + DAY)),
