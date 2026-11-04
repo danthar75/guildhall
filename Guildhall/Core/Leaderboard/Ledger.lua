@@ -5,16 +5,20 @@ local ADDON, ns = ...
 -- profile: a bank character counts for a profile only if that profile's record lists it,
 -- otherwise it counts toward the guild total alone. Netted types (bank gold, bank items) are
 -- netted here, per window, never at storage.
+-- Bank review: a contribution whose ref ctx.config:Exclusions() lists is left out of its member's
+-- score but still counts toward the guild total (the gold or items really are in the bank). It is
+-- applied here in Query, never in the cached Contributions.
 --
 -- Contribution: { type, profile?, char?, value (signed int), at, item?, tab?, ref, counted,
 --   why?, net? }. why: "unpaired", "waiting for confirmation", "rank excluded",
---   "tab not counted", "not linked".
+--   "tab not counted", "not linked", "excluded by an officer" (rows then carry reason and
+--   excludedBy).
 ns.Ledger = ns.Ledger or {}
 local Ledger = ns.Ledger
 local L = {}
 L.__index = L
 
--- ctx: { observations, profile, roster, now, activity }. Callers may add fields (derivers
+-- ctx: { observations, profile, roster, now, activity, config? }. Callers may add fields (derivers
 -- receive ctx as their second argument).
 function Ledger.new(ctx)
   return setmetatable({ ctx = ctx, cache = nil, cacheChanges = nil, dirty = true }, L)
@@ -83,6 +87,8 @@ function L:Query(q)
   local tabs = q.tabs or toSet(ctx.roster:ConfigList("donations"))
   local anyTab = next(tabs) ~= nil
 
+  local excluded = ctx.config and ctx.config.Exclusions and ctx.config:Exclusions() or {}
+
   local result = { byProfile = {}, guild = {}, goldKept = 0 }
   if q.includeUncounted then result.rows = {} end
   local nets = {}
@@ -105,26 +111,34 @@ function L:Query(q)
       if counted and c.tab ~= nil and anyTab and not tabs[c.tab] then
         counted, why = false, "tab not counted"
       end
+      -- guildOnly: excluded by an officer, so it still counts toward the guild total
+      local ex = counted and c.ref ~= nil and excluded[c.ref] or nil
+      local guildOnly = ex ~= nil
+      if guildOnly then counted, why = false, "excluded by an officer" end
       if result.rows then
         local row = {}
         for k, v in pairs(c) do row[k] = v end
         row.counted, row.why = counted, counted and nil or why
         if profile then row.profile = profile end
+        if guildOnly then row.reason, row.excludedBy, row.excludedAt = ex.reason, ex.by, ex.at end
         result.rows[#result.rows + 1] = row
       end
-      if counted then
+      if counted or guildOnly then
         if c.net then
+          -- One bucket per owner: sum feeds the guild total (excluded entries too), own feeds
+          -- the member, so excluding an entry never changes what the guild total nets to.
           local owner = profile and ("p:" .. profile) or ("c:" .. tostring(c.char))
           local key = c.type .. "|" .. owner .. "|" .. tostring(c.item)
           local n = nets[key]
           if not n then
-            n = { type = c.type, profile = profile, sum = 0 }
+            n = { type = c.type, profile = profile, sum = 0, own = 0 }
             nets[key] = n
           end
           n.sum = n.sum + c.value
+          if counted then n.own, n.hasOwn = n.own + c.value, true end
         else
           addTo(result.guild, c.type, c.value)
-          if profile then
+          if profile and counted then
             result.byProfile[profile] = result.byProfile[profile] or {}
             addTo(result.byProfile[profile], c.type, c.value)
           end
@@ -139,9 +153,9 @@ function L:Query(q)
   for _, n in pairs(nets) do
     local v = math.max(n.sum, 0)
     addTo(result.guild, n.type, v)
-    if n.profile then
+    if n.profile and n.hasOwn then
       result.byProfile[n.profile] = result.byProfile[n.profile] or {}
-      addTo(result.byProfile[n.profile], n.type, v)
+      addTo(result.byProfile[n.profile], n.type, math.max(n.own, 0))
     end
     if n.type == "bank.gold" then result.goldKept = result.goldKept + v end
   end

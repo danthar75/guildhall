@@ -299,4 +299,46 @@ describe("Leaderboard.SettingsView", function()
     buttons["Publish weights"].onClick()
     assert.equal("You don't have permission to publish weights.", section.status.text)
   end)
+
+  describe("bank review", function()
+    it("shows the Bank review button only with bankreview, and it opens the list", function()
+      assert.is_false(buttons["Bank review"].shown)
+      granted.bankreview = true
+      section.refresh()
+      assert.is_true(buttons["Bank review"].shown)
+      local opened = 0
+      ns.Leaderboard.BankReview = { Open = function() opened = opened + 1; return false, "refused text" end }
+      buttons["Bank review"].onClick()
+      assert.equal(1, opened)
+      assert.equal("refused text", section.status:GetText())
+      granted.bankreview = nil
+      section.refresh()
+      assert.is_false(buttons["Bank review"].shown)
+    end)
+
+    it("describes bank changes in plain words, naming the entry when the ledger still has it", function()
+      local D = ns.Leaderboard.SettingsView.Describe
+      local contribs = {
+        { type = "bank.gold", char = "Bob-Realm", value = 500000, ref = "bank:o1" },
+        { type = "bank.items", char = "Cat-Realm", value = -3, item = "Linen", ref = "bank:o2" },
+      }
+      ns.leaderboard.ledger = { Contributions = function() return contribs end }
+      assert.same({ "Excluded a bank entry (Bob, 50g deposit): moving guild funds" },
+        D({ what = "bank", key = "bank:o1", before = { excluded = false }, after = { excluded = true, reason = "moving guild funds" } }))
+      assert.same({ "Counted a bank entry again (Cat, [Linen] x3 withdrawal)" },
+        D({ what = "bank", key = "bank:o2", before = { excluded = true }, after = { excluded = false } }))
+      assert.same({ "Excluded a bank entry (bank:o9)" },
+        D({ what = "bank", key = "bank:o9", before = { excluded = false }, after = { excluded = true } }))
+      assert.same({ "Changed the reason for an excluded bank entry (Bob, 50g deposit): b" },
+        D({ what = "bank", key = "bank:o1", before = { reason = "a" }, after = { reason = "b" } }))
+      assert.same({ "Removed the reason for an excluded bank entry (Bob, 50g deposit)" },
+        D({ what = "bank", key = "bank:o1", before = { reason = "a" }, after = {} }))
+      -- a reason is shown escaped
+      assert.same({ "Excluded a bank entry (bank:o9): a||b" },
+        D({ what = "bank", key = "bank:o9", before = {}, after = { excluded = true, reason = "a|b" } }))
+      ns.leaderboard.ledger = nil
+      assert.same({ "Counted a bank entry again (bank:o1)" },
+        D({ what = "bank", key = "bank:o1", before = { excluded = true }, after = { excluded = false } }))
+    end)
+  end)
 end)

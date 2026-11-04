@@ -73,7 +73,9 @@ local function build(n, s)
     after = s.after, random = s.random, playerChar = s.playerChar, db = db.config, syncs = s.syncs,
     perms = permissions,
   })
-  local ledger = n.Ledger.new({ observations = observations, profile = s.profile, roster = s.roster, now = s.now })
+  -- config: the ledger reads the bank review's exclusions from it on every Query
+  local ledger = n.Ledger.new({ observations = observations, profile = s.profile, roster = s.roster, now = s.now,
+    config = config })
   local bank = n.Bank.new({
     compat = s.compat, observations = observations, profile = s.profile, roster = s.roster,
     now = s.now, moduleDb = db,

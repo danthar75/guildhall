@@ -325,4 +325,31 @@ describe("Leaderboard.View", function()
     timers[1][2]()
     assert.is_true(has("Gold kept in the guild this month: 0 g"))
   end)
+
+  it("the member's breakdown shows 'Excluded by an officer: moving guild funds'", function()
+    result.rows[#result.rows + 1] = { type = "bank.items", profile = "p14", value = 20, at = NOW - 10, item = "Linen",
+      counted = false, why = "excluded by an officer", reason = "moving guild funds", excludedBy = "Gm-Realm", ref = "bank:o1" }
+    local function openUncounted()
+      click(view.pinned)
+      if view.expanded.uncounted then return end
+      for _, l in ipairs(view.d.lines) do
+        if l.toggle == "uncounted" then click(l) end
+      end
+    end
+    openUncounted()
+    assert.is_true(hasLike("Deposited [Linen] x20 · Excluded by an officer: moving guild funds"))
+    assert.is_false(hasLike("Gm")) -- the officer's name is for officers only
+    officer = true
+    view:Refresh()
+    openUncounted()
+    assert.is_true(hasLike("Excluded by an officer (Gm): moving guild funds"))
+    -- no reason: the plain words alone
+    result.rows[#result.rows].reason = nil
+    officer = false
+    view:Refresh()
+    openUncounted()
+    assert.is_true(hasLike("Deposited [Linen] x20 · Excluded by an officer"))
+    assert.is_false(hasLike("Excluded by an officer:"))
+    assert.same({}, errors)
+  end)
 end)

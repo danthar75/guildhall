@@ -173,4 +173,86 @@ describe("Ledger", function()
     ledger:Contributions()
     assert.equal(3, calls)
   end)
+
+  describe("exclusions", function()
+    local excl
+    before_each(function()
+      excl = {}
+      ctx.config = { Exclusions = function() return excl end }
+    end)
+
+    it("an excluded entry leaves the member's total, stays in the guild total, and shows with its reason", function()
+      add({ type = "bank.gold", char = "Ann-R", value = 100, net = true, ref = "bank:a" })
+      add({ type = "bank.gold", char = "Bob-R", value = 30, net = true, ref = "bank:b" })
+      add({ type = "listings", profile = "bob", ref = "x:1" })
+      excl["bank:a"] = { excluded = true, reason = "moving guild funds", by = "Gm-R", at = 5 }
+      local r = ledger:Query({ includeUncounted = true })
+      assert.is_nil(r.byProfile.ann)
+      assert.equal(30, r.byProfile.bob["bank.gold"])
+      assert.equal(130, r.guild["bank.gold"])
+      assert.equal(130, r.goldKept)
+      local row
+      for _, x in ipairs(r.rows) do if x.ref == "bank:a" then row = x end end
+      assert.is_false(row.counted)
+      assert.equal("excluded by an officer", row.why)
+      assert.equal("moving guild funds", row.reason)
+      assert.equal("Gm-R", row.excludedBy)
+      assert.equal("ann", row.profile)
+      -- applied in Query only: the cached contribution is untouched
+      assert.is_true(ctx.contribs[1].counted)
+      assert.is_nil(ctx.contribs[1].why)
+      excl["bank:a"] = nil
+      assert.equal(100, ledger:Query({}).byProfile.ann["bank.gold"])
+    end)
+
+    it("an excluded deposit nets out of the member but not the guild", function()
+      add({ type = "bank.gold", char = "Ann-R", value = 100, net = true, ref = "bank:dep", at = 10 })
+      add({ type = "bank.gold", char = "Ann-R", value = -40, net = true, ref = "bank:wd", at = 20 })
+      local before = ledger:Query({})
+      assert.equal(60, before.byProfile.ann["bank.gold"])
+      assert.equal(60, before.guild["bank.gold"])
+      excl["bank:dep"] = { excluded = true }
+      local r = ledger:Query({})
+      assert.equal(0, r.byProfile.ann["bank.gold"]) -- -40 alone clamps at 0
+      assert.equal(60, r.guild["bank.gold"])        -- the bank still holds the 60
+      assert.equal(60, r.goldKept)
+    end)
+
+    it("an excluded withdrawal nets out of the member but not the guild", function()
+      add({ type = "bank.gold", char = "Ann-R", value = 100, net = true, ref = "bank:dep", at = 10 })
+      add({ type = "bank.gold", char = "Ann-R", value = -40, net = true, ref = "bank:wd", at = 20 })
+      excl["bank:wd"] = { excluded = true, reason = "repairs for the raid" }
+      local r = ledger:Query({})
+      assert.equal(100, r.byProfile.ann["bank.gold"])
+      assert.equal(60, r.guild["bank.gold"])
+      assert.equal(60, r.goldKept)
+      -- netting is still per window
+      local w = ledger:Query({ to = 15 })
+      assert.equal(100, w.byProfile.ann["bank.gold"])
+      assert.equal(100, w.guild["bank.gold"])
+    end)
+
+    it("excluding every entry of a member still leaves the guild total and clamps at 0", function()
+      add({ type = "bank.items", char = "Ann-R", item = 7, value = 5, net = true, ref = "bank:i1" })
+      add({ type = "bank.items", char = "Ann-R", item = 7, value = -8, net = true, ref = "bank:i2" })
+      excl["bank:i1"], excl["bank:i2"] = { excluded = true }, { excluded = true }
+      local r = ledger:Query({})
+      assert.is_nil(r.byProfile.ann) -- nothing left of hers adds to byProfile
+      assert.equal(0, r.guild["bank.items"])
+    end)
+
+    it("an excluded entry that wasn't counted keeps its own why and adds nothing", function()
+      add({ type = "bank.gold", char = "Ann-R", value = 100, net = true, ref = "bank:u", counted = false, why = "unpaired" })
+      excl["bank:u"] = { excluded = true }
+      local r = ledger:Query({ includeUncounted = true })
+      assert.is_nil(r.guild["bank.gold"])
+      assert.equal("unpaired", r.rows[1].why)
+    end)
+
+    it("works without a config", function()
+      ctx.config = nil
+      add({ type = "bank.gold", char = "Ann-R", value = 100, net = true, ref = "bank:a" })
+      assert.equal(100, ledger:Query({}).byProfile.ann["bank.gold"])
+    end)
+  end)
 end)

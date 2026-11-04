@@ -151,6 +151,7 @@ local function configFor(real, store)
     c[name] = function(_, ...) return real[name](real, ...) end
   end
   function c:History() return {} end -- a read, never a write
+  function c:Exclusions() return {} end -- the demo rows are never excluded
   function c:Months() return { store.month.ym } end
   function c:Month(ym)
     if ym == store.month.ym then return ns.Util.DeepCopy(store.month.rec) end

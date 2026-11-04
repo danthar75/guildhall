@@ -5,13 +5,17 @@ local ADDON, ns = ...
 --   "month:YYYY-MM" frozen top-5 record of a finished month (first accepted wins; an officer
 --                   retake, d.retake = true with a Greater version, replaces it)
 --   "perms"         guild-rank permissions (ns.Permissions validates it: the author must be rank 0)
+--   "exclude:<ref>" whether one bank contribution (ref "bank:<oldest observation id>") counts
+--                   toward its member's score: { ref, excluded = bool, reason?, by = char, at }.
+--                   Newest version wins (re-ticking publishes excluded = false); expires after 2
+--                   years, which outlives the 400-day observations it points to.
 --   "history:<profile>:<t>:<n>"  append-only log of one decision (a weights change, a month
---                   retake or a permissions change): { what, key, before, after, by = char, at }.
---                   Never replaced (a second version is rejected); expires after 2 years. n is a
---                   per-session counter.
--- Weights and retakes need the "weights" / "retake" permission (guild master only by default); the
--- automatic month save stays an officer action. Other record kinds (exclude:) join later through
--- the id-prefix dispatch in validateRecord. A record is checked against the roster and permissions
+--                   retake, a permissions change or a bank review): { what, key, before, after,
+--                   by = char, at }. Never replaced (a second version is rejected); expires after
+--                   2 years. n is a per-session counter.
+-- Weights, retakes and bank reviews need the "weights" / "retake" / "bankreview" permission (guild
+-- master only by default); the automatic month save stays an officer action. Record kinds are told
+-- apart by the id-prefix dispatch in validateRecord. A record is checked against the roster and permissions
 -- only when it arrives, so a demoted author's earlier record stays in effect. An unknown roster
 -- rejects it for now; the next sync offers it again.
 ns.LbConfig = ns.LbConfig or {}
@@ -28,8 +32,10 @@ local MAX_ID, MAX_NAME, MAX_BOARDS, MAX_WEIGHTS = 16, 48, 16, 32
 local MAX_VALUE = 1e12
 local RETENTION = 34560000
 local HISTORY_RETENTION = 63072000 -- 2 years
--- What a history record may describe. Task 17 adds "bank".
-local HISTORY_WHAT = { weights = true, month = true, perms = true }
+-- What a history record may describe.
+local HISTORY_WHAT = { weights = true, month = true, perms = true, bank = true }
+local MAX_REF, MAX_REASON = 48, 80
+local EXCLUDE_FIELDS = { ref = true, excluded = true, reason = true, by = true, at = true }
 local REFUSED = "no permission"
 
 local C = {}
@@ -52,6 +58,7 @@ local function canWriteHistory(self, char, what)
   if what == "weights" then return self.perms:Can(char, "weights") end
   if what == "month" then return self.perms:Can(char, "retake") end
   if what == "perms" then return self.perms:IsGuildMaster(char) end
+  if what == "bank" then return self.perms:Can(char, "bankreview") end
   return canAdminister(self.roster, char)
 end
 
@@ -133,6 +140,48 @@ local function validSummary(x)
     and finite(x.savedAt))
 end
 
+local function validRef(ref)
+  return type(ref) == "string" and #ref <= MAX_REF and ref:match("^bank:.") ~= nil
+end
+
+-- A stored reason: nil, or 1..80 bytes with no surrounding whitespace.
+local function validReason(r)
+  return r == nil or (type(r) == "string" and #r >= 1 and #r <= MAX_REASON and ns.Util.Trim(r) == r)
+end
+
+-- A bank history side: only `excluded` and `reason`, each optional.
+local function validBankState(x)
+  if type(x) ~= "table" then return false end
+  for k in pairs(x) do
+    if k ~= "excluded" and k ~= "reason" then return false end
+  end
+  if x.excluded ~= nil and type(x.excluded) ~= "boolean" then return false end
+  return validReason(x.reason)
+end
+
+local function validExclusion(self, rec)
+  local ref = rec.id:match("^exclude:(.*)$")
+  if not validRef(ref) then return false, "bad exclusion id" end
+  local d = rec.d
+  if type(d) ~= "table" then return false, "not a table" end
+  for k in pairs(d) do
+    if not EXCLUDE_FIELDS[k] then return false, "unknown exclusion field" end
+  end
+  if d.ref ~= ref then return false, "exclusion ref mismatch" end
+  if type(d.excluded) ~= "boolean" then return false, "bad excluded" end
+  if not validReason(d.reason) then return false, "bad reason" end
+  if d.by ~= rec.char then return false, "exclusion author mismatch" end
+  if not finite(d.at) or d.at ~= rec.t then return false, "bad exclusion time" end
+  if rec.exp ~= rec.t + HISTORY_RETENTION then return false, "bad exclusion expiry" end
+  -- Checked when the record arrives. An unknown roster (or an author it doesn't list yet) is
+  -- rejected for now; the next sync offers the record again.
+  local r = self.roster
+  if r == nil or r.RankIndex == nil or (r.HasRanks and r:HasRanks() ~= true) then return false, "roster unknown" end
+  if type(rec.char) ~= "string" or r:RankIndex(rec.char) == nil then return false, "roster unknown" end
+  if not self.perms:Can(rec.char, "bankreview") then return false, "author lacks permission" end
+  return true
+end
+
 local function validHistory(self, rec)
   local profile, at = rec.id:match("^history:([^:]+):(%d+):%d+$")
   if not profile or #profile > MAX_ID then return false, "bad history id" end
@@ -167,6 +216,11 @@ local function validHistory(self, rec)
     if not ok then return false, err end
     return ns.Permissions.ValidGrants(d.after)
   end
+  if d.what == "bank" then
+    if not validRef(d.key) then return false, "bad key" end
+    if not validBankState(d.before) or not validBankState(d.after) then return false, "bad bank change" end
+    return true
+  end
   if not validSummary(d.before) or not validSummary(d.after) then return false, "bad summary" end
   return true
 end
@@ -177,6 +231,7 @@ local function validateRecord(self, rec)
   if rec.del == true then return false, "deletions not allowed" end
   if id:sub(1, 8) == "history:" then return validHistory(self, rec) end
   if id == "perms" then return self.perms:Validate(rec) end
+  if id:sub(1, 8) == "exclude:" then return validExclusion(self, rec) end
   if id == "weights" then
     if not self.perms:Can(rec.char, "weights") then return false, "author lacks permission" end
     if type(rec.d) ~= "table" then return false, "not a table" end
@@ -494,4 +549,64 @@ function C:RetakeMonth(ym, ledger)
       { savedBy = d.savedBy, savedAt = d.savedAt })
   end
   return good
+end
+
+-- Bank review --------------------------------------------------------------------------
+
+-- The first n bytes of s, never ending inside a UTF-8 sequence.
+local function cutBytes(s, n)
+  if #s <= n then return s end
+  local i = n
+  -- a continuation byte at i + 1 means byte i's character goes on past the cut
+  while i > 0 and (s:byte(i + 1) or 0) >= 128 and (s:byte(i + 1) or 0) < 192 do i = i - 1 end
+  return s:sub(1, i)
+end
+
+local function exclusionData(self, ref)
+  local d = liveData(self, "exclude:" .. ref)
+  if d and d.excluded == true then return d end
+  return nil
+end
+
+-- Excludes (excluded = true) or counts again one bank contribution, and logs the change.
+-- reason is trimmed and cut to 80 bytes; an empty one, or any reason when counting again, is nil.
+-- Setting what is already stored publishes nothing and returns true.
+function C:SetExcluded(ref, excluded, reason)
+  if not self:_can("bankreview") then return false, REFUSED end
+  if not validRef(ref) then return false, "bad ref" end
+  if type(excluded) ~= "boolean" then return false, "bad excluded" end
+  if excluded and type(reason) == "string" then
+    reason = ns.Util.Trim(cutBytes(ns.Util.Trim(reason), MAX_REASON))
+    if reason == "" then reason = nil end
+  else
+    reason = nil
+  end
+  local cur = exclusionData(self, ref)
+  local was = { excluded = cur ~= nil, reason = cur and cur.reason or nil }
+  if was.excluded == excluded and was.reason == reason then return true end
+  local t = self.now()
+  local good = self:_publish("exclude:" .. ref,
+    { ref = ref, excluded = excluded, reason = reason, by = self.playerChar, at = t },
+    t + HISTORY_RETENTION, t)
+  if good then
+    local b, a = {}, {}
+    if was.excluded ~= excluded then b.excluded, a.excluded = was.excluded, excluded end
+    if was.reason ~= reason then b.reason, a.reason = was.reason, reason end
+    self:_safeLogHistory("bank", ref, b, a)
+  end
+  return good, (not good) and "not accepted" or nil
+end
+
+-- The bank contributions currently excluded: { [ref] = { excluded = true, reason, by, at } }.
+-- The Ledger calls this on every Query, so it walks the store unsorted.
+function C:Exclusions()
+  local out, now = {}, self.now()
+  for id, rec in pairs(self.set.store) do
+    local ref = type(id) == "string" and id:match("^exclude:(.+)$")
+    local d = rec.d
+    if ref and not rec.del and type(d) == "table" and d.excluded == true and rec.exp > now then
+      out[ref] = { excluded = true, reason = d.reason, by = d.by, at = d.at }
+    end
+  end
+  return out
 end

@@ -3,7 +3,8 @@ local ADDON, ns = ...
 -- Leaderboard section of the Settings tab: the opt-out checkbox, the privacy note and the
 -- activity weights. Ranks granted "weights" (guild master only by default) edit and publish the
 -- weights; everyone else sees them read-only. Officers, the guild master and anyone holding a
--- permission also see the shared change history (newest 20 entries, wheel scrolls).
+-- permission also see the shared change history (newest 20 entries, wheel scrolls). Ranks granted
+-- "bankreview" get a "Bank review" button that opens ns.Leaderboard.BankReview.
 -- SettingsView.Build(parent) -> section { refresh }; sets the parent's height.
 -- SettingsView.Describe(e) -> plain-language lines for one history entry (PermissionsView uses it).
 -- SettingsView.CanSeeHistory() -> bool.
@@ -89,6 +90,42 @@ local function permLabel(key)
   return ns.Permissions and ns.Permissions.Label(key) or tostring(key)
 end
 
+-- "Bob, 50g deposit" for a bank contribution ref, from the ledger the client has now; nil once
+-- the observation behind it is gone. The ref -> contribution map is rebuilt only when the
+-- ledger's cached list changes.
+local refCache = { list = nil, map = nil }
+local function bankEntryText(ref)
+  local l = lb()
+  local ledger = l and l.ledger
+  if not (ledger and ledger.Contributions) then return nil end
+  local ok, list = pcall(ledger.Contributions, ledger)
+  if not ok or type(list) ~= "table" then return nil end
+  if refCache.list ~= list then
+    local map = {}
+    for _, c in ipairs(list) do if c.ref ~= nil then map[c.ref] = c end end
+    refCache.list, refCache.map = list, map
+  end
+  local c = refCache.map[ref]
+  if not c or type(c.value) ~= "number" then return nil end
+  local amount
+  if c.type == "bank.gold" then
+    local copper = math.abs(c.value)
+    if copper >= 10000 then amount = math.floor(copper / 10000) .. "g"
+    elseif copper >= 100 then amount = math.floor(copper / 100) .. "s"
+    else amount = copper .. "c" end
+  else
+    local item = c.item
+    if type(item) == "string" and Util.IsItemLink(item) then
+      amount = item
+    else
+      amount = "[" .. Util.Escape(Util.ItemName(item or "items")) .. "]"
+    end
+    amount = amount .. " x" .. math.abs(c.value)
+  end
+  return Util.Escape(Util.DisplayName(tostring(c.char))) .. ", " .. amount
+    .. (c.value < 0 and " withdrawal" or " deposit")
+end
+
 -- Plain-language lines for one history entry (ASCII only): one per changed weight, one for a
 -- month retake, or one per changed permission. Nothing for a kind this version doesn't know.
 local function describe(e)
@@ -123,6 +160,19 @@ local function describe(e)
     for _, key in ipairs(keys) do
       out[#out + 1] = "Changed " .. Util.Escape(permLabel(key)) .. ": "
         .. grantText((e.before or {})[key]) .. " -> " .. grantText((e.after or {})[key])
+    end
+  elseif e.what == "bank" then
+    local a = type(e.after) == "table" and e.after or {}
+    local where = " (" .. (bankEntryText(e.key) or Util.Escape(tostring(e.key))) .. ")"
+    local reason = type(a.reason) == "string" and (": " .. Util.Escape(a.reason)) or ""
+    if a.excluded == true then
+      out[#out + 1] = "Excluded a bank entry" .. where .. reason
+    elseif a.excluded == false then
+      out[#out + 1] = "Counted a bank entry again" .. where
+    elseif reason ~= "" then
+      out[#out + 1] = "Changed the reason for an excluded bank entry" .. where .. reason
+    else
+      out[#out + 1] = "Removed the reason for an excluded bank entry" .. where
     end
   end
   return out
@@ -275,6 +325,14 @@ function SettingsView.Build(parent)
     end
   end)
   section.publish:SetPoint("TOPLEFT", 4, y)
+  section.bankReview = UI.Button(parent, "Bank review", 120, function()
+    local br = ns.Leaderboard.BankReview
+    if not br then return end
+    local ok, err = br.Open()
+    if not ok then section.status:SetText(tostring(err)) end
+  end)
+  section.bankReview:SetPoint("TOPLEFT", WIDTH - 120, y)
+  section.bankReview:Hide()
   section.error = UI.Text(parent, "GameFontNormalSmall", "")
   section.error:SetTextColor(1, 0.35, 0.35)
   section.error:SetPoint("LEFT", section.publish, "RIGHT", 10, 0)
@@ -361,6 +419,7 @@ function SettingsView.Build(parent)
     end
     if editable then section.publish:Show() else section.publish:Hide(); section.error:Hide() end
     if editable then recheck() end
+    if can("bankreview") then section.bankReview:Show() else section.bankReview:Hide() end
     section.changed:SetText(lastChanged())
     refreshHistory()
   end

@@ -303,9 +303,14 @@ describe("Permissions", function()
     assert.is_true(cfg:HistoryAuthorPermitted({ what = "month", by = "Gm-Realm" }))
     assert.is_true(cfg:HistoryAuthorPermitted({ what = "perms", by = "Gm-Realm" }))
     assert.is_false(cfg:HistoryAuthorPermitted({ what = "perms", by = "Off-Realm" }))
-    -- any other kind is an officer check
+    -- a bank review follows "bankreview" (guild master only by default)
+    assert.is_true(cfg:HistoryAuthorPermitted({ what = "bank", by = "Gm-Realm" }))
+    assert.is_false(cfg:HistoryAuthorPermitted({ what = "bank", by = "Off-Realm" }))
+    apply(cfg, prec(2, "Gm-Realm", { weights = grant({ 0, 1 }), bankreview = grant({ 0, 1 }) }))
     assert.is_true(cfg:HistoryAuthorPermitted({ what = "bank", by = "Off-Realm" }))
-    assert.is_false(cfg:HistoryAuthorPermitted({ what = "bank", by = "Vet-Realm" }))
+    -- any other kind is an officer check
+    assert.is_true(cfg:HistoryAuthorPermitted({ what = "other", by = "Off-Realm" }))
+    assert.is_false(cfg:HistoryAuthorPermitted({ what = "other", by = "Vet-Realm" }))
   end)
 
   it("validates the payload strictly, keeps unknown keys and always grants rank 0", function()

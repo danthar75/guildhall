@@ -37,7 +37,19 @@ local UNPAIRED = {
   exchange = "the other player's client hasn't confirmed it yet",
   bank = "no second guildmate with Guildhall has seen this in the bank log yet",
 }
+-- "Excluded by an officer: <reason>"; officers also see who: "Excluded by an officer (Name)".
+local EXCLUDED = "excluded by an officer"
+local function excludedText(row)
+  local text = "Excluded by an officer"
+  local s = ns.services
+  if s and s.roster and s.roster:IsOfficer(s.playerChar) == true and type(row.excludedBy) == "string" then
+    text = text .. " (" .. Util.Escape(Util.DisplayName(row.excludedBy)) .. ")"
+  end
+  if type(row.reason) == "string" and row.reason ~= "" then text = text .. ": " .. Util.Escape(row.reason) end
+  return text
+end
 local function whyText(row)
+  if row.why == EXCLUDED then return excludedText(row) end
   if row.why == "unpaired" then
     return tostring(row.type):match("^bank%.") and UNPAIRED.bank or UNPAIRED.exchange
   end
@@ -385,7 +397,7 @@ local function listLines(bd)
         if budget <= 0 then break end
         budget = budget - 1
         local what = describe(row)
-        if not g.counted then what = what .. ", " .. whyText(row) end
+        if not g.counted then what = what .. (row.why == EXCLUDED and " · " or ", ") .. whyText(row) end
         out[#out + 1] = { date = shortDate(row.at), what = what, value = g.counted and rowValue(row) or "",
           gray = not g.counted }
       end

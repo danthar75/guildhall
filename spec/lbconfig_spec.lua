@@ -557,4 +557,224 @@ describe("Leaderboard Config", function()
       assert.equal(0, #cfg:History())
     end)
   end)
+
+  describe("bank exclusions", function()
+    local TWO_YEARS = 63072000
+    local REF = "bank:o42"
+    local contribs
+
+    local function xrec(v, char, d, t)
+      t = t or clock.now()
+      d = d or {}
+      local data = { ref = REF, excluded = true, by = char, at = t }
+      for k, val in pairs(d) do data[k] = val end
+      return { id = "exclude:" .. (data.ref or REF), v = v, t = t, exp = t + TWO_YEARS, by = "pX", char = char, d = data }
+    end
+    local function hist()
+      local out = {}
+      for _, e in ipairs(cfg:History()) do if e.what == "bank" then out[#out + 1] = e end end
+      return out
+    end
+    -- A real Ledger over fixed bank contributions, reading exclusions from cfg.
+    local function realLedger()
+      loadAddonFile(ns, "Guildhall/Core/Leaderboard/Ledger.lua")
+      ns.Observations = { KINDS = { bank = true } }
+      ns.Activity.Register({ id = "bank.gold", label = "Bank gold", unit = "gold", verify = "paired", weight = 0.2, order = 60 })
+      ns.Activity.RegisterDeriver("bank", function() return contribs end)
+      local owners = { ["Bob-Realm"] = "pBob", ["Cat-Realm"] = "pCat" }
+      return ns.Ledger.new({
+        observations = { List = function() return { {} } end, changes = 0 },
+        profile = {
+          OwnerOf = function(_, ch) return owners[ch] end,
+          CharsOf = function(_, id) return id == "pBob" and { "Bob-Realm" } or id == "pCat" and { "Cat-Realm" } or {} end,
+          OnlineChar = function() return nil end,
+          set = { Get = function() return nil end },
+        },
+        roster = { RankIndex = function() return nil end, ConfigList = function() return {} end },
+        now = clock.now, config = cfg,
+      })
+    end
+
+    before_each(function()
+      contribs = {
+        { type = "bank.gold", char = "Bob-Realm", value = 500000, at = utc(2026, 10, 5), ref = REF, counted = true, net = true },
+        { type = "bank.gold", char = "Cat-Realm", value = 200000, at = utc(2026, 10, 6), ref = "bank:o43", counted = true, net = true },
+      }
+    end)
+
+    it("an officer's exclusion removes the entry from the member's total but not the guild total", function()
+      local l = realLedger()
+      assert.equal(500000, l:Query({}).byProfile.pBob["bank.gold"])
+      assert.is_true((cfg:SetExcluded(REF, true, "moving guild funds")))
+      local r = l:Query({})
+      assert.is_nil(r.byProfile.pBob)
+      assert.equal(200000, r.byProfile.pCat["bank.gold"])
+      assert.equal(700000, r.guild["bank.gold"])
+      assert.equal(700000, r.goldKept)
+    end)
+
+    it("re-ticking restores it", function()
+      local l = realLedger()
+      assert.is_true((cfg:SetExcluded(REF, true, "oops")))
+      clock.advance(5)
+      assert.is_true((cfg:SetExcluded(REF, false)))
+      assert.same({}, cfg:Exclusions())
+      assert.equal(500000, l:Query({}).byProfile.pBob["bank.gold"])
+      local rec = cfg.set:Get("exclude:" .. REF)
+      assert.equal(2, rec.v)
+      assert.is_false(rec.d.excluded)
+      assert.is_nil(rec.d.reason)
+      assert.equal(rec.t + TWO_YEARS, rec.exp)
+    end)
+
+    it("an exclusion record from a rank without bankreview is rejected; granting the rank makes it accepted", function()
+      local r = xrec(1, "Grunt-Realm")
+      assert.equal("invalid", apply(r))
+      assert.is_nil(cfg.set:Get(r.id))
+      assert.is_true((cfg.perms:Publish({ bankreview = { ranks = { [5] = true } } })))
+      assert.equal("accepted", apply(r))
+      assert.same({ [REF] = { excluded = true, by = "Grunt-Realm", at = r.t } }, cfg:Exclusions())
+    end)
+
+    it("an unknown roster rejects an exclusion now and accepts it on a later sync", function()
+      officers["Boss-Realm"] = nil
+      local r = xrec(1, "Boss-Realm")
+      assert.equal("invalid", apply(r))
+      local last = ctx.log:Query()[1]
+      assert.equal("roster unknown", last.reason)
+      officers["Boss-Realm"] = true
+      assert.equal("accepted", apply(r))
+    end)
+
+    it("each change writes one history record what=bank", function()
+      assert.is_true((cfg:SetExcluded(REF, true, "  moving guild funds  ")))
+      local h = hist()
+      assert.equal(1, #h)
+      assert.equal(REF, h[1].key)
+      assert.same({ excluded = false }, h[1].before)
+      assert.same({ excluded = true, reason = "moving guild funds" }, h[1].after)
+      clock.advance(10)
+      assert.is_true((cfg:SetExcluded(REF, false)))
+      h = hist()
+      assert.equal(2, #h)
+      assert.same({ excluded = true, reason = "moving guild funds" }, h[1].before)
+      assert.same({ excluded = false }, h[1].after)
+      -- a change that changes nothing publishes nothing
+      local v = cfg.set:Get("exclude:" .. REF).v
+      assert.is_true((cfg:SetExcluded(REF, false)))
+      assert.equal(2, #hist())
+      assert.equal(v, cfg.set:Get("exclude:" .. REF).v)
+      -- only the reason changes: excluded is left out of both sides
+      assert.is_true((cfg:SetExcluded(REF, true, "a")))
+      clock.advance(10)
+      assert.is_true((cfg:SetExcluded(REF, true, "b")))
+      h = hist()
+      assert.same({ reason = "a" }, h[1].before)
+      assert.same({ reason = "b" }, h[1].after)
+      assert.is_true(cfg:HistoryAuthorPermitted(h[1]))
+    end)
+
+    it("stores the reason trimmed, an empty reason as nil, and cuts a long one to 80 bytes", function()
+      assert.is_true((cfg:SetExcluded(REF, true, "   ")))
+      assert.is_nil(cfg.set:Get("exclude:" .. REF).d.reason)
+      assert.is_true((cfg:SetExcluded("bank:o43", true, string.rep("a", 79) .. "\195\169x")))
+      local reason = cfg.set:Get("exclude:bank:o43").d.reason
+      assert.equal(string.rep("a", 79), reason) -- never splits a UTF-8 character
+      assert.is_true((cfg:SetExcluded("bank:o44", true, string.rep("b", 100))))
+      assert.equal(80, #cfg.set:Get("exclude:bank:o44").d.reason)
+    end)
+
+    it("SetExcluded needs bankreview and a bank ref", function()
+      local g = build("Grunt-Realm")
+      local ok, err = g:SetExcluded(REF, true)
+      assert.is_false(ok)
+      assert.equal("no permission", err)
+      assert.is_nil(g.set:Get("exclude:" .. REF))
+      assert.equal(0, #g:History())
+      build("Boss-Realm")
+      assert.is_false((cfg:SetExcluded("trade:o1", true)))
+      assert.is_false((cfg:SetExcluded("bank:" .. string.rep("x", 44), true)))
+      assert.is_false((cfg:SetExcluded(REF, "yes")))
+      assert.equal(0, #cfg:History())
+    end)
+
+    it("rejects malformed exclusion records", function()
+      local t = clock.now()
+      local function bad(r) assert.equal("invalid", apply(r)) end
+      local r
+      r = xrec(1, "Boss-Realm"); r.id = "exclude:trade:o1"; r.d.ref = "trade:o1"; bad(r)
+      r = xrec(1, "Boss-Realm"); local long = "bank:" .. string.rep("x", 44); r.id = "exclude:" .. long; r.d.ref = long; bad(r)
+      r = xrec(1, "Boss-Realm"); r.d.ref = "bank:o99"; bad(r) -- d.ref must match the id
+      bad(xrec(1, "Boss-Realm", { excluded = "true" }))
+      bad(xrec(1, "Boss-Realm", { reason = string.rep("r", 81) }))
+      bad(xrec(1, "Boss-Realm", { reason = " padded" }))
+      bad(xrec(1, "Boss-Realm", { reason = "" }))
+      bad(xrec(1, "Boss-Realm", { reason = 5 }))
+      bad(xrec(1, "Boss-Realm", { by = "Other-Realm" }))
+      bad(xrec(1, "Boss-Realm", { at = t - 1 }))
+      bad(xrec(1, "Boss-Realm", { extra = 1 }))
+      r = xrec(1, "Boss-Realm"); r.exp = r.exp + 1; bad(r)
+      r = xrec(1, "Boss-Realm"); r.d = "x"; bad(r)
+      r = xrec(1, "Boss-Realm"); r.del = true; bad(r)
+      assert.same({}, cfg:Exclusions())
+      -- the good one, at the bounds
+      assert.equal("accepted", apply(xrec(1, "Boss-Realm", { reason = string.rep("r", 80) })))
+    end)
+
+    it("a newer version wins and Exclusions lists only excluded refs", function()
+      assert.equal("accepted", apply(xrec(1, "Boss-Realm", { reason = "x" })))
+      clock.advance(1)
+      assert.equal("accepted", apply(xrec(2, "Boss-Realm", { excluded = false })))
+      assert.equal("stale", apply(xrec(1, "Boss-Realm", { reason = "x" }, clock.now() - 1)))
+      assert.same({}, cfg:Exclusions())
+      local e = cfg:Exclusions()
+      e.x = 1
+      assert.is_nil(cfg:Exclusions().x)
+    end)
+
+    it("rejects malformed bank history records", function()
+      local now = clock.now()
+      local id = "history:pX:" .. now .. ":1"
+      local function h(d)
+        d.what, d.by, d.at = "bank", "Boss-Realm", now
+        return { id = id, v = 1, t = now, exp = now + TWO_YEARS, by = "pX", char = "Boss-Realm", d = d }
+      end
+      assert.equal("invalid", apply(h({ key = "trade:o1", before = {}, after = { excluded = true } })))
+      assert.equal("invalid", apply(h({ key = REF, before = { excluded = "no" }, after = {} })))
+      assert.equal("invalid", apply(h({ key = REF, before = {}, after = { reason = string.rep("r", 81) } })))
+      assert.equal("invalid", apply(h({ key = REF, before = {}, after = { other = 1 } })))
+      assert.equal("invalid", apply(h({ before = {}, after = {} })))
+      assert.equal("accepted", apply(h({ key = REF, before = { excluded = false }, after = { excluded = true, reason = "x" } })))
+    end)
+
+    it("an exclusion survives two years and then purges", function()
+      assert.is_true((cfg:SetExcluded(REF, true)))
+      clock.advance(TWO_YEARS - 10)
+      cfg.set:Purge()
+      assert.is_not_nil(cfg:Exclusions()[REF])
+      clock.advance(20)
+      cfg.set:Purge()
+      assert.same({}, cfg:Exclusions())
+    end)
+
+    it("an excluded entry inside a saved month leaves the month record unchanged", function()
+      local l = realLedger()
+      clock.advance(utc(2026, 11, 10) - clock.now())
+      assert.is_true(cfg:MaybeSaveMonth(l, clock.now()))
+      local before = cfg:Month("2026-10")
+      assert.equal("pBob", before.overall[1].profile)
+      assert.equal(2, #before.boards["bank.gold"])
+      assert.is_true((cfg:SetExcluded(REF, true, "moving guild funds")))
+      assert.same(before, cfg:Month("2026-10"))
+      assert.is_false(cfg:MaybeSaveMonth(l, clock.now()))
+      assert.same(before, cfg:Month("2026-10"))
+      -- a retake picks the exclusion up
+      clock.advance(10)
+      assert.is_true(cfg:RetakeMonth("2026-10", l))
+      local after = cfg:Month("2026-10")
+      assert.equal(1, #after.boards["bank.gold"])
+      assert.equal("pCat", after.overall[1].profile)
+      assert.equal(700000, after.goldKept)
+    end)
+  end)
 end)
