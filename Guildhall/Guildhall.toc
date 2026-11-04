@@ -20,6 +20,8 @@ Core/Sync.lua
 Core/Log.lua
 Core/Roster.lua
 Core/Profile.lua
+Core/Leaderboard/Activity.lua
+Core/Leaderboard/Observations.lua
 Core/UI/Window.lua
 Core/UI/CopyBox.lua
 Core/UI/Launcher.lua
