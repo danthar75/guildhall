@@ -284,7 +284,9 @@ local function guildLines()
   local obs = l and l.observations
   if not obs then return {} end
   local out = {}
-  for _, c in ipairs(ns.Groups.Credit.Clears(obs:List("kill"), s and s.roster)) do
+  local cfg = l.realConfig or l.config
+  local clock = ns.Scoring.Clock(cfg, s and s.compat, D.Now())
+  for _, c in ipairs(ns.Groups.Credit.Clears(obs:List("kill"), s and s.roster, clock)) do
     local inst = ns.Instances.Get(c.instance)
     local text = Util.Escape(inst.short) .. " cleared by " .. namesText(c.names)
     if c.dur then text = text .. ", " .. math.floor(c.dur / 60 + 0.5) .. " min" end
@@ -437,7 +439,6 @@ function View.Build(parent)
 
   view.ready = buildReady(parent)
   view.readyBtn = UI.Button(parent, "I'm ready now", 110, function()
-    local mine = myReady()
     UI.PickList(view.readyBtn, readyItems(), function(choice) setReady(choice) end)
   end)
   view.readyBtn:SetPoint("TOPRIGHT", 0, 0)
@@ -481,7 +482,7 @@ function View.Build(parent)
   view.detail = det
   view.say = say
   view.refresh = function() View.Refresh() end
-  D.Build(view, det, DETAIL_W)
+  D.Build(view, det, DETAIL_W, H)
 
   -- History: one full-width panel.
   local hist = { which = "mine", lines = {} }

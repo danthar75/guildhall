@@ -121,7 +121,7 @@ describe("Groups.View", function()
         Active = function() return nil end,
         Night = function() return night end,
         SelfCheck = function() return { lines = {} } end,
-        Confirm = function(_, char, inst, ok) confirmed[#confirmed + 1] = { char, inst, ok }; return true end,
+        ConfirmTicks = function(_, inst, boxes) confirmed[#confirmed + 1] = { inst, boxes }; return 1 end,
       },
       flex = {
         Status = function() return flexStatus end,
@@ -246,12 +246,14 @@ describe("Groups.View", function()
     assert.is_not_nil(row.check.calls.Enable)
     assert.is_true(buttons["Confirm all checked"].shown)
     assert.is_true(buttons["Edit checklist"].shown)
+    -- the leader unticks Brakka, then ticks him again: a change; Mireth (the poster, no check) untouched
+    row.check:SetChecked(false); click(row.check)
+    row.check:SetChecked(true); click(row.check)
     click(buttons["Confirm all checked"])
-    assert.equal(2, #confirmed) -- Mireth (the poster, unticked: no check) and Brakka
-    local byChar = {}
-    for _, c in ipairs(confirmed) do byChar[c[1]] = c[3] end
-    assert.is_true(byChar["Brakka-R"])
-    assert.is_false(byChar["Mireth-R"])
+    assert.equal(1, #confirmed)
+    assert.equal("mc", confirmed[1][1])
+    assert.same({ ["Brakka-R"] = { checked = true, changed = true }, ["Mireth-R"] = { checked = false, changed = false } },
+      confirmed[1][2])
     assert.same({}, errors)
   end)
 
@@ -394,6 +396,42 @@ describe("Groups.View", function()
     view:Refresh()
     assert.is_false(row.flex.shown)
     assert.equal("Switched", row.flexText.text)
+    assert.same({}, errors)
+  end)
+
+  it("an item the client hasn't cached reads 'Needs: item' and searches nothing", function()
+    posts = { post("p2:g1_1", "p2", { instance = "strat_ud", role = "t", need = { t = 0, h = 1, d = 3 }, want = 12345 }) }
+    build()
+    assert.equal("Needs: item", view.d.needs.label.text)
+    click(view.d.needs)
+    assert.is_nil(searched)
+    assert.same({}, errors)
+  end)
+
+  it("with 5 signups waiting, +N more sits on the header line and nothing overlaps", function()
+    posts = { post("p1:g1_1", "p1", STRAT) }
+    local list = {}
+    for i = 1, 5 do
+      list[i] = { profile = "x" .. i, char = "Pug" .. i .. "-R", roles = { d = true }, at = NOW - 60 + i }
+    end
+    signups["p1:g1_1"] = list
+    build()
+    local d, L = view.d, ns.Groups.Details.LAYOUT
+    assert.equal("+2 more", d.signMore.text)
+    assert.is_true(d.signMore.shown)
+    local function topOf(w)
+      local c = w.calls.SetPoint[#w.calls.SetPoint]
+      return -c[3]
+    end
+    -- "+N more" is on the header's line, at the right
+    assert.equal("TOPRIGHT", d.signMore.calls.SetPoint[#d.signMore.calls.SetPoint][1])
+    assert.is_true(math.abs(topOf(d.signMore) - topOf(d.signHead)) <= 4)
+    -- the last signup row ends before the footnote, and the footnote before the buttons
+    local last = d.signRows[#d.signRows]
+    assert.is_true(last.shown)
+    local lastBottom = topOf(last) + L.signRow
+    assert.is_true(lastBottom <= topOf(d.foot), "rows overlap the footnote")
+    assert.is_true(topOf(d.foot) + L.footH <= L.panel - L.buttonGap - L.button, "footnote overlaps the buttons")
     assert.same({}, errors)
   end)
 end)

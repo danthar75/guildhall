@@ -345,6 +345,7 @@ describe("Compat", function()
       assert.is_nil(Compat.new({ UnitLevel = function() return 60 end,
         issecretvalue = function() return true end }):PlayerLevel())
       assert.is_nil(Compat.new({ UnitLevel = function() return 0 end }):PlayerLevel())
+      assert.is_nil(Compat.new({ UnitLevel = function() error("boom") end }):PlayerLevel())
     end)
 
     it("ItemName reads the item's name, nil when missing, secret or not cached", function()

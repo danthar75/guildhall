@@ -544,6 +544,32 @@ function L:Night(instance)
   return out
 end
 
+-- "Confirm all checked": boxes = { [raiderChar] = { checked = bool, changed = bool } } (changed = the
+-- leader ticked or unticked it here). Publishes a confirmation for each guild member (roster IsMember
+-- true) whose box is checked or was changed, when it differs from tonight's newest confirmation.
+-- Returns the number published, and the last refusal reason (nil when none).
+function L:ConfirmTicks(instance, boxes)
+  if type(instance) ~= "string" or not ns.Instances.Get(instance) then return 0, "bad instance" end
+  if type(boxes) ~= "table" then return 0, "bad boxes" end
+  local roster = self.config and self.config.roster
+  local night = self:Night(instance)
+  local chars = {}
+  for char in pairs(boxes) do chars[#chars + 1] = char end
+  table.sort(chars)
+  local n, lastErr = 0, nil
+  for _, char in ipairs(chars) do
+    local box = boxes[char]
+    local want = type(box) == "table" and box.checked == true
+    local member = type(char) == "string" and roster ~= nil and roster.IsMember ~= nil and roster:IsMember(char) == true
+    local cur = night[char] and night[char].confirmed
+    if member and (want or (type(box) == "table" and box.changed == true)) and cur ~= want then
+      local ok, err = self:Confirm(char, instance, want)
+      if ok then n = n + 1 else lastErr = err end
+    end
+  end
+  return n, lastErr
+end
+
 -- A leadership confirmation that raiderChar was (ok = true) or was not prepared tonight.
 function L:Confirm(raiderChar, instance, ok)
   if type(raiderChar) ~= "string" or raiderChar == "" or #raiderChar > RAIDER_MAX then return false, "bad raider" end

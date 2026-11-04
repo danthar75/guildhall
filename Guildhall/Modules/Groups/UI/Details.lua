@@ -22,6 +22,12 @@ local LETTER = { t = "T", h = "H", d = "D" }
 local ROLE_NAME = { t = "Tank", h = "Healer", d = "DPS" }
 local NEED_WORD = { t = "tank", h = "healer", d = "DPS" }
 local GROUP_ROWS, SIGN_ROWS, ROSTER_ROWS, LINE_COLS = 5, 3, 6, 3
+-- Dungeon pane, y from the panel's top: the signups header line (with "+N more" at its right), the
+-- rows, then the footnote (2 wrapped lines, FOOT_H reserved) above the 22 px buttons 8 px from the
+-- bottom. Details.LAYOUT exposes these for the overlap test.
+local SIGN_HEAD_Y, SIGN_Y, SIGN_H, FOOT_Y, FOOT_H, BUTTON_H, BUTTON_GAP = 184, 202, 22, 272, 28, 22, 8
+Details.LAYOUT = { signHead = SIGN_HEAD_Y, signTop = SIGN_Y, signRow = SIGN_H, signRows = SIGN_ROWS,
+  foot = FOOT_Y, footH = FOOT_H, button = BUTTON_H, buttonGap = BUTTON_GAP }
 local ACTIVE = 7200 -- a raid within 2 h of its start counts the current group as its roster
 
 local DUNGEON_FOOT = "Credit when the group kills the last boss with 3+ guild members. Once per dungeon per player per day."
@@ -144,11 +150,11 @@ function Details.Can(key, instance)
   return p:Can(s.playerChar, key, { raidLeaders = leaders }) == true
 end
 
--- An item's plain name for an id, link or typed name.
+-- An item's plain name for an id, link or typed name; nil for an id the client hasn't cached.
 function Details.ItemName(item)
   if type(item) == "number" then
     local s = services()
-    return s and s.compat and s.compat.ItemName and s.compat:ItemName(item) or ("item " .. item)
+    return s and s.compat and s.compat.ItemName and s.compat:ItemName(item) or nil
   end
   if type(item) ~= "string" then return nil end
   return Util.ItemName(item)
@@ -261,10 +267,16 @@ local function showDungeon(post)
   if type(pd.note) == "string" and pd.note ~= "" then sub = sub .. " · \"" .. Util.Escape(pd.note) .. "\"" end
   d.sub:SetText(sub)
   d.sub:Show()
-  local want = pd.want ~= nil and Details.ItemName(pd.want) or nil
-  if want then
-    d.needs.label:SetText("Needs: [" .. Util.Escape(want) .. "]")
-    d.needs.search = want
+  if pd.want ~= nil then
+    local want = Details.ItemName(pd.want)
+    if want then
+      d.needs.label:SetText("Needs: [" .. Util.Escape(want) .. "]")
+      d.needs.label:SetTextColor(0.5, 0.78, 1)
+      d.needs.search = want
+    else -- an item the client hasn't cached: plain text, nothing to search for
+      d.needs.label:SetText("Needs: item")
+      d.needs.label:SetTextColor(GRAY[1], GRAY[2], GRAY[3])
+    end
     d.needs:Show()
   end
 
@@ -570,25 +582,23 @@ end
 
 -- Build -----------------------------------------------------------------------------------------
 
+-- Hands the boxes to the Checklist service, which decides what to publish.
 local function confirmAll()
   local r = view.d.raid
   if not (r and r.instance) then return end
-  local cl = ns.groups.checklist
-  local failed
+  local ticks = view.ticks[tickKey(r.instance)] or {}
+  local boxes = {}
   for _, char in ipairs(r.chars) do
-    local want = boxValue(r.instance, char, r.night) == true
-    local n = r.night[char]
-    if not (n and n.confirmed == want) then
-      local ok, err = cl:Confirm(char, r.instance, want)
-      if not ok then failed = err end
-    end
+    boxes[char] = { checked = boxValue(r.instance, char, r.night) == true, changed = ticks[char] ~= nil }
   end
+  local _, err = ns.groups.checklist:ConfirmTicks(r.instance, boxes)
   view.ticks[tickKey(r.instance)] = nil
-  result(failed == nil, failed, "Prepared ticks confirmed.")
+  result(err == nil, err, "Prepared ticks confirmed.")
 end
 
-function Details.Build(v, panel, width)
+function Details.Build(v, panel, width, height)
   view = v
+  Details.LAYOUT.panel = height or 336
   local d = { hideable = {}, groupRows = {}, signRows = {}, roster = {}, hLines = {} }
   v.d = d
   v.clPick = v.clPick or {}
@@ -622,9 +632,13 @@ function Details.Build(v, panel, width)
     d.groupRows[i] = row
   end
 
-  d.signHead = keep(text(panel, "GameFontNormal", 12, 184, W, GOLD))
+  d.signHead = keep(text(panel, "GameFontNormal", 12, SIGN_HEAD_Y, 200, GOLD))
+  d.signMore = keep(text(panel, "GameFontDisableSmall", 0, 0, 120))
+  d.signMore:ClearAllPoints()
+  d.signMore:SetPoint("TOPRIGHT", -12, -(SIGN_HEAD_Y + 2))
+  d.signMore:SetJustifyH("RIGHT")
   for i = 1, SIGN_ROWS do
-    local row = keep(frameRow(panel, 12, 202 + (i - 1) * 22, W, 22))
+    local row = keep(frameRow(panel, 12, SIGN_Y + (i - 1) * SIGN_H, W, SIGN_H))
     row.dot = dot(row, 2)
     row.name = text(row, "GameFontHighlightSmall", 16, 5, 110)
     row.offer = text(row, "GameFontNormalSmall", 130, 5, 50, GRAY)
@@ -653,8 +667,7 @@ function Details.Build(v, panel, width)
     row.invite:SetPoint("LEFT", x + 4, 0)
     d.signRows[i] = row
   end
-  d.signMore = keep(text(panel, "GameFontDisableSmall", 12, 202 + SIGN_ROWS * 22, W))
-  d.foot = keep(wrapped(text(panel, "GameFontNormalSmall", 12, 272, W, GRAY)))
+  d.foot = keep(wrapped(text(panel, "GameFontNormalSmall", 12, FOOT_Y, W, GRAY)))
 
   -- Raid pane
   d.raidSub = keep(wrapped(text(panel, "GameFontNormal", 12, 32, W, TAN)))
@@ -733,7 +746,7 @@ function Details.Build(v, panel, width)
   -- Buttons along the bottom
   local function bottom(label, w, fn, anchor)
     local b = keep(UI.Button(panel, label, w, fn))
-    if anchor then b:SetPoint("LEFT", anchor, "RIGHT", 6, 0) else b:SetPoint("BOTTOMLEFT", 12, 8) end
+    if anchor then b:SetPoint("LEFT", anchor, "RIGHT", 6, 0) else b:SetPoint("BOTTOMLEFT", 12, BUTTON_GAP) end
     return b
   end
   d.postLF = bottom("Post LF on Exchange", 150, function()

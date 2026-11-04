@@ -327,14 +327,27 @@ describe("Groups Credit", function()
     pair(list, "strat_ud", 479, FIVE, T0 + HOUR)                            -- not the final boss
     list[#list + 1] = kill("p3", "rfc", RFC_FINAL, FIVE, T0 + 3 * HOUR)     -- not verified
     pair(list, "rfc", RFC_FINAL, { "A-R", "B-R", "X-R", "Y-R", "Z-R" }, T0 + 4 * HOUR) -- no majority
-    pair(list, "mc", 672, FIVE, T0 + 5 * HOUR)
+    pair(list, "mc", 672, FIVE, T0 + 5 * HOUR)                              -- Ragnaros only: not a clear
     local out = Credit.Clears(list, ctx.roster)
-    assert.equal(2, #out)
+    assert.equal(1, #out)
+    assert.equal("strat_ud", out[1].instance)
+    assert.equal(2520, out[1].dur)
+    assert.same(FIVE, out[1].names)
+  end)
+
+  it("Clears lists a raid once every boss has a verified kill in one weekly reset", function()
+    local list = {}
+    -- next week (the fallback reset is Tuesday 15:00 UTC; T0 is a Friday): every MC boss, the
+    -- last one completing the set
+    local week2 = T0 + 5 * DAY
+    for i = 1, 10 do pair(list, "mc", MC[i], FIVE, week2 + i * 600) end
+    -- this week: all but one boss
+    for i = 1, 9 do pair(list, "mc", MC[i], FIVE, T0 + i * 600) end
+    local out = Credit.Clears(list, ctx.roster, { tz = 0 })
+    assert.equal(1, #out)
     assert.equal("mc", out[1].instance)
-    assert.is_nil(out[1].dur)
-    assert.equal("strat_ud", out[2].instance)
-    assert.equal(2520, out[2].dur)
-    assert.same(FIVE, out[2].names)
+    assert.equal(week2 + 6000, out[1].at)
+    assert.equal(MC[10], out[1].encounter)
   end)
 
   it("Bosses counts the different bosses with a verified kill that day", function()

@@ -600,7 +600,8 @@ end
 function Compat:PlayerLevel()
   local env = self.env
   if not env.UnitLevel then return nil end
-  local n = self:Safe((env.UnitLevel("player")))
+  local ok, raw = pcall(env.UnitLevel, "player")
+  local n = ok and self:Safe(raw) or nil
   if type(n) == "number" and n >= 1 and n <= 80 and n == math.floor(n) then return n end
   return nil
 end

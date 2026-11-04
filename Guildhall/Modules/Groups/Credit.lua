@@ -308,21 +308,38 @@ function C:_dayIndex()
   return cache
 end
 
--- Verified final-boss kills (dungeon or raid) with a guild majority, newest first, for the run
--- history: { instance, encounter, at, names (credited guild members, in report order), dur? (seconds,
--- from the reports that carry one) }.
-function Credit.Clears(kills, roster)
-  local out = {}
+-- Cleared runs for the history (Ruling T10c), newest first: { instance, encounter, at, names, dur? }.
+-- Only verified kills with a guild majority count. A dungeon is cleared by its last-boss kill (dur
+-- = the longest `dur` its reports carry). A raid is cleared when every encounter in its bosses table
+-- has such a kill within one weekly reset period (Scoring.WeekStart); the entry is the kill that
+-- completed the set (its time and its guild members), and the set then starts again.
+-- clock: a Scoring clock ({ tz, weekStart? }); defaults to { tz = 0 }.
+function Credit.Clears(kills, roster, clock)
+  clock = clock or { tz = 0 }
+  local out, covered = {}, {}
   for _, k in ipairs(Credit.Verified(kills)) do
-    local _, isFinal = ns.Instances.ByEncounter(k.encounter)
+    local entry, isFinal = ns.Instances.ByEncounter(k.encounter)
     local guild, majority = Credit.GuildMembers(k, roster)
-    if isFinal and majority then
+    if majority and entry.kind == "dungeon" and isFinal then
       local dur
       for _, r in ipairs(k.reports) do
         local v = r.d.dur
         if type(v) == "number" and v >= 1 and (dur == nil or v > dur) then dur = v end
       end
       out[#out + 1] = { instance = k.instance, encounter = k.encounter, at = k.at, names = guild, dur = dur }
+    elseif majority and entry.kind == "raid" then
+      local ck = k.instance .. "|" .. ns.Scoring.WeekStart(k.at, clock)
+      local set = covered[ck] or {}
+      covered[ck] = set
+      set[k.encounter] = true
+      local all = true
+      for _, id in ipairs(entry.bosses) do
+        if not set[id] then all = false; break end
+      end
+      if all then
+        covered[ck] = {}
+        out[#out + 1] = { instance = k.instance, encounter = k.encounter, at = k.at, names = guild }
+      end
     end
   end
   table.sort(out, function(a, b) return a.at > b.at end)

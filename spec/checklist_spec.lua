@@ -639,4 +639,30 @@ describe("Groups Checklist", function()
     clock.advance(DAY)
     assert.same({}, off.cl:Night("mc"))
   end)
+
+  it("ConfirmTicks publishes checked or changed boxes of guild members that differ from tonight's newest", function()
+    grant({ prepared = { ranks = { 1 }, raidlead = false } })
+    local off = client("Off-R")
+    assert.is_true((off.cl:Confirm("A-R", "mc", true)))
+    clock.advance(5)
+    local n, err = off.cl:ConfirmTicks("mc", {
+      ["A-R"] = { checked = true, changed = false },     -- already confirmed: nothing
+      ["B-R"] = { checked = false, changed = false },    -- unticked and untouched: nothing
+      ["Raider-R"] = { checked = true, changed = false }, -- pre-ticked: confirmed
+      ["Mem-R"] = { checked = false, changed = true },    -- unticked by the leader: confirmed false
+      ["Pug-R"] = { checked = true, changed = true },     -- not in the guild: skipped
+    })
+    assert.equal(2, n)
+    assert.is_nil(err)
+    local night = off.cl:Night("mc")
+    assert.is_true(night["Raider-R"].confirmed)
+    assert.is_false(night["Mem-R"].confirmed)
+    assert.is_nil(night["B-R"])
+    assert.is_nil(night["Pug-R"])
+    -- without permission nothing is published and the reason is returned
+    local mem = client("Mem-R")
+    local n2, err2 = mem.cl:ConfirmTicks("mc", { ["B-R"] = { checked = true } })
+    assert.equal(0, n2)
+    assert.equal("no permission", err2)
+  end)
 end)
