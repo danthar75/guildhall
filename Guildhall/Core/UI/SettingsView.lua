@@ -1,16 +1,22 @@
 local ADDON, ns = ...
 
--- Settings tab: a core section (guild key, profile id, officer threshold, linked characters)
--- followed by each module's settings.build(parent) section and the Permissions section
--- (UI.PermissionsView, looked up when it is built), stacked in a scroll frame.
--- A module section builder may set its parent's height; the default is 120.
--- Named global: "GuildhallUISettingsScroll" (scroll frame template needs a name on some clients).
+-- Settings tab: a row of sub-tabs, General, one per module with a `settings` entry (in module
+-- registration order: Exchange, Leaderboard, Groups), Permissions (UI.PermissionsView) and Change
+-- history (UI.HistoryView). General holds the core lines (guild key, profile id, officer threshold,
+-- linked characters). The builders are looked up when a sub-tab is built. Every sub-tab but Change
+-- history (which scrolls its own list) sits in a scroll frame; a section builder may set its
+-- parent's height, the default is 120. Only the shown sub-tab refreshes.
+-- SettingsView.Build(parent) -> view { refresh, select(key), tabKeys, panes, info, chars }.
+-- Named globals: "GuildhallUISettingsScroll" (General) and "GuildhallUISettingsScroll2", 3, ... for
+-- the other sub-tabs (the scroll frame template needs a name on some clients).
 local UI = ns.UI
 local SettingsView = {}
 UI.SettingsView = SettingsView
 
 local WIDTH = 690
 local SECTION_DEFAULT_HEIGHT = 120
+local TAB_H = 28
+local GENERAL = "General"
 
 local function coreLines()
   local s = ns.services
@@ -39,16 +45,18 @@ local function coreLines()
   return table.concat(lines, "\n"), "Characters in this guild:\n" .. table.concat(charLines, "\n")
 end
 
-function SettingsView.Build(parent)
-  local view = {}
-
-  local scroll = CreateFrame("ScrollFrame", "GuildhallUISettingsScroll", parent, "UIPanelScrollFrameTemplate")
+-- A scroll frame filling `pane`, with its content frame.
+local function scrollPane(pane, name)
+  local scroll = CreateFrame("ScrollFrame", name, pane, "UIPanelScrollFrameTemplate")
   scroll:SetPoint("TOPLEFT", 4, -4)
   scroll:SetPoint("BOTTOMRIGHT", -26, 4)
   local content = CreateFrame("Frame", nil, scroll)
   content:SetSize(WIDTH, 400)
   scroll:SetScrollChild(content)
+  return content
+end
 
+local function buildGeneral(view, content)
   local header = UI.Text(content, "GameFontNormalLarge", "Guildhall")
   header:SetPoint("TOPLEFT", 4, -4)
 
@@ -71,12 +79,44 @@ function SettingsView.Build(parent)
   -- Single anchor: sets both axes, keeps the fixed 100 px width.
   view.change:SetPoint("TOPLEFT", view.chars, "TOPRIGHT", 20, 2)
 
-  -- Module sections. A section that fails to build (e.g. before guild data exists) is
-  -- rebuilt in a fresh frame on a later refresh once ns.services exists.
+  return function()
+    local info, chars = coreLines()
+    view.info:SetText(info)
+    view.chars:SetText(chars)
+    if ns.services then view.change:Show() else view.change:Hide() end
+    content:SetHeight(math.max(1, 4 + header:GetStringHeight() + 8 + view.info:GetStringHeight() + 10
+      + math.max(view.chars:GetStringHeight(), 24) + 24))
+  end
+end
+
+function SettingsView.Build(parent)
+  local view = { panes = {}, tabKeys = {}, tabs = {}, sections = {} }
+
+  -- Sub-tab definitions, in display order.
+  local defs = { { key = GENERAL } }
+  local used = { [GENERAL] = true, Permissions = true, ["Change history"] = true }
+  for _, name in ipairs(ns.Modules()) do
+    local def = ns.GetModule(name)
+    local st = type(def) == "table" and def.settings
+    if type(st) == "table" and type(st.build) == "function" then
+      local key = type(st.title) == "string" and st.title or name
+      if used[key] then key = name end
+      if not used[key] then
+        used[key] = true
+        defs[#defs + 1] = { key = key, build = st.build }
+      end
+    end
+  end
+  defs[#defs + 1] = { key = "Permissions", build = function(p) return UI.PermissionsView.Build(p) end }
+  defs[#defs + 1] = { key = "Change history", build = function(p) return UI.HistoryView.Build(p) end, noScroll = true }
+
+  -- A section that fails to build (e.g. before guild data exists) is rebuilt in a fresh frame
+  -- on a later refresh once ns.services exists.
   local function buildSection(sec)
     if sec.frame then sec.frame:Hide() end
-    local section = CreateFrame("Frame", nil, content)
+    local section = CreateFrame("Frame", nil, sec.host)
     section:SetSize(WIDTH - 10, SECTION_DEFAULT_HEIGHT)
+    section:SetPoint("TOPLEFT", sec.host, "TOPLEFT", 4, -4)
     sec.frame = section
     local ok, obj = pcall(sec.build, section)
     if ok then
@@ -89,49 +129,63 @@ function SettingsView.Build(parent)
     end
   end
 
-  view.sections = {}
-  for _, name in ipairs(ns.Modules()) do
-    local def = ns.GetModule(name)
-    local st = type(def) == "table" and def.settings
-    if type(st) == "table" and type(st.build) == "function" then
-      local sec = { title = UI.Text(content, "GameFontNormalLarge", st.title or name), build = st.build }
+  local x = 4
+  for i, d in ipairs(defs) do
+    local key = d.key
+    view.tabKeys[i] = key
+    local width = math.max(80, 24 + 7 * #key)
+    local btn = UI.Button(parent, key, width, function() view.select(key) end)
+    btn:SetPoint("TOPLEFT", x, -2)
+    x = x + width + 4
+    view.tabs[key] = btn
+
+    local pane = CreateFrame("Frame", nil, parent)
+    pane:SetPoint("TOPLEFT", 0, -TAB_H)
+    pane:SetPoint("BOTTOMRIGHT", 0, 0)
+    pane:Hide()
+    view.panes[key] = pane
+
+    if key == GENERAL then
+      view.refreshGeneral = buildGeneral(view, scrollPane(pane, "GuildhallUISettingsScroll"))
+    else
+      local sec = { key = key, build = d.build }
+      if d.noScroll then
+        sec.host = pane
+      else
+        sec.host = scrollPane(pane, "GuildhallUISettingsScroll" .. i)
+        sec.content = sec.host
+      end
       buildSection(sec)
-      view.sections[#view.sections + 1] = sec
+      view.sections[key] = sec
     end
   end
-  local perms = { title = UI.Text(content, "GameFontNormalLarge", "Permissions"), build = function(p)
-    return UI.PermissionsView.Build(p)
-  end }
-  buildSection(perms)
-  view.sections[#view.sections + 1] = perms
 
-  local function layout()
-    local y = -4 - header:GetStringHeight() - 8 - view.info:GetStringHeight() - 10
-      - math.max(view.chars:GetStringHeight(), 24) - 24
-    for _, sec in ipairs(view.sections) do
-      sec.title:ClearAllPoints()
-      sec.title:SetPoint("TOPLEFT", content, "TOPLEFT", 4, y)
-      y = y - sec.title:GetStringHeight() - 6
-      sec.frame:ClearAllPoints()
-      sec.frame:SetPoint("TOPLEFT", content, "TOPLEFT", 4, y)
-      y = y - sec.frame:GetHeight() - 20
-    end
-    content:SetHeight(math.max(1, -y))
+  local function refreshSection(sec)
+    -- Retry once services exist (only if the earlier failure happened without them).
+    if sec.failed and not sec.failedWithServices and ns.services then buildSection(sec) end
+    local obj = sec.obj
+    if type(obj) == "table" and type(obj.refresh) == "function" then UI.Try(obj.refresh, obj) end
+    if sec.content then sec.content:SetHeight(math.max(1, (sec.frame:GetHeight() or SECTION_DEFAULT_HEIGHT) + 12)) end
   end
 
   function view.refresh()
-    local info, chars = coreLines()
-    view.info:SetText(info)
-    view.chars:SetText(chars)
-    if ns.services then view.change:Show() else view.change:Hide() end
-    for _, sec in ipairs(view.sections) do
-      -- Retry once services exist (only if the earlier failure happened without them).
-      if sec.failed and not sec.failedWithServices and ns.services then buildSection(sec) end
-      local obj = sec.obj
-      if type(obj) == "table" and type(obj.refresh) == "function" then UI.Try(obj.refresh, obj) end
+    if view.current == GENERAL then
+      view.refreshGeneral()
+    elseif view.sections[view.current] then
+      refreshSection(view.sections[view.current])
     end
-    layout()
   end
 
+  function view.select(key)
+    if not view.panes[key] then key = GENERAL end
+    view.current = key
+    for k, pane in pairs(view.panes) do
+      if k == key then pane:Show(); view.tabs[k]:LockHighlight()
+      else pane:Hide(); view.tabs[k]:UnlockHighlight() end
+    end
+    view.refresh()
+  end
+
+  view.select(GENERAL)
   return view
 end

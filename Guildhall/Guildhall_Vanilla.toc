@@ -49,6 +49,7 @@ Core/Leaderboard/UI/View.lua
 Core/Leaderboard/UI/SettingsView.lua
 Core/Leaderboard/UI/BankReview.lua
 Core/UI/PermissionsView.lua
+Core/UI/HistoryView.lua
 Core/Leaderboard/Demo.lua
 Core/Leaderboard/Module.lua
 Modules/Groups/Perms.lua
@@ -65,5 +66,6 @@ Modules/Groups/UI/Details.lua
 Modules/Groups/UI/View.lua
 Modules/Groups/UI/Form.lua
 Modules/Groups/UI/ChecklistEditor.lua
+Modules/Groups/UI/SettingsView.lua
 Modules/Groups/Module.lua
 Core/Boot.lua

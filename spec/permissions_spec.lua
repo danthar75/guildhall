@@ -495,7 +495,7 @@ describe("PermissionsView", function()
     })
     ns.services = { playerChar = char, roster = roster }
     ns.leaderboard = { config = cfg, permissions = perms }
-    loadAddonFile(ns, "Guildhall/Core/Leaderboard/UI/SettingsView.lua")
+    loadAddonFile(ns, "Guildhall/Core/UI/HistoryView.lua")
     loadAddonFile(ns, "Guildhall/Core/UI/PermissionsView.lua")
     view = ns.UI.PermissionsView.Build(W.new("Frame"))
     return view
@@ -562,7 +562,7 @@ describe("PermissionsView", function()
     assert.is_true(has("(full list under Change history)"))
     local found = false
     for _, l in ipairs(view.historyLines) do
-      if l:find("Changed Review bank contributions: Guild Master -> Guild Master, Officer, Veteran", 1, true) then found = true end
+      if l:find("Permission Review bank contributions: added Veteran", 1, true) then found = true end
     end
     assert.is_true(found)
     assert.same({}, errors)
@@ -635,7 +635,8 @@ describe("PermissionsView", function()
     build("Gm-Realm")
     for _, t in ipairs(texts) do assert.is_true(isAllowed(tostring(t.text)), tostring(t.text)) end
     for _, path in ipairs({ "Guildhall/Core/Permissions.lua", "Guildhall/Core/UI/PermissionsView.lua",
-      "Guildhall/Core/Leaderboard/UI/SettingsView.lua", "Guildhall/Core/UI/SettingsView.lua" }) do
+      "Guildhall/Core/Leaderboard/UI/SettingsView.lua", "Guildhall/Core/UI/SettingsView.lua",
+      "Guildhall/Core/UI/HistoryView.lua", "Guildhall/Modules/Groups/UI/SettingsView.lua" }) do
       local f = assert(io.open(path)); local src = f:read("*a"); f:close()
       for str in src:gmatch('"([^"\n]*)"') do assert.is_true(isAllowed(str), path .. ": " .. str) end
     end

@@ -483,9 +483,9 @@ describe("Groups Checklist", function()
 
   describe("fix round 1", function()
     it("every rendered history line names the checklist, never its id", function()
-      ns.Leaderboard = ns.Leaderboard or {}
-      loadAddonFile(ns, "Guildhall/Core/Leaderboard/UI/SettingsView.lua")
-      local D = ns.Leaderboard.SettingsView.Describe
+      ns.UI = ns.UI or {}
+      loadAddonFile(ns, "Guildhall/Core/UI/HistoryView.lua")
+      local D = ns.UI.HistoryView.Describe
       grant({ checklists = { ranks = { 1 }, raidlead = false } })
       local off = client("Off-R")
       local _, a = off.cl:Save(LIST)

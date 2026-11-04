@@ -5,7 +5,7 @@ local ADDON, ns = ...
 -- assistants" when any key allows it. The Guild Master column is always checked and disabled;
 -- every other checkbox is enabled only for the guild master (rank 0), and only while demo mode
 -- is off. Reset sets the grid back to guild master only; Save publishes it.
--- Below the grid, the newest 4 change history entries (for those who may see the history).
+-- Below the grid, the newest 4 change history entries (UI.HistoryView.Lines; for those who may see it).
 -- PermissionsView.Build(parent) -> view { refresh, cells, raid, ... }; sets the parent's height.
 -- Reads ns.leaderboard.permissions on each refresh (the demo swaps it). No named globals.
 local UI = ns.UI
@@ -171,25 +171,13 @@ function PermissionsView.Build(parent)
   end
 
   local function refreshHistory()
-    local l = ns.leaderboard
-    local lbs = ns.Leaderboard and ns.Leaderboard.SettingsView
-    local lines = {}
-    local visible = l and l.config and l.config.History and lbs and lbs.CanSeeHistory and lbs.CanSeeHistory()
-    if visible then
-      local tz = l.config.Tz and l.config:Tz() or 0
-      local entries = l.config:History()
-      for i = 1, math.min(HISTORY_ENTRIES, #entries) do
-        local e = entries[i]
-        local stamp = (date or os.date)("!%Y-%m-%d %H:%M", e.at + tz)
-        local mark = (l.config.HistoryAuthorPermitted == nil or l.config:HistoryAuthorPermitted(e)) and ""
-          or " (no permission now)"
-        for _, text in ipairs(lbs.Describe(e)) do
-          lines[#lines + 1] = stamp .. "  " .. Util.Escape(Util.DisplayName(e.by)) .. "  " .. text .. mark
-        end
-      end
+    local hv = UI.HistoryView
+    local lines = hv and hv.Lines(HISTORY_ENTRIES)
+    if lines then
       if #lines == 0 then lines[1] = "No changes recorded yet." end
       view.historyHead:Show(); view.historyNote:Show()
     else
+      lines = {}
       view.historyHead:Hide(); view.historyNote:Hide()
     end
     view.historyLines = lines
