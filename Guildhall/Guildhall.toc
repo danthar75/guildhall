@@ -35,6 +35,8 @@ Modules/Exchange/Listing.lua
 Modules/Exchange/Format.lua
 Modules/Exchange/MailDrafts.lua
 Modules/Exchange/Exchange.lua
+Modules/Exchange/Deals.lua
+Modules/Exchange/DealWatch.lua
 Modules/Exchange/UI/Form.lua
 Modules/Exchange/UI/Settings.lua
 Modules/Exchange/UI/Board.lua

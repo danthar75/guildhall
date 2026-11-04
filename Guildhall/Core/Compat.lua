@@ -164,4 +164,44 @@ function Compat:SecondsUntilWeeklyReset()
   return s
 end
 
+-- Both sides of the open trade window: { give = {{id,n}}, get = {{id,n}}, giveCopper, getCopper },
+-- or nil when the APIs are missing or ANY value is secret (an incomplete snapshot is never kept).
+-- Slots 1-6 are the tradable ones (slot 7 is the will-not-be-traded slot).
+function Compat:TradeSnapshot()
+  local env = self.env
+  if not (env.GetPlayerTradeMoney and env.GetTargetTradeMoney) then return nil end
+  local function side(linkFn, infoFn)
+    if not (linkFn and infoFn) then return nil end
+    local out = {}
+    for i = 1, 6 do
+      local rawLink = linkFn(i)
+      if rawLink ~= nil then
+        local link = self:Safe(rawLink)
+        local _, _, n = infoFn(i)
+        n = self:Safe(n)
+        if link == nil or n == nil then return nil end
+        local id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
+        if id and type(n) == "number" and n > 0 then out[#out + 1] = { id = id, n = n } end
+      end
+    end
+    return out
+  end
+  local give = side(env.GetTradePlayerItemLink, env.GetTradePlayerItemInfo)
+  local get = side(env.GetTradeTargetItemLink, env.GetTradeTargetItemInfo)
+  local giveCopper, getCopper = self:Safe(env.GetPlayerTradeMoney()), self:Safe(env.GetTargetTradeMoney())
+  if not give or not get or type(giveCopper) ~= "number" or type(getCopper) ~= "number" then return nil end
+  return { give = give, get = get, giveCopper = giveCopper, getCopper = getCopper }
+end
+
+-- The trade partner's full name, or nil (no trade, API missing or secret).
+function Compat:TradePartner()
+  local env = self.env
+  if not env.UnitName then return nil end
+  local name, realm = env.UnitName("NPC")
+  name, realm = self:Safe(name), self:Safe(realm)
+  if type(name) ~= "string" or name == "" then return nil end
+  local home = env.GetNormalizedRealmName and env.GetNormalizedRealmName() or nil
+  return ns.Util.FullName(name, type(realm) == "string" and realm or nil, home)
+end
+
 ns.compat = Compat.new(_G)

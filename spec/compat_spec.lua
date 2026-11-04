@@ -174,4 +174,39 @@ describe("Compat", function()
     e.issecretvalue = function() return true end
     assert.is_nil(Compat.new(e):SecondsUntilWeeklyReset())
   end)
+  describe("trade", function()
+    local function tradeEnv(extra)
+      local e = {
+        GetTradePlayerItemLink = function(i) if i == 1 then return "|Hitem:2589::|h[Linen Cloth]|h" end end,
+        GetTradePlayerItemInfo = function(i) if i == 1 then return "Linen Cloth", 1, 20 end end,
+        GetTradeTargetItemLink = function(i) if i == 2 then return "|Hitem:2592::|h[Wool Cloth]|h" end end,
+        GetTradeTargetItemInfo = function(i) if i == 2 then return "Wool Cloth", 1, 5 end end,
+        GetPlayerTradeMoney = function() return 0 end,
+        GetTargetTradeMoney = function() return 12345 end,
+        UnitName = function(u) if u == "NPC" then return "Bob", "Argent Dawn" end end,
+      }
+      for k, v in pairs(extra or {}) do e[k] = v end
+      return e
+    end
+
+    it("TradeSnapshot reads both sides, items and money", function()
+      local snap = Compat.new(tradeEnv()):TradeSnapshot()
+      assert.same({ { id = 2589, n = 20 } }, snap.give)
+      assert.same({ { id = 2592, n = 5 } }, snap.get)
+      assert.equal(0, snap.giveCopper)
+      assert.equal(12345, snap.getCopper)
+    end)
+
+    it("TradeSnapshot is nil when the APIs are missing or any value is secret", function()
+      assert.is_nil(Compat.new({}):TradeSnapshot())
+      assert.is_nil(Compat.new(tradeEnv({ issecretvalue = function(v) return v == 12345 end })):TradeSnapshot())
+      assert.is_nil(Compat.new(tradeEnv({ issecretvalue = function(v) return v == 20 end })):TradeSnapshot())
+    end)
+
+    it("TradePartner is the NPC unit as a full name, nil when absent or secret", function()
+      assert.equal("Bob-ArgentDawn", Compat.new(tradeEnv()):TradePartner())
+      assert.is_nil(Compat.new({}):TradePartner())
+      assert.is_nil(Compat.new(tradeEnv({ issecretvalue = function(v) return v == "Bob" end })):TradePartner())
+    end)
+  end)
 end)
