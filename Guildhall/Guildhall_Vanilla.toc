@@ -55,4 +55,5 @@ Modules/Groups/Perms.lua
 Modules/Groups/Instances.lua
 Modules/Groups/Post.lua
 Modules/Groups/Groups.lua
+Modules/Groups/KillWatch.lua
 Core/Boot.lua

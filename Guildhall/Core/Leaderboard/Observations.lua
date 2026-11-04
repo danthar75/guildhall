@@ -13,8 +13,20 @@ local MAX_STR, MAX_ITEMS = 64, 6
 
 Obs.KINDS = { trade = true, cod = true, manual = true, witness = true, bank = true }
 
-function Obs.AddKind(kind)
-  if type(kind) == "string" and kind ~= "" then Obs.KINDS[kind] = true end
+local VALIDATORS = {}
+local MAX_NAMES = 40
+
+-- Registers a kind. validateFn(d) -> ok, err is an optional strict check that runs after the
+-- generic ones.
+function Obs.AddKind(kind, validateFn)
+  if type(kind) == "string" and kind ~= "" then
+    Obs.KINDS[kind] = true
+    VALIDATORS[kind] = type(validateFn) == "function" and validateFn or nil
+  end
+end
+
+for _, k in ipairs({ "prepcheck", "prepared", "flexask", "flexdone", "flexok", "signup" }) do
+  Obs.AddKind(k)
 end
 
 local function isInt(x)
@@ -34,6 +46,13 @@ function Obs.Validate(d)
       if not isInt(v) then return false, "bad number: " .. k end
     elseif tv == "boolean" then
       -- allowed flag
+    elseif tv == "table" and (k == "members" or k == "assists") then
+      local count = 0
+      for _ in pairs(v) do count = count + 1 end
+      if count ~= #v or count > MAX_NAMES then return false, "bad " .. k end
+      for _, name in ipairs(v) do
+        if type(name) ~= "string" or name == "" or #name > MAX_STR then return false, "bad " .. k end
+      end
     elseif tv == "table" and k == "items" then
       if #v > MAX_ITEMS then return false, "too many items" end
       local count = 0
@@ -63,6 +82,8 @@ function Obs.Validate(d)
       if d.count ~= nil or d.item ~= nil then return false, "bad bank money entry" end
     end
   end
+  local custom = VALIDATORS[d.kind]
+  if custom then return custom(d) end
   return true
 end
 
