@@ -321,4 +321,31 @@ describe("Groups Credit", function()
       assert.same(expected, derive(shuffled))
     end
   end)
+  it("Clears lists verified final kills with a guild majority, newest first, with the duration", function()
+    local list = {}
+    pair(list, "strat_ud", 484, FIVE, T0 + 2 * HOUR, { dur = 2520 }, { dur = 2400 })
+    pair(list, "strat_ud", 479, FIVE, T0 + HOUR)                            -- not the final boss
+    list[#list + 1] = kill("p3", "rfc", RFC_FINAL, FIVE, T0 + 3 * HOUR)     -- not verified
+    pair(list, "rfc", RFC_FINAL, { "A-R", "B-R", "X-R", "Y-R", "Z-R" }, T0 + 4 * HOUR) -- no majority
+    pair(list, "mc", 672, FIVE, T0 + 5 * HOUR)
+    local out = Credit.Clears(list, ctx.roster)
+    assert.equal(2, #out)
+    assert.equal("mc", out[1].instance)
+    assert.is_nil(out[1].dur)
+    assert.equal("strat_ud", out[2].instance)
+    assert.equal(2520, out[2].dur)
+    assert.same(FIVE, out[2].names)
+  end)
+
+  it("Bosses counts the different bosses with a verified kill that day", function()
+    local day = ns.Scoring.DayKey(T0 + 20 * HOUR, 0)
+    local list = {}
+    pair(list, "mc", 663, FIVE, T0 + 20 * HOUR)
+    pair(list, "mc", 664, FIVE, T0 + 21 * HOUR)
+    list[#list + 1] = kill("p3", "mc", 665, FIVE, T0 + 22 * HOUR) -- not verified
+    ctx.observations = { changes = 1, List = function(_, kind) return kind == "kill" and list or {} end }
+    local credit = Credit.new(ctx)
+    assert.equal(2, credit:Bosses("mc", day))
+    assert.equal(0, credit:Bosses("bwl", day))
+  end)
 end)

@@ -259,14 +259,14 @@ function G:Withdraw(postId)
   return pok, prec
 end
 
--- Live, not withdrawn signups for a post, oldest first.
+-- Live, not withdrawn signups for a post, oldest first: { profile, char (who signed up), roles, at }.
 function G:Signups(postId)
   local now, out = self.now(), {}
   local prefix = postId .. "|"
   for id, rec in pairs(self.signups.store) do
     if id:sub(1, #prefix) == prefix and rec.del ~= true and rec.exp > now and type(rec.d) == "table"
         and rec.d.withdrawn ~= true then
-      out[#out + 1] = { profile = rec.by, roles = copy(rec.d.roles), at = rec.d.at }
+      out[#out + 1] = { profile = rec.by, char = rec.char, roles = copy(rec.d.roles), at = rec.d.at }
     end
   end
   table.sort(out, function(a, b)

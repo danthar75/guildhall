@@ -236,6 +236,22 @@ function C:Refresh()
   return true
 end
 
+-- The chars whose own signup observation for the event (title, start) exists, sorted.
+function C:Attendees(title, start)
+  local seen, out = {}, {}
+  local t = type(title) == "string" and title:sub(1, MAX_STR) or nil
+  for _, rec in ipairs(self.obs and self.obs:List("signup") or {}) do
+    local d = rec.d
+    if type(d) == "table" and d.post == nil and d.title == t and d.start == start and type(rec.char) == "string"
+        and not seen[rec.char] then
+      seen[rec.char] = true
+      out[#out + 1] = rec.char
+    end
+  end
+  table.sort(out)
+  return out
+end
+
 -- Calendar raids for the board: read-only, marked "Calendar". accepted = guild members (profiles) whose
 -- own signup observation for the event exists.
 function C:Events()

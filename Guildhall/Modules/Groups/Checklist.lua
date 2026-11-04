@@ -511,6 +511,39 @@ function L:OnZone(pick)
   return self:RunCheck(e.key, pickInstance(pick) == e.key and pick or nil)
 end
 
+-- Tonight (this server day) in `instance`, per raider char: { ok, miss } from the raider's newest
+-- own check (prepcheck, by its char), and confirmed = ok of the newest leadership confirmation
+-- (prepared), whoever sent it. For display only: credit is decided by the deriver.
+function L:Night(instance)
+  local out, today = {}, self:_today()
+  local tz = tzOf(self.config, self.compat, self.now())
+  local function entry(char)
+    out[char] = out[char] or {}
+    return out[char]
+  end
+  local newest = {}
+  local function take(rec, key)
+    local cur = newest[key]
+    if cur and not newer(rec, cur) then return false end
+    newest[key] = rec
+    return true
+  end
+  for _, kind in ipairs({ "prepcheck", "prepared" }) do
+    for _, rec in ipairs(self.obs and self.obs:List(kind) or {}) do
+      local d = type(rec) == "table" and rec.d
+      if type(d) == "table" and d.instance == instance and finite(d.at) and ns.Scoring.DayKey(d.at, tz) == today then
+        if kind == "prepcheck" and type(rec.char) == "string" and take(rec, "c|" .. rec.char) then
+          local e = entry(rec.char)
+          e.ok, e.miss = d.ok, d.miss
+        elseif kind == "prepared" and type(d.raider) == "string" and take(rec, "p|" .. d.raider) then
+          entry(d.raider).confirmed = d.ok
+        end
+      end
+    end
+  end
+  return out
+end
+
 -- A leadership confirmation that raiderChar was (ok = true) or was not prepared tonight.
 function L:Confirm(raiderChar, instance, ok)
   if type(raiderChar) ~= "string" or raiderChar == "" or #raiderChar > RAIDER_MAX then return false, "bad raider" end

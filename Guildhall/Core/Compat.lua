@@ -596,6 +596,29 @@ function Compat:PlayReadyCheckSound()
   return (pcall(env.PlaySound, id, "Master"))
 end
 
+-- The player's level (1..80), or nil when UnitLevel is missing, secret or out of range.
+function Compat:PlayerLevel()
+  local env = self.env
+  if not env.UnitLevel then return nil end
+  local n = self:Safe((env.UnitLevel("player")))
+  if type(n) == "number" and n >= 1 and n <= 80 and n == math.floor(n) then return n end
+  return nil
+end
+
+-- An item's name by id, or nil when the API is missing, the call fails, the item isn't cached yet
+-- or the name is secret.
+function Compat:ItemName(itemId)
+  local env = self.env
+  for _, f in ipairs({ env.C_Item and env.C_Item.GetItemNameByID or false, env.GetItemInfo or false }) do
+    if type(f) == "function" then
+      local ok, name = pcall(f, itemId)
+      name = ok and self:Safe(name) or nil
+      if type(name) == "string" and name ~= "" then return name end
+    end
+  end
+  return nil
+end
+
 -- How many of an item the player carries, or nil when the API is missing or the count is secret.
 function Compat:ItemCount(itemId)
   local env = self.env

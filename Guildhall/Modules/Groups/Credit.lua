@@ -289,7 +289,7 @@ function C:_dayIndex()
   local changes = obs and obs.changes
   local cache = self.cache
   if not (cache and type(changes) == "number" and cache.changes == changes and cache.tz == tz) then
-    local byDay, members = {}, {}
+    local byDay, members, bosses = {}, {}, {}
     for _, k in ipairs(Credit.Verified(obs and obs:List("kill") or {})) do
       local key = k.instance .. "|" .. ns.Scoring.DayKey(k.at, tz)
       local set = byDay[key] or {}
@@ -298,11 +298,35 @@ function C:_dayIndex()
       local mset = members[key] or {}
       members[key] = mset
       for _, ch in ipairs(k.confirmed) do mset[ch] = true end
+      local bset = bosses[key] or {}
+      bosses[key] = bset
+      bset[k.encounter] = true
     end
-    cache = { changes = changes, tz = tz, byDay = byDay, members = members }
+    cache = { changes = changes, tz = tz, byDay = byDay, members = members, bosses = bosses }
     self.cache = cache
   end
   return cache
+end
+
+-- Verified final-boss kills (dungeon or raid) with a guild majority, newest first, for the run
+-- history: { instance, encounter, at, names (credited guild members, in report order), dur? (seconds,
+-- from the reports that carry one) }.
+function Credit.Clears(kills, roster)
+  local out = {}
+  for _, k in ipairs(Credit.Verified(kills)) do
+    local _, isFinal = ns.Instances.ByEncounter(k.encounter)
+    local guild, majority = Credit.GuildMembers(k, roster)
+    if isFinal and majority then
+      local dur
+      for _, r in ipairs(k.reports) do
+        local v = r.d.dur
+        if type(v) == "number" and v >= 1 and (dur == nil or v > dur) then dur = v end
+      end
+      out[#out + 1] = { instance = k.instance, encounter = k.encounter, at = k.at, names = guild, dur = dur }
+    end
+  end
+  table.sort(out, function(a, b) return a.at > b.at end)
+  return out
 end
 
 local function copySet(src)
@@ -321,6 +345,13 @@ end
 -- `instance` on server day dayKey. Returns a new table each call.
 function C:Attendees(instance, dayKey)
   return copySet(self:_dayIndex().members[tostring(instance) .. "|" .. tostring(dayKey)])
+end
+
+-- How many different bosses of `instance` have a verified kill on server day dayKey.
+function C:Bosses(instance, dayKey)
+  local n = 0
+  for _ in pairs(self:_dayIndex().bosses[tostring(instance) .. "|" .. tostring(dayKey)] or {}) do n = n + 1 end
+  return n
 end
 
 -- Module-level RaidLeaders(instance, dayKey) answers from the ctx last attached (wiring calls

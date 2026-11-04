@@ -242,6 +242,51 @@ function F:Tick(askId)
   return true
 end
 
+-- Tonight's (this server day) newest ask per raider char in `instance`, for the roster:
+-- { ask = id, mine = asked by this profile, done = a flexdone from the raider's profile within 900 s
+-- or a flexok from the asker's profile }. For display only: credit is decided by the deriver.
+function F:Status(instance)
+  local now = self.now()
+  local tz = tzOf(self.config, self.compat, now)
+  local today = ns.Scoring.DayKey(now, tz)
+  local p = self.profile
+  local me = p and p.Id and p:Id() or nil
+  local latest = {}
+  for _, rec in ipairs(self.obs:List("flexask")) do
+    local d = rec.d
+    if wellFormedAsk(rec) and d.instance == instance and ns.Scoring.DayKey(d.at, tz) == today then
+      local cur = latest[d.raider]
+      if not cur or d.at > cur.d.at or (d.at == cur.d.at and rec.id > cur.id) then latest[d.raider] = rec end
+    end
+  end
+  local function answered(kind, ok)
+    local set = {}
+    for _, r in ipairs(self.obs:List(kind)) do
+      local d = type(r) == "table" and r.d
+      if type(d) == "table" and type(d.ask) == "string" and finite(d.at) and ok(r, d) then set[d.ask] = true end
+    end
+    return set
+  end
+  local byId = {}
+  for _, rec in pairs(latest) do byId[rec.id] = rec end
+  local dones = answered("flexdone", function(r, d)
+    local ask = byId[d.ask]
+    if not ask then return false end
+    local owner = p and p.OwnerOf and p:OwnerOf(ask.d.raider) or nil
+    local delta = d.at - ask.d.at
+    return owner ~= nil and r.by == owner and delta >= 0 and delta <= WINDOW
+  end)
+  local oks = answered("flexok", function(r, d)
+    local ask = byId[d.ask]
+    return ask ~= nil and r.by == ask.by
+  end)
+  local out = {}
+  for raider, rec in pairs(latest) do
+    out[raider] = { ask = rec.id, mine = me ~= nil and rec.by == me, done = dones[rec.id] == true or oks[rec.id] == true }
+  end
+  return out
+end
+
 -- Open asks naming one of this profile's chars, newest first: under 900 s old, not answered yet.
 function F:OpenAsks()
   local own, now, out = self:_ownChars(), self.now(), {}

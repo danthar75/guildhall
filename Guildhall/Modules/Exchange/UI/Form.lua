@@ -5,6 +5,7 @@ local ADDON, ns = ...
 -- Named global: "GuildhallUIExchangeForm" (UISpecialFrames needs a name for ESC to close it).
 -- Item input: shift-click (post-hook on ChatFrameUtil.InsertLink, Classic: ChatEdit_InsertLink),
 -- drag and drop onto the slot, or a typed name. Only the link (or the typed name) goes into d.item.
+-- Global: ns.ExchangeUI.OpenForm(prefill) (see below).
 ns.Exchange = ns.Exchange or {}
 local UI = ns.UI
 local Util = ns.Util
@@ -474,6 +475,24 @@ function Form.Open(rec, defaultKind)
   frame:ClearAllPoints()
   frame:SetPoint("CENTER")
   frame:Show()
+end
+
+-- ns.ExchangeUI.OpenForm(prefill): a new listing, prefill = { kind = "LF"|"WTS"?, item = item id,
+-- link or typed name? } (the Groups tab's "Post LF on Exchange"). An id whose name the client
+-- doesn't know yet leaves the name empty.
+ns.ExchangeUI = ns.ExchangeUI or {}
+if not ns.ExchangeUI.OpenForm then
+  function ns.ExchangeUI.OpenForm(prefill)
+    prefill = type(prefill) == "table" and prefill or {}
+    Form.Open(nil, prefill.kind == "WTS" and "WTS" or "LF")
+    local item = prefill.item
+    if type(item) == "number" then
+      item = ns.compat and ns.compat.ItemName and ns.compat:ItemName(item) or nil
+    end
+    if type(item) ~= "string" or item == "" then return end
+    if Util.IsItemLink(item) then Form.SetLink(item) else setTypedName(item) end
+    relayout()
+  end
 end
 
 function Form.IsShown() return frame ~= nil and frame:IsShown() end

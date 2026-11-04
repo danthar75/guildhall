@@ -339,6 +339,25 @@ describe("Compat", function()
       assert.is_nil(Compat.new({}):InstanceKey())
     end)
 
+    it("PlayerLevel reads UnitLevel, nil when missing, secret or out of range", function()
+      assert.equal(60, Compat.new({ UnitLevel = function(u) return u == "player" and 60 or nil end }):PlayerLevel())
+      assert.is_nil(Compat.new({}):PlayerLevel())
+      assert.is_nil(Compat.new({ UnitLevel = function() return 60 end,
+        issecretvalue = function() return true end }):PlayerLevel())
+      assert.is_nil(Compat.new({ UnitLevel = function() return 0 end }):PlayerLevel())
+    end)
+
+    it("ItemName reads the item's name, nil when missing, secret or not cached", function()
+      assert.equal("Runecloth", Compat.new({ C_Item = { GetItemNameByID = function(id)
+        return id == 14047 and "Runecloth" or nil end } }):ItemName(14047))
+      assert.equal("Silk", Compat.new({ GetItemInfo = function() return "Silk" end }):ItemName(4306))
+      assert.is_nil(Compat.new({ GetItemInfo = function() return nil end }):ItemName(4306))
+      assert.is_nil(Compat.new({ GetItemInfo = function() error("boom") end }):ItemName(4306))
+      assert.is_nil(Compat.new({ GetItemInfo = function() return "Silk" end,
+        issecretvalue = function() return true end }):ItemName(4306))
+      assert.is_nil(Compat.new({}):ItemName(4306))
+    end)
+
     it("ActiveSpecGroup is nil without dual spec", function()
       assert.is_nil(Compat.new({}):ActiveSpecGroup())
       assert.is_nil(Compat.new({ GetActiveTalentGroup = function() return 1 end,

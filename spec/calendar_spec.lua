@@ -320,6 +320,8 @@ describe("Groups Calendar", function()
     assert.equal("Calendar", out[1].source)
     assert.equal(2, out[1].accepted)
     assert.equal("mc", out[1].instance)
+    assert.same({ "A-R", "B-R" }, a.cal:Attendees("MC night", start))
+    assert.same({}, a.cal:Attendees("MC night", start + 1))
   end)
 
   -- Deriver ---------------------------------------------------------------------------------------
