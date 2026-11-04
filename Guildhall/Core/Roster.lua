@@ -68,6 +68,11 @@ function Roster:RankIndex(fullName)
   return self.cache.ranks[key]
 end
 
+-- True once a roster has been read (rank cache non-empty).
+function Roster:HasRanks()
+  return next(self.cache.ranks) ~= nil
+end
+
 function Roster:OfficerThreshold()
   local n = self.cache.guildConfig and self.cache.guildConfig.officers
   return type(n) == "number" and n or DEFAULT_OFFICERS

@@ -42,6 +42,7 @@ function ns.Exchange.Create(ctx)
         e.action, e.after = "create", copy(rec.d)
       elseif rec.del == true and type(rec.d) == "table" and rec.d.offRemove then
         e.action, e.before, e.after = "officer-remove", copy(old.d), copy(rec.d)
+        e.author = rec.d.offBy
       elseif rec.del == true then
         e.action, e.before, e.after = "remove", copy(old.d), copy(rec.d)
       elseif rec.exp > old.exp then
@@ -71,6 +72,7 @@ function ns.Exchange.Create(ctx)
       return Listing.CheckIncoming(rec, existing, {
         ownerOf = function(c) return self.profile:OwnerOf(c) end,
         isOfficer = function(c) return self.roster:IsOfficer(c) end,
+        rosterKnown = type(self.roster.HasRanks) == "function" and self.roster:HasRanks() or false,
         now = self.now(),
       })
     end,

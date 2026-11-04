@@ -80,13 +80,13 @@ describe("Exchange.Listing", function()
     assert.is_nil(c.d.qty); assert.is_nil(c.d.note)
   end)
 
-  it("Remove makes tombstone, officer removal flags and re-owns", function()
+  it("Remove makes tombstone; officer removal flags it, keeps by and records offBy", function()
     local r = L.New(good(), "p1", "Bob-Realm", 1000, 1)
     local own = L.Remove(r, "Bob-Realm", 2000, false)
     assert.is_true(own.del); assert.equals(2, own.v); assert.equals("p1", own.by)
-    assert.is_nil(own.d.offRemove)
+    assert.is_nil(own.d.offRemove); assert.is_nil(own.d.offBy)
     local off = L.Remove(r, "Off-Realm", 2000, true, "p9")
-    assert.is_true(off.d.offRemove); assert.equals("p9", off.by)
+    assert.is_true(off.d.offRemove); assert.equals("p1", off.by); assert.equals("p9", off.d.offBy)
     assert.is_false(r.del)
     assert.has_error(function() L.Remove(r, "Off-Realm", 2000, true) end)
   end)
@@ -127,8 +127,61 @@ describe("Exchange.Listing", function()
   it("accepts officer removal with unknown rank as officer unverified", function()
     local ex = L.New(good(), "p1", "Bob-Realm", 1000, 1)
     local off = L.Remove(ex, "Off-Realm", 2000, true, "p9")
-    local ok, why = L.CheckIncoming(off, ex, ctx({ isOfficer = function() return nil end }))
+    local ok, why = L.CheckIncoming(off, ex, ctx({ isOfficer = function() return nil end, rosterKnown = false }))
     assert.is_true(ok); assert.equals("officer unverified", why)
+  end)
+
+  -- M1: hardening against forged officer removals.
+  it("rejects officer removal by a name unknown to a roster we have read", function()
+    local ex = L.New(good(), "p1", "Bob-Realm", 1000, 1)
+    local off = L.Remove(ex, "Nobody-Realm", 2000, true, "p9")
+    local ok, why = L.CheckIncoming(off, ex, ctx({ isOfficer = function() return nil end, rosterKnown = true }))
+    assert.is_false(ok); assert.equals("not officer", why)
+  end)
+
+  it("rejects any incoming record whose char is not a non-empty string", function()
+    local ex = L.New(good(), "p1", "Bob-Realm", 1000, 1)
+    for _, bad in ipairs({ false, 5, "" }) do
+      local r = L.New(good(), "p1", "Bob-Realm", 1000, 2); r.char = bad
+      local ok, why = L.CheckIncoming(r, nil, ctx())
+      assert.is_false(ok); assert.equals("bad char", why)
+    end
+    local nochar = L.New(good(), "p1", "Bob-Realm", 1000, 3); nochar.char = nil
+    assert.is_false((L.CheckIncoming(nochar, nil, ctx())))
+    local off = L.Remove(ex, "Off-Realm", 2000, true, "p9"); off.char = nil
+    local ok, why = L.CheckIncoming(off, ex, ctx({ isOfficer = function() return nil end, rosterKnown = false }))
+    assert.is_false(ok); assert.equals("bad char", why)
+  end)
+
+  -- M2: by never changes, so the owner check holds for every version.
+  it("rejects an officer removal that re-attributes by, or lacks offBy", function()
+    local ex = L.New(good(), "p1", "Bob-Realm", 1000, 1)
+    local off = L.Remove(ex, "Off-Realm", 2000, true, "p9")
+    off.by = "p9"
+    local ok, why = L.CheckIncoming(off, ex, ctx())
+    assert.is_false(ok); assert.equals("not owner", why)
+    local off2 = L.Remove(ex, "Off-Realm", 2000, true, "p9")
+    off2.d.offBy = nil
+    ok, why = L.CheckIncoming(off2, ex, ctx())
+    assert.is_false(ok); assert.equals("bad offBy", why)
+  end)
+
+  it("accepts an owner renew that follows an officer removal of the same version", function()
+    local ex = L.New(good(), "p1", "Bob-Realm", 1000, 1)
+    local off = L.Remove(ex, "Off-Realm", 2000, true, "p9")
+    local renew = L.Renew(ex, "Bob-Realm", 2100)
+    assert.is_true((L.CheckIncoming(renew, off, ctx())))
+    assert.is_true((L.CheckIncoming(off, renew, ctx())))
+  end)
+
+  it("rejects a foreign plain tombstone and a foreign live record flagged offRemove", function()
+    local ex = L.New(good(), "p1", "Bob-Realm", 1000, 1)
+    local t = L.Remove(ex, "Eve-Realm", 2000, false); t.by = "p2"
+    local ok, why = L.CheckIncoming(t, ex, ctx())
+    assert.is_false(ok); assert.equals("not owner", why)
+    local live = L.Edit(ex, { offRemove = true }, "Eve-Realm", 2000); live.by = "p2"
+    ok, why = L.CheckIncoming(live, ex, ctx())
+    assert.is_false(ok); assert.equals("not owner", why)
   end)
 
   it("tombstone skips payload validation", function()

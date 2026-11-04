@@ -178,7 +178,36 @@ describe("Exchange", function()
     assert.equal("officer-remove", a.logStore[#a.logStore].action)
     assert.equal("Bob-Realm", a.logStore[#a.logStore].relayer)
     assert.equal("officer-remove", b.logStore[#b.logStore].action)
+    assert.equal(b.profile:Id(), a.logStore[#a.logStore].author)
+    assert.equal(rec.by, a.ex.listings:Get(rec.id).by)
     assert.equal(0, #a.ex:List("all"))
+  end)
+
+  it("officer removal and a same-version owner renew converge in either order (M2)", function()
+    local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+    local rec = post(a)
+    local L = a.ns.Exchange.Listing
+    local off = L.Remove(rec, "Bob-Realm", 1005, true, b.profile:Id())
+    local renew = L.Renew(rec, "Alice-Realm", 1010)
+    local c, d = node("Carol-Realm", { id = 3 }), node("Dave-Realm", { id = 4 })
+    c.officers["Bob-Realm"] = true; d.officers["Bob-Realm"] = true
+    local cp = a.ns.Util.DeepCopy
+    c.ex.sync:_onRec({ rs = { cp(rec) } }, "Alice-Realm"); d.ex.sync:_onRec({ rs = { cp(rec) } }, "Alice-Realm")
+    c.ex.sync:_onRec({ rs = { cp(off) } }, "Bob-Realm"); c.ex.sync:_onRec({ rs = { cp(renew) } }, "Alice-Realm")
+    d.ex.sync:_onRec({ rs = { cp(renew) } }, "Alice-Realm"); d.ex.sync:_onRec({ rs = { cp(off) } }, "Bob-Realm")
+    local cr, dr = c.ex.listings:Get(rec.id), d.ex.listings:Get(rec.id)
+    assert.equal(1010, cr.t); assert.equal(1010, dr.t)
+    assert.is_false(cr.del); assert.is_false(dr.del)
+  end)
+
+  it("an officer removal from a name the read roster does not know is rejected (M1)", function()
+    local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+    local rec = post(a)
+    b.roster.HasRanks = function() return true end
+    local off = a.ns.Exchange.Listing.Remove(rec, "Forger-Realm", 1005, true, "ffffffffffff")
+    b.ex.sync:_onRec({ rs = { off } }, "Forger-Realm")
+    assert.is_false(b.ex.listings:Get(rec.id).del)
+    assert.equal("not officer", b.logStore[#b.logStore].reason)
   end)
 
   it("OfficerRemove refuses non-officers and own listings", function()

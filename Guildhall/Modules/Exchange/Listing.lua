@@ -61,7 +61,8 @@ function Listing.Renew(rec, char, now)
   return n
 end
 
--- byOfficer: marks d.offRemove and re-attributes the record to officerProfileId.
+-- byOfficer: marks d.offRemove and records the officer's profile in d.offBy. `by` never
+-- changes, so the owner check holds for every version and the merge rule alone decides.
 function Listing.Remove(rec, char, now, byOfficer, officerProfileId)
   if byOfficer and officerProfileId == nil then
     error("Listing.Remove: officerProfileId required when byOfficer", 2)
@@ -71,7 +72,7 @@ function Listing.Remove(rec, char, now, byOfficer, officerProfileId)
   n.v, n.t, n.char, n.del = rec.v + 1, now, char, true
   if byOfficer then
     n.d.offRemove = true
-    n.by = officerProfileId
+    n.d.offBy = officerProfileId
   end
   return n
 end
@@ -81,8 +82,11 @@ local function isOfficerRemoval(rec)
 end
 
 -- Returns ok, reason. ok=true may carry a reason ("officer unverified") to be logged.
+-- ctx: isOfficer(char) -> true|false|nil; rosterKnown: true once a guild roster has been
+-- read, so a name missing from it is treated as "not officer" rather than "unverified".
 function Listing.CheckIncoming(rec, existing, ctx)
   if type(rec) ~= "table" then return false, "bad record" end
+  if type(rec.char) ~= "string" or rec.char == "" then return false, "bad char" end
   if rec.del ~= true then
     local ok, err = Listing.Validate(rec.d)
     if not ok then return false, err end
@@ -90,11 +94,15 @@ function Listing.CheckIncoming(rec, existing, ctx)
   if type(rec.exp) ~= "number" or type(rec.t) ~= "number" then return false, "bad times" end
   if rec.exp > rec.t + MAX_EXP_AHEAD then return false, "exp too far" end
   local offRemoval = isOfficerRemoval(rec)
-  if existing and rec.by ~= existing.by and not offRemoval then return false, "not owner" end
+  if existing and rec.by ~= existing.by then return false, "not owner" end
   if offRemoval then
+    if type(rec.d.offBy) ~= "string" or rec.d.offBy == "" then return false, "bad offBy" end
     local isOff = ctx and ctx.isOfficer and ctx.isOfficer(rec.char)
     if isOff == false then return false, "not officer" end
-    if isOff == nil then return true, "officer unverified" end
+    if isOff == nil then
+      if ctx and ctx.rosterKnown then return false, "not officer" end
+      return true, "officer unverified"
+    end
   end
   return true
 end
