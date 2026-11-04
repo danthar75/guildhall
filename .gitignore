@@ -2,3 +2,4 @@
 .tools/
 *.zip
 dist/
+reference/
