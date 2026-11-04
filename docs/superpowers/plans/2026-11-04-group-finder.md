@@ -25,7 +25,7 @@
 - Parent specs: `docs/superpowers/specs/2026-11-04-guild-leaderboard-design.md` and `docs/superpowers/specs/2026-11-02-guildhall-exchange-design.md`.
 - Mockups: https://claude.ai/artifact/8FViUNtVFmBFUkncwvjPqX, boards "Groups · dungeon post", "Groups · raid night", "New group post form" and "Settings · Permissions".
 
-**Prerequisite:** this plan starts from `main` after `feature/leaderboard` has merged, including leaderboard Tasks 9, 10 and 14.
+**Prerequisite:** this plan starts from `main` after `feature/leaderboard` has merged, including leaderboard Tasks 9, 10, 14 and 16 (Permissions).
 - Task 9 provides `core.config` and `Config`.
 - Task 10 provides `def.events` and `services.syncs`.
 - Task 14 provides history records.
@@ -130,55 +130,30 @@
 
 ---
 
-### Task 1: Core permissions and their history
+### Task 1: Group permissions and their history
+
+The core Permissions system was built in the leaderboard branch (its Task 16: `Guildhall/Core/Permissions.lua` and `Core/UI/PermissionsView.lua`) because bank review needed it. This task adds the group finder's keys and extends the history.
 
 **Files:**
-- Create `Guildhall/Core/Permissions.lua` (both TOCs, after `Core/Leaderboard/Config.lua`).
-- Modify:
-  - `Guildhall/Core/Leaderboard/Config.lua` (permission checks replace `IsOfficer` for weights and retake; history `what` gains `"perms"` and `"checklist"`; history `exp`)
-  - `Guildhall/Core/Roster.lua` (`Roster:RankNames()`)
-  - `Guildhall/Core/Compat.lua` (`Compat:GuildRanks()`)
-- Test: `spec/permissions_spec.lua`, plus updates to `spec/lbconfig_spec.lua`.
+- Modify `Guildhall/Modules/Groups/Module.lua` (or create an early `Guildhall/Modules/Groups/Perms.lua` in both TOCs) to register the keys.
+- Modify `Guildhall/Core/Leaderboard/Config.lua`, so history `what` gains `"checklist"` and history `exp = at + 63072000`.
+- Test: `spec/permissions_spec.lua`.
 
 **Interfaces:**
-- **Consumes:**
-  - `core.config` from Config: `cfg.set`, the history writer `cfg:_history(what, key, before, after)` (rename to this if Task 14 named it differently, and keep one writer).
-  - `Roster:RankIndex`, `Roster:OfficerThreshold`.
-- **Produces:**
-  - `Compat:GuildRanks() -> array of names | nil`, using `GuildControlGetNumRanks` and `GuildControlGetRankName(i)`. Index 1 is rank 0. A secret value gives nil.
-  - `Roster:RankNames() -> array`. Falls back to the names seen in the roster cache.
-  - `Permissions.KEYS = { "checklists", "prepared", "flex", "weights", "retake" }`, with labels:
-    - "Edit raid checklists"
-    - "Confirm prepared"
-    - "Ask for spec switches"
-    - "Edit leaderboard weights"
-    - "Retake a month"
-  - `Permissions.new(ctx) -> perms`. `ctx` holds `config`, `roster`, `profile`, `now` and `compat`.
-  - `perms:Grants(key) -> { ranks = { [rankIndex] = true }, raidlead = bool }`. Defaults to the officer ranks with `raidlead = false`.
-  - `perms:Can(char, key, opts) -> bool`.
-    - True if the char's rank is in the grant.
-    - Also true if the grant has `raidlead`, `opts.raidLeaders` is given and it contains the char.
-    - An unknown rank gives false.
-  - `perms:Publish(map) -> ok, err`.
-    - Only allowed when I'm rank 0; otherwise it returns `false, "Only the guild master can change permissions."`.
-    - Writes record id `"perms"`.
-    - Writes a history entry with `what = "perms"` in the same call.
-  - Incoming `"perms"` record: accepted only if `roster:RankIndex(rec.char) == 0` when it arrives.
-    - If the roster is unknown, reject it now (it is retried on sync).
-    - Within that rule, a newer version wins.
-  - `cfg:PublishWeights` and `cfg:RetakeMonth` now check `perms:Can(myChar, "weights" | "retake")`.
-  - Incoming weights and month records are checked with `perms:Can(rec.char, ...)` when they arrive. Before any perms record exists, the defaults keep today's officer rule.
+- **Consumes:** `Permissions.AddKey`, `perms:Can`, `perms:Grants` and the history writer, all from leaderboard Task 16.
+- **Produces:** these new keys, each with `raidlead = true`:
+  - `checklists`: "Edit raid checklists"
+  - `prepared`: "Confirm prepared"
+  - `flex`: "Ask for spec switches"
+
+  The keys default to the officer ranks. The Permissions grid shows the "Raid leader & assistants" column for these keys only.
 
 - [ ] **Step 1: Failing tests.**
-  - "defaults grant officer ranks only"
-  - "a perms record from rank 1 is rejected; from rank 0 accepted"
-  - "permissions from a former GM stay; a new GM's record replaces them; unknown roster defers" (Review Focus 5)
-  - "Can honours raidlead only with a matching raidLeaders set"
-  - "Publish writes one history entry what=perms with before and after"
-  - "a weights publish by a rank now granted 'weights' is accepted; by an officer whose rank was removed is rejected"
+  - "the three groups keys appear after the leaderboard keys and default to officer ranks"
+  - "a raidlead grant needs a matching raidLeaders set"
   - "history records carry exp = at + 63072000"
-- [ ] **Steps 2–4:** confirm the tests fail, implement, confirm they pass (`bash tools/check.sh`).
-- [ ] **Step 5:** commit "Core: guild-rank permissions with change history".
+- [ ] **Steps 2–4:** run the tests and see them fail, implement, then run them and see them pass.
+- [ ] **Step 5:** commit "Groups: permission keys".
 
 ### Task 2: Instance table and group Compat reads
 
@@ -576,26 +551,22 @@
 - [ ] **Steps 2–4:** confirm the tests fail, implement, confirm they pass.
 - [ ] **Step 5:** commit "Groups: post form and checklist editor".
 
-### Task 12: Settings — Permissions, Change history and Groups
+### Task 12: Settings — Change history and Groups
 
 **Files:**
-- Create `Guildhall/Core/UI/PermissionsView.lua` and `Guildhall/Modules/Groups/UI/SettingsView.lua` (both TOCs).
+- Create `Guildhall/Modules/Groups/UI/SettingsView.lua` (both TOCs). The Permissions view already exists (leaderboard Task 16).
 - Modify `Guildhall/Core/UI/SettingsView.lua` (sub-tabs) and `Guildhall/Core/Leaderboard/UI/SettingsView.lua` (move the history list out to the shared Change history view).
-- Test: `spec/permissionsview_spec.lua`.
+- Test: `spec/settingsview_spec.lua`.
 
 **Interfaces:**
 - **Settings sub-tabs.** Settings shows sub-tabs General, Leaderboard, Groups, Permissions and Change history. A module's `settings` entry becomes a sub-tab.
-- **Permissions view.** It follows the "Settings · Permissions" mockup.
-  - **Caption, verbatim:** "Only the Guild Master can change these. Ranks come from the game, in rank order."
-  - **Grid.** Columns are `Roster:RankNames()` plus "Raid leader & assistants". The raid-leader column is shown only for `checklists`, `prepared` and `flex`. Rows are `Permissions.KEYS` labels. The Guild Master column is always ✓ and not editable.
-  - **Who can edit.** Checkboxes are enabled only for rank 0.
-  - **Buttons.** "Reset to officer ranks" and "Save". Save calls `perms:Publish`.
-  - **Recent changes.** Below the grid, the 4 newest history entries, with the label "(full list under Change history)".
+- **Permissions view.** Already built (leaderboard Task 16). The groups keys from Task 1 appear in it automatically, with the raid-leader column.
 - **Change history view:**
   - **Visibility.** The guild master and officers see it. Other members see "Only officers and the guild master can see the change history."
   - **Rows.** Each row shows the time, the name with rank name in brackets, and a plain-language line:
     - "Checklist <name>: <item> 3 → 5"
     - "Permission <label>: added <rank>" or "removed <rank>"
+    - "Bank entry <date> <name> <what>: excluded" or "counted again", followed by the reason
     - "Leaderboard weight <label>: 3 → 30"
     - "Retook <Month> top 5"
 - **Groups settings:**
@@ -604,8 +575,7 @@
   - "My usual roles": the defaults for Ready now and Sign up.
 
 - [ ] **Step 1: Failing tests.**
-  - "a non-GM sees the grid read-only"
-  - "GM save publishes perms with the ticked ranks"
+  - "the groups keys show the raid-leader column; leaderboard keys don't"
   - "history lines render in plain language for each what"
   - "members can't see the change history"
 - [ ] **Steps 2–4:** confirm the tests fail, implement, confirm they pass.
