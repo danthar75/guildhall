@@ -188,6 +188,30 @@ describe("Groups Flex", function()
     assert.same({}, derive(raider))
   end)
 
+  it("answered asks are remembered by their time and forgotten after 15 min", function()
+    local raider, off = setup()
+    local _, id = off.fx:Ask("Raider-R", "mc")
+    local askAt = off.obs:List("flexask")[1].d.at
+    clock.advance(60)
+    spec = 2
+    raider.fx:OnSpecChanged()
+    assert.equal(askAt, raider.db.flexSent[id])
+    -- a later session: entries under 900 s old stay, older ones and malformed ones go
+    raider.db.flexSent.old = clock.now() - 900
+    raider.db.flexSent.legacy = true
+    local again = ns.Groups.Flex.new({ config = raider.cfg, observations = raider.obs, compat = raider.compat,
+      now = clock.now, playerChar = "Raider-R", profile = raider.profile, db = raider.db })
+    assert.equal(askAt, again.sent[id])
+    assert.is_nil(raider.db.flexSent.old)
+    assert.is_nil(raider.db.flexSent.legacy)
+    -- the ask is still not answered twice
+    assert.same({}, again:OpenAsks())
+    clock.advance(900)
+    ns.Groups.Flex.new({ config = raider.cfg, observations = raider.obs, compat = raider.compat,
+      now = clock.now, playerChar = "Raider-R", profile = raider.profile, db = raider.db })
+    assert.is_nil(raider.db.flexSent[id])
+  end)
+
   it("a change after 16 min doesn't count", function()
     local raider, off = setup()
     local _, id = off.fx:Ask("Raider-R", "mc")

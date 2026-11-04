@@ -220,13 +220,31 @@ local function creditWindow(post)
 end
 
 -- Publishes the player's own `signup` observation (the Groups records are purged with the post, so
--- credit is derived from observations). Never fails the signup. Needs ctx.observations.
+-- credit is derived from observations). Never fails the signup. Needs ctx.observations. Skipped when
+-- this char's latest signup observation for the post (by at, id) already has the same status, instance
+-- and window (a role change, for example, publishes nothing).
 function G:_observe(post, postId, status)
   local obs = self.ctx.observations
   if not (obs and obs.Publish) then return end
   local from, to = creditWindow(post)
-  obs:Publish({ kind = "signup", post = postId, instance = post.d.instance, from = math.floor(from),
-    to = math.floor(to), status = status, at = math.floor(self.now()) })
+  from, to = math.floor(from), math.floor(to)
+  if obs.List then
+    local latest
+    for _, rec in ipairs(obs:List("signup")) do
+      local d = type(rec) == "table" and rec.d
+      if type(d) == "table" and rec.char == self.playerChar and d.post == postId and type(d.at) == "number"
+          and (latest == nil or d.at > latest.d.at
+            or (d.at == latest.d.at and tostring(rec.id) > tostring(latest.id))) then
+        latest = rec
+      end
+    end
+    local ld = latest and latest.d
+    if ld and ld.status == status and ld.instance == post.d.instance and ld.from == from and ld.to == to then
+      return
+    end
+  end
+  obs:Publish({ kind = "signup", post = postId, instance = post.d.instance, from = from,
+    to = to, status = status, at = math.floor(self.now()) })
 end
 
 function G:SignUp(postId, roles)

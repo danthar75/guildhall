@@ -175,6 +175,39 @@ describe("Groups", function()
     assert.equal(3, #sent)
   end)
 
+  it("a signup observation is skipped when the player's latest one for the post already says the same", function()
+    local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+    local sent, store, seq = {}, {}, 0
+    b.ctx.observations = {
+      Publish = function(_, d)
+        seq = seq + 1
+        sent[#sent + 1] = d
+        store[#store + 1] = { id = "o" .. seq, char = "Bob-Realm", d = d }
+        return "accepted"
+      end,
+      List = function(_, kind) return kind == "signup" and store or {} end,
+    }
+    local post = mustPost(a)
+    assert.is_true((b.g:SignUp(post.id, { d = true })))
+    assert.equal(1, #sent)
+    -- changing roles keeps the status: nothing new
+    assert.is_true((b.g:SignUp(post.id, { h = true })))
+    assert.equal(1, #sent)
+    -- withdrawing changes it, and so does signing up again
+    assert.is_true((b.g:Withdraw(post.id)))
+    assert.equal(2, #sent)
+    assert.equal("withdrawn", sent[2].status)
+    clock.advance(5)
+    assert.is_true((b.g:SignUp(post.id, { d = true })))
+    assert.equal(3, #sent)
+    assert.equal("signedup", sent[3].status)
+    -- another char's observation for the post doesn't count as this player's
+    store[#store + 1] = { id = "x1", char = "Alt-Realm", d = { kind = "signup", post = post.id, instance = "lbrs",
+      from = sent[3].from, to = sent[3].to, status = "withdrawn", at = sent[3].at + 100 } }
+    assert.is_true((b.g:SignUp(post.id, { t = true })))
+    assert.equal(3, #sent)
+  end)
+
   it("signups expire with their post", function()
     local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
     local post = mustPost(a)

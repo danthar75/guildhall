@@ -184,9 +184,16 @@ function Flex.new(ctx)
   self.perms = ctx.perms or (ctx.config and ctx.config.perms)
   self.playerChar = ctx.playerChar or (ctx.config and ctx.config.playerChar)
   self.profile = ctx.profile or (ctx.config and ctx.config.profile)
+  -- db.flexSent[ask id] = the ask's at, for asks this client answered. An ask is open for 900 s
+  -- only, so older entries (and malformed ones) are dropped here.
   if type(ctx.db) == "table" then
     ctx.db.flexSent = type(ctx.db.flexSent) == "table" and ctx.db.flexSent or {}
     self.sent = ctx.db.flexSent
+    local now, dead = self.now(), {}
+    for id, at in pairs(self.sent) do
+      if not finite(at) or now - at >= WINDOW then dead[#dead + 1] = id end
+    end
+    for _, id in ipairs(dead) do self.sent[id] = nil end
   else
     self.sent = {}
   end
@@ -317,7 +324,7 @@ function F:OnSpecChanged()
   for _, rec in ipairs(self:OpenAsks()) do
     local status = self.obs:Publish({ kind = "flexdone", ask = rec.id, at = math.floor(self.now()) })
     if status == "accepted" then
-      self.sent[rec.id] = true
+      self.sent[rec.id] = rec.d.at
       n = n + 1
     end
   end
