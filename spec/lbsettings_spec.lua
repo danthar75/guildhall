@@ -47,6 +47,7 @@ describe("Leaderboard.SettingsView", function()
       Tz = function() return 0 end,
       WeightsInfo = function() return info end,
       History = function() return history end,
+      HistoryAuthorPermitted = function(_, e) return e.by ~= "Gone-Realm" end,
       PublishWeights = function(_, map) pubMap = map; return pubResult, (not pubResult) and "not accepted" or nil end,
     } }
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/UI/SettingsView.lua")
@@ -235,6 +236,13 @@ describe("Leaderboard.SettingsView", function()
       assert.equal("2023-11-14 23:13  Boss  Retook October 2026 top 5", l[1])
       assert.equal("2023-11-14 22:13  Dor  Leaderboard weight Sales: 3 -> 30", l[2])
       for _, line in ipairs(l) do assert.is_nil(line:find("[\128-\255]")) end
+    end)
+
+    it("marks an entry whose author no longer has permission, and a removed weight", function()
+      history = { { what = "weights", by = "Gone-Realm", at = 1700000000,
+        before = { ["exchange.sales"] = 3 }, after = {} } }
+      becomeOfficer()
+      assert.same({ "2023-11-14 22:13  Gone  Leaderboard weight Sales: 3 -> removed (no permission now)" }, lines())
     end)
 
     it("the guild master (rank 0) sees it without being an officer", function()

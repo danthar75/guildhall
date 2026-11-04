@@ -59,14 +59,18 @@ end
 local function describe(e)
   local out = {}
   if e.what == "weights" then
-    local ids = {}
-    for id in pairs(e.after or {}) do ids[#ids + 1] = id end
+    local ids, seen = {}, {}
+    for _, map in ipairs({ e.before or {}, e.after or {} }) do
+      for id in pairs(map) do
+        if not seen[id] then seen[id] = true; ids[#ids + 1] = id end
+      end
+    end
     table.sort(ids)
     for _, id in ipairs(ids) do
-      local was, now = (e.before or {})[id], e.after[id]
+      local was, now = (e.before or {})[id], (e.after or {})[id]
       if was ~= now then
         out[#out + 1] = "Leaderboard weight " .. Util.Escape(weightLabel(id)) .. ": "
-          .. (was ~= nil and tostring(was) or "default") .. " -> " .. tostring(now)
+          .. (was ~= nil and tostring(was) or "default") .. " -> " .. (now ~= nil and tostring(now) or "removed")
       end
     end
   elseif e.what == "month" then
@@ -277,9 +281,10 @@ function SettingsView.Build(parent)
       for i = 1, math.min(HISTORY_ENTRIES, #entries) do
         local e = entries[i]
         local stamp = (date or os.date)("!%Y-%m-%d %H:%M", e.at + tz)
+        local mark = l.config:HistoryAuthorPermitted(e) and "" or " (no permission now)"
         for _, text in ipairs(describe(e)) do
           section.historyLines[#section.historyLines + 1] = stamp .. "  "
-            .. Util.Escape(Util.DisplayName(e.by)) .. "  " .. text
+            .. Util.Escape(Util.DisplayName(e.by)) .. "  " .. text .. mark
         end
       end
       section.historyHead:Show()

@@ -43,9 +43,26 @@ local function canAdminister(roster, char)
 end
 
 -- Who may author a history record. Task 16 changes this to "the author held the permission for
--- rec.d.what". Checked when the record arrives, like every other record.
-local function canWriteHistory(self, rec)
-  return canAdminister(self.roster, rec.char)
+-- rec.d.what". Used to mark an entry at display time ("no permission now").
+local function canWriteHistory(self, char)
+  return canAdminister(self.roster, char)
+end
+
+-- History is a log of what happened, so a later demotion must not erase it. A record is accepted
+-- when the roster is not loaded yet, or its author is (still) a guild member.
+local function historyAuthorKnown(self, char)
+  if type(char) ~= "string" then return false end
+  local r = self.roster
+  if r == nil or r.RankIndex == nil or (r.HasRanks and r:HasRanks() ~= true) then return true end
+  return r:RankIndex(char) ~= nil
+end
+
+local function deepEqual(a, b)
+  if type(a) ~= type(b) then return false end
+  if type(a) ~= "table" then return a == b end
+  for k, v in pairs(a) do if not deepEqual(v, b[k]) then return false end end
+  for k in pairs(b) do if a[k] == nil then return false end end
+  return true
 end
 
 local function validWeights(w)
@@ -116,14 +133,16 @@ local function validHistory(self, rec)
   -- error (Apply files it as stale); any other second version is.
   local old = self.set:Get(rec.id)
   if old then
-    if rec.v ~= old.v or rec.t ~= old.t then return false, "history is append-only" end
+    local same = rec.v == old.v and rec.t == old.t and rec.char == old.char
+      and (rec.del == true) == (old.del == true) and deepEqual(rec.d, old.d)
+    if not same then return false, "history is append-only" end
   elseif rec.v ~= 1 then
     return false, "bad history version"
   end
   if rec.by ~= profile then return false, "history author mismatch" end
   local d = rec.d
   if type(d) ~= "table" then return false, "not a table" end
-  if not canWriteHistory(self, rec) then return false, "author not permitted" end
+  if not historyAuthorKnown(self, rec.char) then return false, "author not a guild member" end
   if not HISTORY_WHAT[d.what] then return false, "unknown history kind" end
   if d.by ~= rec.char then return false, "history author mismatch" end
   if not finite(d.at) or d.at ~= rec.t or tonumber(at) ~= rec.t then
@@ -233,14 +252,33 @@ function C:_logHistory(what, key, before, after)
     id = string.format("history:%s:%d:%d", self.profile:Id(), at, self.historySeq)
   until not self.set:Get(id)
   local d = { what = what, key = key, before = before, after = after, by = self.playerChar, at = at }
-  return (self:_publish(id, d, at + HISTORY_RETENTION, at))
+  local rec = { id = id, v = 1, t = at, exp = at + HISTORY_RETENTION, by = self.profile:Id(),
+    char = self.playerChar, d = d }
+  local ok, reason = validateRecord(self, rec)
+  if not ok then
+    self.log:Add({ t = at, set = SET_NAME, id = id, v = 1, author = rec.by, authorChar = rec.char,
+      action = "invalid", result = "rejected", reason = reason })
+    return false
+  end
+  return self.sync:Publish(rec) == "accepted"
+end
+
+-- Never lets a history problem escape after the change it records has been sent.
+function C:_safeLogHistory(...)
+  local ok, err = pcall(self._logHistory, self, ...)
+  if not ok and ns.OnError then ns.OnError(err) end
+end
+
+-- Whether an entry's author could still make that change now (for the "no permission now" mark).
+function C:HistoryAuthorPermitted(entry)
+  return type(entry) == "table" and canWriteHistory(self, entry.by) == true
 end
 
 -- Change history, newest first: { id, what, key, before, after, by, at }.
 function C:History()
   local out = {}
   for _, rec in ipairs(self.set:List(false)) do
-    if rec.id:match("^history:") and type(rec.d) == "table" then
+    if rec.id:match("^history:") and type(rec.d) == "table" and rec.exp > self.now() then
       local e = copy(rec.d)
       e.id = rec.id
       e.seq = tonumber(rec.id:match(":(%d+)$")) or 0
@@ -301,7 +339,13 @@ function C:PublishWeights(map)
   local before = self:Weights()
   local good = self:_publish("weights", { weights = copy(map), tz = tz,
     changedBy = self.playerChar, changedAt = self.now() })
-  if good then self:_logHistory("weights", nil, before, copy(map)) end
+  if good then
+    local after = self:Weights() -- as now stored, defaults merged in
+    local b, a = {}, {}
+    for id, v in pairs(before) do if after[id] ~= v then b[id] = v end end
+    for id, v in pairs(after) do if before[id] ~= v then a[id] = v end end
+    self:_safeLogHistory("weights", nil, b, a)
+  end
   return good, (not good) and "not accepted" or nil
 end
 
@@ -412,7 +456,7 @@ function C:RetakeMonth(ym, ledger)
   d.retake = true
   local good = self:_publish("month:" .. ym, d)
   if good then
-    self:_logHistory("month", ym, { savedBy = old.savedBy, savedAt = old.savedAt },
+    self:_safeLogHistory("month", ym, { savedBy = old.savedBy, savedAt = old.savedAt },
       { savedBy = d.savedBy, savedAt = d.savedAt })
   end
   return good

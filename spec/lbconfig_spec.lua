@@ -23,7 +23,9 @@ describe("Leaderboard Config", function()
     ctx = {
       comm = bus:join(char), now = clock.now, after = timers.after, random = function(lo) return lo end,
       log = ns.Log.new({}, clock.now, function() return "" end),
-      roster = { IsOfficer = function(_, name) return officers[name] end },
+      roster = { IsOfficer = function(_, name) return officers[name] end,
+        HasRanks = function() return true end,
+        RankIndex = function(_, name) if officers[name] ~= nil then return officers[name] and 1 or 5 end end },
       profile = {
         Id = function() return "pMe" end,
         OnlineChar = function() return nil end,
@@ -398,10 +400,78 @@ describe("Leaderboard Config", function()
       assert.equal(9, cfg.set:Get(id).d.after.sales)
     end)
 
-    it("a non-officer's history record is rejected", function()
+    it("history from a non-member is rejected, from a demoted officer accepted", function()
       local id = "history:pX:" .. clock.now() .. ":1"
-      assert.equal("invalid", apply(hrec(id, 1, "Grunt-Realm", hd("Grunt-Realm"))))
+      assert.equal("invalid", apply(hrec(id, 1, "Stranger-Realm", hd("Stranger-Realm"))))
       assert.is_nil(cfg.set:Get(id))
+      officers["Grunt-Realm"] = false -- a member who is not (or no longer) an officer
+      assert.equal("accepted", apply(hrec(id, 1, "Grunt-Realm", hd("Grunt-Realm"))))
+      local h = cfg:History()
+      assert.is_false(cfg:HistoryAuthorPermitted(h[1]))
+      assert.is_true(cfg:HistoryAuthorPermitted({ by = "Boss-Realm" }))
+    end)
+
+    it("history is accepted while the roster is not loaded yet", function()
+      ctx.roster.HasRanks = function() return false end
+      local id = "history:pX:" .. clock.now() .. ":1"
+      assert.equal("accepted", apply(hrec(id, 1, "Stranger-Realm", hd("Stranger-Realm"))))
+    end)
+
+    it("only an identical copy of an existing history record is tolerated", function()
+      local id = "history:pX:" .. clock.now() .. ":1"
+      assert.equal("accepted", apply(hrec(id, 1, "Boss-Realm", hd("Boss-Realm"))))
+      assert.equal("stale", apply(hrec(id, 1, "Boss-Realm", hd("Boss-Realm"))))
+      local otherChar = hrec(id, 1, "Grunt-Realm", hd("Grunt-Realm"))
+      officers["Grunt-Realm"] = true
+      assert.equal("invalid", apply(otherChar))
+      local otherD = hrec(id, 1, "Boss-Realm", hd("Boss-Realm"))
+      otherD.d.after = { sales = 1 }
+      assert.equal("invalid", apply(otherD))
+      assert.equal("Boss-Realm", cfg.set:Get(id).char)
+      assert.equal(9, cfg.set:Get(id).d.after.sales)
+    end)
+
+    it("stores only the keys that changed", function()
+      assert.is_true((cfg:PublishWeights({ sales = 9, ["gold.earned"] = 0.1 })))
+      local r = ids()[1]
+      assert.same({ sales = 5 }, r.d.before)
+      assert.same({ sales = 9 }, r.d.after)
+    end)
+
+    it("History skips expired records", function()
+      assert.is_true((cfg:PublishWeights({ sales = 9 })))
+      local r = ids()[1]
+      cfg.set.store[r.id].exp = clock.now()
+      assert.equal(0, #cfg:History())
+    end)
+
+    it("an invalid history record is logged and not published, and the change stands", function()
+      local ok = cfg:PublishWeights({ sales = 9 })
+      assert.is_true(ok)
+      local n = #ids()
+      ctx.roster.RankIndex = function() return nil end -- author vanishes from a known roster
+      assert.is_true((cfg:PublishWeights({ sales = 8 })))
+      assert.equal(n, #ids())
+      assert.equal(8, cfg:Weights().sales)
+    end)
+
+    it("a failing history write never escapes the publish", function()
+      local errs = {}
+      ns.OnError = function(e) errs[#errs + 1] = e end
+      cfg._logHistory = function() error("boom") end
+      assert.is_true((cfg:PublishWeights({ sales = 9 })))
+      assert.equal(1, #errs)
+    end)
+
+    it("a relayed history record is accepted verbatim by a third client", function()
+      assert.is_true((cfg:PublishWeights({ sales = 9 })))
+      local stored = cfg.set:Get(ids()[1].id)
+      local b = build("Grunt-Realm")
+      assert.equal("accepted", b.sync:_applyOne(stored, "Boss"))
+      local relayed = b.set:Get(stored.id)
+      local c = build("Boss-Realm")
+      assert.equal("accepted", c.sync:_applyOne(relayed, "Grunt"))
+      assert.same(stored.d, c.set:Get(stored.id).d)
     end)
 
     it("rejects malformed history records", function()
