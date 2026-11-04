@@ -88,6 +88,37 @@ function UI.Button(parent, text, width, onClick)
   return b
 end
 
+-- Guild tabard (background, emblem, border), drawn with the same textures and Blizzard helper
+-- the game's own guild frames use. `size` is the background's edge in pixels (Blizzard: 62).
+function UI.Tabard(parent, size)
+  local t = CreateFrame("Frame", nil, parent)
+  local k = size / 62
+  t:SetSize(size, size)
+  t.background = t:CreateTexture(nil, "BORDER")
+  t.background:SetTexture("Interface\\GuildFrame\\GuildFrame")
+  t.background:SetTexCoord(0.63183594, 0.69238281, 0.61914063, 0.74023438)
+  t.background:SetAllPoints(t)
+  t.emblem = t:CreateTexture(nil, "ARTWORK")
+  t.emblem:SetSize(56 * k, 64 * k)
+  t.emblem:SetPoint("CENTER")
+  t.border = t:CreateTexture(nil, "ARTWORK", nil, 1)
+  t.border:SetTexture("Interface\\GuildFrame\\GuildFrame")
+  t.border:SetTexCoord(0.63183594, 0.69238281, 0.74414063, 0.86523438)
+  t.border:SetSize(61 * k, 60 * k)
+  t.border:SetPoint("TOPLEFT", 1 * k, -1 * k)
+  t:Hide()
+  return t
+end
+
+-- Paints the player's guild tabard (Blizzard's helper also covers "no tabard designed yet"
+-- with its own placeholder). Returns true when shown; hides it when the helper is missing.
+function UI.ApplyTabard(t)
+  if type(SetLargeGuildTabardTextures) ~= "function" then t:Hide(); return false end
+  SetLargeGuildTabardTextures("player", t.emblem, t.background, t.border)
+  t:Show()
+  return true
+end
+
 -- A movable dialog-style panel with a title and close button. `name` is optional.
 function UI.CreatePanel(name, width, height, title)
   local f = CreateFrame("Frame", name, UIParent, BACKDROP_TEMPLATE)
@@ -163,7 +194,7 @@ local Window = {}
 UI.Window = Window
 
 local WIDTH, HEIGHT = 760, 500
-local frame, tabs, current, titleText
+local frame, tabs, current, titleText, tabard
 
 local function collectTabs()
   local list = {}
@@ -273,6 +304,9 @@ local function build()
   frame:Hide()
   if UISpecialFrames then table.insert(UISpecialFrames, "GuildhallMainFrame") end
 
+  tabard = UI.Tabard(frame, 44)
+  tabard:SetPoint("TOPLEFT", 12, -10)
+
   titleText = UI.Text(frame, "GameFontNormalLarge")
   titleText:SetPoint("TOPLEFT", 16, -14)
 
@@ -321,10 +355,27 @@ function Window:IsShown()
   return frame ~= nil and frame:IsShown()
 end
 
+-- Header: in a guild, the guild's tabard plus "<Guild>  Guildhall"; otherwise plain "Guildhall".
 local function applyTitle()
-  titleText:SetText(ns.Theme.Get("title") or "Guildhall")
+  local guild = ns.compat and ns.compat:GuildName()
+  local branded = guild ~= nil and UI.Try(UI.ApplyTabard, tabard) == true
+  local left = branded and 64 or 16
+  titleText:ClearAllPoints()
+  titleText:SetPoint("TOPLEFT", left, -14)
+  local base = ns.Theme.Get("title") or "Guildhall"
+  if guild then
+    titleText:SetText(ns.Util.Escape(guild) .. "  |cff9d9d9d" .. base .. "|r")
+  else
+    titleText:SetText(base)
+  end
   local accent = ns.Theme.Get("accent")
   if accent then titleText:SetTextColor(accent[1], accent[2], accent[3]) end
+  local x = branded and 62 or 14
+  for _, tab in ipairs(tabs or {}) do
+    tab.button:ClearAllPoints()
+    tab.button:SetPoint("TOPLEFT", x, -40)
+    x = x + tab.button:GetWidth() + 4
+  end
 end
 
 function Window:Refresh()

@@ -93,6 +93,18 @@ describe("Compat", function()
     assert.is_nil(Compat.new(env):GuildKey())
   end)
 
+  it("GuildName returns the guild's name, or nil when absent, empty or secret", function()
+    local name
+    local env = { GetGuildInfo = function() return name, "Member", 3 end,
+      issecretvalue = function(v) return v == "SECRET" end }
+    local c = Compat.new(env)
+    name = "Emergence"; assert.equal("Emergence", c:GuildName())
+    name = nil; assert.is_nil(c:GuildName())
+    name = ""; assert.is_nil(c:GuildName())
+    name = "SECRET"; assert.is_nil(c:GuildName())
+    assert.is_nil(Compat.new({}):GuildName())
+  end)
+
   it("PlayerFullName", function()
     local env = { UnitName = function() return "Thalwyn" end, GetNormalizedRealmName = function() return "ArgentDawn" end }
     assert.equal("Thalwyn-ArgentDawn", Compat.new(env):PlayerFullName())

@@ -92,6 +92,15 @@ function Compat:PlayerFullName()
   return ns.Util.FullName(name, nil, realm)
 end
 
+-- The guild's display name, or nil (not in a guild, not loaded yet, or secret).
+function Compat:GuildName()
+  local env = self.env
+  if not env.GetGuildInfo then return nil end
+  local name = self:Safe((env.GetGuildInfo("player")))
+  if type(name) ~= "string" or name == "" then return nil end
+  return name
+end
+
 function Compat:GuildKey()
   local env = self.env
   if not env.GetGuildInfo then return nil end
