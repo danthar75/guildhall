@@ -86,7 +86,7 @@ describe("Observations", function()
     from.comm:Send("core.observations", "REC", { rs = { rec } })
   end
 
-  it("incoming record with d.at 2 days ahead is rejected", function()
+  it("incoming record with d.at 2 days ahead is rejected (Review Focus 3)", function()
     local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
     local now = clock.now()
     forge(a, { id = "x:o1", v = 1, t = now, exp = now + 1000, by = a.profile:Id(), char = "Alice-Realm",
@@ -102,17 +102,14 @@ describe("Observations", function()
     b.profSet:Apply({ id = "aaaa", v = 1, t = now, exp = now + 100000, by = "aaaa", char = "Carol-Realm",
       d = { chars = { "Carol-Realm" } } })
     local owner = b.profile:OwnerOf("Carol-Realm")
-    if owner then
-      forge(a, { id = "y:o1", v = 1, t = now, exp = now + 1000, by = "someone-else",
-        char = "Carol-Realm", d = trade(now) })
-      assert.equal(0, #b.obs:List())
-      -- the true owner is accepted
-      forge(a, { id = "z:o1", v = 1, t = now, exp = now + 1000, by = owner,
-        char = "Carol-Realm", d = trade(now) })
-      assert.equal(1, #b.obs:List())
-    else
-      error("test setup: owner of Carol-Realm unknown")
-    end
+    assert.is_truthy(owner)
+    forge(a, { id = "y:o1", v = 1, t = now, exp = now + 1000, by = "someone-else",
+      char = "Carol-Realm", d = trade(now) })
+    assert.equal(0, #b.obs:List())
+    -- the true owner is accepted
+    forge(a, { id = "z:o1", v = 1, t = now, exp = now + 1000, by = owner,
+      char = "Carol-Realm", d = trade(now) })
+    assert.equal(1, #b.obs:List())
   end)
 
   it("tombstones without a payload still bucket and sync", function()
@@ -121,5 +118,42 @@ describe("Observations", function()
     forge(a, { id = "t:o1", v = 1, t = now, exp = now + 1000, by = a.profile:Id(), char = "Alice-Realm", del = true })
     assert.equal(0, #b.obs:List())
     assert.is_not_nil(b.obs.set:Get("t:o1"))
+  end)
+
+
+  it("ids differ for two publishes in the same second", function()
+    local a = node("Alice-Realm", { id = 1 })
+    local _, r1 = a.obs:Publish(trade())
+    local _, r2 = a.obs:Publish(trade())
+    assert.not_equal(r1.id, r2.id)
+    assert.is_true(#r1.id <= 64)
+  end)
+
+  it("ids differ after a store reset for the same profile and time", function()
+    local a = node("Alice-Realm", { id = 1 })
+    local _, r1 = a.obs:Publish(trade())
+    local ctx2 = {}
+    for k, v in pairs(a.ctx) do ctx2[k] = v end
+    ctx2.db, ctx2.syncs = {}, nil
+    local fresh = a.ns.Observations.New(ctx2)
+    local _, r2 = fresh:Publish(trade())
+    assert.not_equal(r1.id, r2.id)
+  end)
+
+  it("accepts d.at exactly now + 86400 and rejects +86401", function()
+    local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+    local now = clock.now()
+    local by = a.profile:Id()
+    forge(a, { id = "ok:o1", v = 1, t = now, exp = now + 1000, by = by, char = "Alice-Realm", d = trade(now + 86400) })
+    forge(a, { id = "no:o1", v = 1, t = now, exp = now + 1000, by = by, char = "Alice-Realm", d = trade(now + 86401) })
+    assert.is_not_nil(b.obs.set:Get("ok:o1"))
+    assert.is_nil(b.obs.set:Get("no:o1"))
+  end)
+
+  it("Publish returns invalid on a bad payload", function()
+    local a = node("Alice-Realm", { id = 1 })
+    local st = a.obs:Publish({ kind = "bogus", at = 1 })
+    assert.equal("invalid", st)
+    assert.equal(0, #a.obs:List())
   end)
 end)

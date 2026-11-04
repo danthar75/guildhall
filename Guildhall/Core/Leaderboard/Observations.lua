@@ -71,7 +71,6 @@ function Obs.New(ctx)
   self.profile, self.log, self.now = ctx.profile, ctx.log, ctx.now
   self.playerChar = ctx.playerChar
   self.store = ctx.db
-  self.counter = nil
   self.set = ns.ReplicatedSet.new(SET_NAME, self.store, {
     now = ctx.now, maxFuture = DAY,
     onChange = function() if ns.Events then ns.Events:Fire("ObservationsChanged") end end,
@@ -123,20 +122,16 @@ function O:Start()
   self.sync:Start()
 end
 
+-- Ids embed the publish second plus a per-session counter, so they never depend on local
+-- history (a wiped store or purged records can't reissue an id peers still hold). The counter
+-- is module-level so a fresh Observations object in the same session continues it.
+local session = { at = nil, n = 0 }
+
 function O:_nextId()
-  local pid = self.profile:Id()
-  if not self.counter then
-    local prefix, max = pid .. ":o", 0
-    for id in pairs(self.store) do
-      if id:sub(1, #prefix) == prefix then
-        local n = tonumber(id:sub(#prefix + 1))
-        if n and n > max then max = n end
-      end
-    end
-    self.counter = max
-  end
-  self.counter = self.counter + 1
-  return pid .. ":o" .. self.counter
+  local at = math.floor(self.now())
+  if session.at ~= at then session.at, session.n = at, 0 end
+  session.n = session.n + 1
+  return string.format("%s:o%d_%d", self.profile:Id(), at, session.n)
 end
 
 function O:Publish(d)
