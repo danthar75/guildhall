@@ -63,6 +63,12 @@ Guildhall adds a guild-only group finder. It makes runs easy to post, join, sche
   - Guildhall carries a table of final-boss encounter IDs per instance for the Era/Forever content set.
 - **Raids:** each boss kill counts (user's "killing bosses"). A full clear may add a bonus, a separately weighted activity (my call).
 
+### Repeat runs (user)
+- **Dungeon credit counts once per dungeon per player per server day (user).** Running Stratholme Undead three times in a day earns one `groups.dungeon` credit. A different dungeon, or a different end of a multi-wing dungeon, counts separately. The day is the guild's server day, the same clock the leaderboard periods use.
+- **No level limit (user).** A level 60 helping a guildmate through a low-level dungeon still earns credit, because helping guildies get gear or a clear is exactly what the guild wants to encourage.
+- Applied at query time when the ledger counts credit, so the raw kill observations are all kept (my call).
+- Raids are already limited by their weekly lockout, so they have no extra limit.
+
 ### Guild majority (user)
 A kill counts only if **more than half** of the group are guild members: 3 of 5 for dungeons (user), and the same rule for raids, for example 21 of 40 (my call, the same rule extended).
 
