@@ -150,4 +150,34 @@ describe("ReplicatedSet", function()
     r.v = 99
     assert.equal(2, store.a.v)
   end)
+
+  it("Apply rejects malformed peer data without raising", function()
+    set:Apply(rec())
+    assert.equal("invalid", (set:Apply(rec({ char = 5 }))))
+    assert.equal("invalid", (set:Apply(rec({ char = {} }))))
+    assert.equal("invalid", (set:Apply(rec({ char = true }))))
+    assert.equal("invalid", (set:Apply("junk")))
+    assert.equal("invalid", (set:Apply(nil)))
+    assert.equal("invalid", (set:Apply(rec({ del = "yes" }))))
+  end)
+
+  it("Apply rejects NaN and infinite numbers", function()
+    for _, f in ipairs({ "v", "t", "exp" }) do
+      for _, bad in ipairs({ 0/0, math.huge, -math.huge }) do
+        assert.equal("invalid", (set:Apply(rec({ [f] = bad }))))
+      end
+    end
+  end)
+
+  it("Missing treats non-table digest as empty", function()
+    set:Apply(rec())
+    assert.equal(1, #set:Missing("x"))
+    assert.equal(1, #set:Missing(nil))
+  end)
+
+  it("Missing treats non-number digest entries as absent", function()
+    set:Apply(rec())
+    assert.equal(1, #set:Missing({ a = "5" }))
+    assert.equal(1, #set:Missing({ a = {} }))
+  end)
 end)

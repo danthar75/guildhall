@@ -22,6 +22,10 @@ local function greater(a, b)
   return (a.char or "") > (b.char or "")
 end
 
+local function finite(x)
+  return type(x) == "number" and x == x and x ~= math.huge and x ~= -math.huge
+end
+
 function ReplicatedSet.new(name, store, opts)
   opts = opts or {}
   local self = setmetatable({}, Set)
@@ -52,7 +56,9 @@ end
 
 function Set:Apply(rec)
   if type(rec) ~= "table" or type(rec.id) ~= "string" or rec.id == ""
-    or type(rec.v) ~= "number" or type(rec.t) ~= "number" or type(rec.exp) ~= "number" then
+    or not finite(rec.v) or not finite(rec.t) or not finite(rec.exp)
+    or (rec.char ~= nil and type(rec.char) ~= "string")
+    or (rec.del ~= nil and type(rec.del) ~= "boolean") then
     return "invalid"
   end
   if self.validate then
@@ -91,8 +97,10 @@ end
 
 function Set:Missing(digest)
   local now, out = self.now(), {}
+  if type(digest) ~= "table" then digest = {} end
   for id, rec in pairs(self.store) do
     local pv = digest[id]
+    if type(pv) ~= "number" then pv = nil end
     if rec.exp > now and (pv == nil or pv < rec.v) then out[#out + 1] = rec end
   end
   table.sort(out, function(a, b) return a.id < b.id end)
