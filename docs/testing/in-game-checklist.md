@@ -37,12 +37,15 @@ Keep `/console scriptErrors 1` on (or BugSack installed) for every session.
 
 ## Consent
 
-- [ ] [Era] First login on a character in a guild shows the consent dialog with the text "Guildhall links your characters so guildmates can reach you on whichever one is online. Uncheck any you don't want shared."
+- [ ] [Era] First login on a character in a guild shows the consent dialog with the text "Guildhall links your characters in <guild> so guildmates there can reach you on whichever one is online. Only characters in <guild> are listed. Uncheck any you don't want shared."
 - [ ] [Era] The dialog lists the current character, checked.
 - [ ] [Era] Click OK. The dialog closes. The Log tab shows a `profile-link` entry.
 - [ ] [Era] Log in on a first alt in the same guild. The consent dialog appears again for that alt only.
 - [ ] [Era] Uncheck the alt and click OK. Settings shows it as "not shared".
-- [ ] [Era] Settings > Change… shows all known characters with the current choices. Changing one and clicking OK updates Settings and adds a `profile-update` log entry.
+- [ ] [Era] Two guilds: log in on a character in guild A, then on an alt in guild B. The consent dialog for B lists only the B alt (not the A character). In A, Settings lists only A's characters; a guildmate in A never sees the B alt under "Also:".
+- [ ] [Era] Upgrading from a build without guild scoping: on first login each character is asked about once more (the dialog names the guild). Characters not logged in since stay unlinked until they log in.
+- [ ] [Era] Uncheck the current character (Settings > Change…). "+ New listing" > Post shows "This character isn't linked to your profile. Posting from it would reveal the link. Link it in Settings or post from a linked character." Edit, Renew and Remove on your listings show the same message, and nothing is sent.
+- [ ] [Era] Settings > Change… shows all known characters in this guild with the current choices. Changing one and clicking OK updates Settings and adds a `profile-update` log entry.
 - [ ] [Era] Logging in again after consent does not show the dialog.
 
 ## Settings
@@ -84,7 +87,7 @@ Keep `/console scriptErrors 1` on (or BugSack installed) for every session.
 - [ ] [Era] Typing a name in the Name box (no item link) posts a listing with that plain name.
 - [ ] [Era] Typing in the Name box after loading a link clears the slot back to "No item chosen".
 - [ ] [Era] Quantity accepts digits only (max 4). 0 shows "Quantity must be a whole number from 1 to 9999."
-- [ ] [Era] The note stops at 200 characters and the counter shows n/200.
+- [ ] [Era] The note stops at 200 bytes and the counter shows n/200. Accented letters (e.g. "é") count 2, and a full accented note posts without a "too long" error.
 - [ ] [Era] Posting with no item shows "Choose an item (shift-click or drag one in) or type its name." inside the form.
 - [ ] [Era] With an undecided character (new alt), Post shows "Choose which characters to link first." and opens the consent dialog.
 - [ ] [Era] Edit opens "Edit listing" pre-filled (type, item, quantity, toggles, note) with a Save button. Clearing quantity or note removes them.
@@ -130,8 +133,16 @@ Keep `/console scriptErrors 1` on (or BugSack installed) for every session.
 
 ## Forever restrictions
 
-- [ ] [Forever] `/console addonChatRestrictionsForced 1`, then post. The message stays queued (no error). `/console addonChatRestrictionsForced 0`. It sends within a few seconds.
+- [ ] [Forever] `/console addonChatRestrictionsForced 1`, then post. The status line reads "Listing posted. It will reach guildmates when chat restrictions lift." The message stays queued (no error). `/console addonChatRestrictionsForced 0`. It sends within a few seconds.
 - [ ] [Forever] `/console addonMapRestrictionsForced 1`. Online dots show unknown. No Lua errors. Set it back to 0.
 - [ ] [Forever] Inside a dungeon (and during a boss pull): no Lua errors, the window still opens.
 - [ ] [Forever] After leaving the instance, pending messages go out and the board catches up.
 - [ ] [Forever] A trial account gets the trial message on posting.
+- [ ] [Forever] Several restriction lifts within a minute (e.g. pulls in a dungeon) send at most one catch-up per minute (`/gh log` shows no burst of ignored "too large" entries).
+
+## Guild change and large boards
+
+- [ ] [Era] While logged in, leave the guild (or `/gquit` on a test alt). Within a few seconds one chat line says Guildhall has stopped and asks for `/reload`. No Lua errors. Guildmates no longer get replies from this client.
+- [ ] [Era] Join a different guild without reloading. One chat line asks you to `/reload` to switch Guildhall to the new guild. Nothing from the old guild's board is sent to the new guild. After `/reload` the board shows the new guild's listings only.
+- [ ] [Forever] Inside an instance, a guild name that reads as empty (secret) does not trigger the guild-change message.
+- [ ] [Era] With a large board (hundreds of listings, e.g. seeded on a test guild), a client that logs in catches up fully; the log shows no "too large" entries.
