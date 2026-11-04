@@ -1,6 +1,6 @@
 # Guildhall: Group finder (design)
 
-Status: draft for the builder check, 2026-11-04. Author: Claude, from conversation with Jon Roberts ("Dor").
+Status: approved for v1 by Jon on 2026-11-04. Author: Claude, from conversation with Jon Roberts ("Dor").
 
 Labels:
 - **(user)**: Jon decided it.
