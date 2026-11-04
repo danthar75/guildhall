@@ -142,6 +142,21 @@ describe("Leaderboard.SettingsView", function()
     assert.equal("0.1", section.boxes["exchange.gold.earned"]:GetText())
   end)
 
+  it("Reset is an unpublished edit that a refresh does not undo", function()
+    weights["exchange.sales"] = 9
+    becomeOfficer()
+    assert.equal("9", section.boxes["exchange.sales"]:GetText())
+    -- the sales row is first; its Reset is not the one in `buttons`, so click via the row
+    section.rows["exchange.sales"].reset.onClick()
+    assert.equal("5", section.boxes["exchange.sales"]:GetText())
+    section.refresh()
+    assert.equal("5", section.boxes["exchange.sales"]:GetText())
+    type_("exchange.sales", "9") -- back to the published value: no longer an edit
+    weights["exchange.sales"] = 8
+    section.refresh()
+    assert.equal("8", section.boxes["exchange.sales"]:GetText())
+  end)
+
   it("has the Activity, Weight and Default header row", function()
     local seen = {}
     ns.UI.Text = function(_, _, text) local t = W.new("FontString"); t.text = text; seen[text or ""] = true; return t end

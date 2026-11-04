@@ -96,6 +96,12 @@ function SettingsView.Build(parent)
   y = y - 18
 
   local types = ns.Activity.Types()
+  -- A box is dirty (an unpublished edit) while its value differs from the published weight.
+  local function markDirty(def)
+    local published = lb() and lb().config:Weights()[def.id] or def.weight
+    local n = parseWeight(section.boxes[def.id]:GetText())
+    section.dirty[def.id] = (n == nil or not sameNumber(n, published)) or nil
+  end
   -- Does nothing for a non-officer: the boxes are hidden, and setting their text must not
   -- bring the Reset buttons back.
   local function recheck()
@@ -128,7 +134,7 @@ function SettingsView.Build(parent)
     box:SetPoint("TOPLEFT", 270, ry)
     -- OnTextChanged also fires for our own SetText; only a user edit (second argument) is dirty.
     on(box, "OnTextChanged", function(_, userInput)
-      if userInput then section.dirty[def.id] = true end
+      if userInput then markDirty(def) end
       recheck()
     end)
     on(box, "OnEnterPressed", function(self) self:ClearFocus() end)
@@ -140,8 +146,8 @@ function SettingsView.Build(parent)
     row.default:SetPoint("TOPLEFT", 350, ry - 4)
     row.reset = UI.Button(parent, "Reset", 60, function()
       if not canEditWeights() then return end
-      section.dirty[def.id] = nil
       box:SetText(tostring(def.weight))
+      markDirty(def)
     end)
     row.reset:SetPoint("TOPLEFT", 440, ry + 1)
     section.rows[def.id] = row
