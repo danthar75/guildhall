@@ -1,10 +1,10 @@
 # Guildhall: Group finder (design)
 
-Status: approved for v1 by Jon on 2026-11-04. Author: Claude, from conversation with Jon Roberts ("Dor").
+Status: approved for v1 by Dor on 2026-11-04. Author: Claude, from conversation with Dor.
 
 Labels:
-- **(user)**: Jon decided it.
-- **(my call)**: Claude decided it; Jon can override.
+- **(user)**: Dor decided it.
+- **(my call)**: Claude decided it; Dor can override.
 
 Related:
 - `2026-11-02-guildhall-exchange-design.md`: core, sync and trust model.
