@@ -551,3 +551,56 @@ In `spec/sync_spec.lua`, a new `describe("day buckets")`, using the existing two
   - "an officer export does"
   - "demo mode publishes nothing and lbdemo off restores the real ledger"
 - [ ] **Step 2–4: Fail, implement, pass.** **Step 5: Commit** "Leaderboard: log redaction, /gh lbdemo, docs".
+
+### Task 14: Shared change history for officer settings (added 2026-11-04, user request)
+
+**Why:** the user wants officer changes logged for the guild master to review, "in case we get a bad egg".
+
+**Files:** modify `Guildhall/Core/Leaderboard/Config.lua` and `Guildhall/Core/Leaderboard/UI/SettingsView.lua`. Test: `spec/lbconfig_spec.lua`.
+
+**Interfaces:**
+- **History records.** Each accepted weights publish, and each month retake, also writes an append-only record `history:<author profile>:<t>` into `core.config`. It holds:
+
+  ```
+  { what = "weights" | "month", key, before, after, by = char, at }
+  ```
+
+  - History records never expire.
+  - They are never replaced: any second version of the same id is rejected.
+  - Like weights, they are accepted only from officers.
+- **`cfg:History() -> array`**, newest first.
+- **Display.** Settings shows a "Change history" list (who, when, what changed) to officers and to the guild master (rank 0).
+
+**Tests:**
+- A weights change writes one history record.
+- A second version of a history id is rejected.
+- A non-officer's history record is rejected.
+- History is listed newest first.
+
+### Task 15: Welcome screen and About tab (added 2026-11-04, user request)
+
+**Spec:** `docs/superpowers/specs/2026-11-04-welcome-screen-design.md`. Build exactly what it describes: first open and after updates with news, the What's new section, the gnome count, the credit line, the About tab, `/gh welcome`, and the release.sh check.
+
+**Files:**
+- Create: `Guildhall/Core/WhatsNew.lua` and `Guildhall/Core/UI/Welcome.lua`. Add both to both TOCs: WhatsNew after Util, and Welcome before Launcher.
+- Modify:
+  - `Guildhall/Core/UI/Window.lua`: About tab after Settings, first-open hook
+  - `Guildhall/Core/UI/Launcher.lua`: `/gh welcome`
+  - `Guildhall/Core/UI/SettingsView.lua`: "Show welcome screen" button
+  - `Guildhall/Core/Init.lua`: module `about`
+  - Exchange and Leaderboard module defs: their `about`
+  - `tools/release.sh`
+- Test: `spec/welcome_spec.lua`.
+
+**Interfaces:**
+- `WhatsNew.ENTRIES`, `WhatsNew.Gnomes(version) -> lo, hi`, `WhatsNew.Unseen(lastSeen, current) -> entries`, and `WhatsNew.Compare(a, b) -> -1 | 0 | 1`.
+- `UI.AboutContent(parent, opts) -> frame`. `opts.news` is an array of entries; `opts.allNews` is a boolean.
+- `UI.Welcome:Show()` and `UI.Welcome:MaybeShow()`.
+
+**Tests:**
+- Gnome count: 0.1.0 gives 10 and 20, the next gives 12 and 23, and an override wins.
+- First open shows it, a second open doesn't, and a version with lines shows it again.
+- A version with empty lines doesn't reopen it.
+- Compare handles 0.10.0 > 0.9.9.
+- The About tab lists every entry.
+- release.sh fails without a WhatsNew entry. This is a shell test in the spec, or covered by `tools/check-release.sh`.
