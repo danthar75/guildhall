@@ -15,6 +15,7 @@ Keep `/console scriptErrors 1` on (or BugSack installed) for every session.
 
 - [ ] [Era] The addon loads with no Lua errors on login and after `/reload`.
 - [ ] [Forever] The addon loads with the release TOC (`Guildhall.toc`), with no Lua errors.
+- [ ] [Forever] **Launch blocker: character names.** Forever names are "Main Secondary" (space-separated) on a realmless client. With a guildmate who also runs Guildhall online, run `/gh names` on both characters and save the output. Check: (1) "Guildhall uses" includes the secondary name; (2) it matches "Guild roster (you)" and the sender the *other* client lists under "Recent addon senders" (realm suffix aside); (3) no API shows the "-" link form ("Dor-Ironhand"). If any check fails, name handling in `Compat:PlayerFullName` / `Util.FullName` / `Util.DisplayName` must change before the guild uses the addon.
 - [ ] [Era] Not in a guild: one friendly chat line ("not in a guild"), no errors. `/gh` opens the window and the Exchange and Log tabs say "Join a guild to use Guildhall".
 - [ ] [Era] `/gh` opens the window. `/gh` again closes it.
 - [ ] [Era] `/guildhall` does the same as `/gh`.

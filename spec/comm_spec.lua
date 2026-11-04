@@ -36,6 +36,11 @@ describe("Comm", function()
     comm:Receive("Guildhall", line, "GUILD", sender or "Other-Realm")
   end
 
+  it("remembers the last few distinct raw senders for diagnostics", function()
+    for _, s in ipairs({ "A-Realm", "A-Realm", "B C-Realm", "D", "E", "F", "G" }) do deliver("junk", s) end
+    assert.same({ "B C-Realm", "D", "E", "F", "G" }, comm.recentSenders)
+  end)
+
   local function big()
     local t = {}
     for i = 1, 400 do t[i] = "item" .. i end

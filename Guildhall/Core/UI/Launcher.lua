@@ -12,6 +12,7 @@ local function help()
   print("|cffffd200Guildhall|r commands:")
   print("  /gh  - open or close the Guildhall window")
   print("  /gh log  - open the Log tab")
+  print("  /gh names  - show how the game reports character names (for troubleshooting)")
   print("  /gh help  - show this list")
 end
 
@@ -24,10 +25,68 @@ SlashCmdList.GUILDHALL = function(msg)
       UI.Window:Toggle()
     elseif cmd == "log" then
       UI.Window:Show("Log")
+    elseif cmd == "names" then
+      Launcher.PrintNames()
     else
       help()
     end
   end)
+end
+
+-- Names diagnostic -----------------------------------------------------------
+-- WoW Forever names are "Main Secondary" (space-separated) and the client is
+-- realmless; this prints what each API actually returns so name handling can
+-- be checked against the live client. Values are shown with %q so spaces and
+-- separators are visible.
+
+local function show(label, ...)
+  local parts = {}
+  for i = 1, select("#", ...) do
+    local v = select(i, ...)
+    if issecretvalue and issecretvalue(v) then
+      parts[#parts + 1] = "<secret>"
+    elseif type(v) == "string" then
+      parts[#parts + 1] = string.format("%q", v)
+    else
+      parts[#parts + 1] = tostring(v)
+    end
+  end
+  print("  " .. label .. ": " .. table.concat(parts, ", "))
+end
+
+local function try(label, f, ...)
+  if type(f) ~= "function" then return show(label, "(not available)") end
+  local r = { pcall(f, ...) }
+  if not r[1] then return show(label, "(error)") end
+  show(label, unpack(r, 2, math.max(2, #r)))
+end
+
+function Launcher.PrintNames()
+  print("|cffffd200Guildhall|r name check (please copy this to Dor):")
+  try("UnitName", UnitName, "player")
+  try("UnitFullName", UnitFullName, "player")
+  try("GetUnitName(full)", GetUnitName, "player", true)
+  try("GetNormalizedRealmName", GetNormalizedRealmName)
+  try("ShouldDisplaySurname", C_PlayerInfo and C_PlayerInfo.ShouldDisplaySurname)
+  local guid = UnitGUID and UnitGUID("player")
+  if issecretvalue and issecretvalue(guid) then guid = nil end
+  local found = false
+  if GetNumGuildMembers and GetGuildRosterInfo then
+    for i = 1, (GetNumGuildMembers() or 0) do
+      local r = { pcall(GetGuildRosterInfo, i) }
+      -- r[18] is the 17th return of GetGuildRosterInfo (guid); r[1] is pcall's ok flag.
+      local g = r[1] and r[18] or nil
+      if issecretvalue and issecretvalue(g) then g = nil end
+      if guid and g == guid then
+        show("Guild roster (you)", r[2]); found = true; break
+      end
+    end
+  end
+  if not found then show("Guild roster (you)", "(not found yet - open the guild window and try again)") end
+  local s = ns.services
+  show("Guildhall uses", s and s.playerChar or "(not started)")
+  local rs = s and s.comm and s.comm.recentSenders or {}
+  show("Recent addon senders", #rs > 0 and table.concat(rs, " | ") or "(none yet)")
 end
 
 -- Minimap button -------------------------------------------------------------

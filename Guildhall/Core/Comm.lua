@@ -27,6 +27,7 @@ function Comm.new(opts)
   self.tail = 0
   self.assembly = {}
   self.seq = 0
+  self.recentSenders = {} -- raw sender strings, newest last (diagnostic: /gh names)
   self.tokens = self.burst
   self.lastRefill = self.now()
   self.retryPending = false
@@ -128,6 +129,11 @@ function Comm:Receive(prefix, msg, channel, sender)
   if prefix ~= self.prefix or channel ~= "GUILD" then return end
   local own = self.playerName or compat:PlayerFullName()
   local full = ns.Util.FullName(sender, nil, own:match("%-(.+)$"))
+  local rs = self.recentSenders
+  if rs[#rs] ~= sender then
+    rs[#rs + 1] = sender
+    if #rs > 5 then table.remove(rs, 1) end
+  end
   if full == own then return end
   self:_expire()
 
