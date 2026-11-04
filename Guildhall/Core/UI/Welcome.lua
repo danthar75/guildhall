@@ -158,19 +158,29 @@ end
 
 local function present(news)
   build()
+  -- One content tree per distinct set of news versions; reopening reuses it.
+  local ids = {}
+  for _, e in ipairs(news) do ids[#ids + 1] = e.version end
+  local sig = table.concat(ids, ",")
+  panel.cache = panel.cache or {}
   if panel.content then panel.content:Hide() end
-  panel.content = UI.AboutContent(panel.scroll, { news = news })
-  panel.scroll:SetScrollChild(panel.content)
+  local content = panel.cache[sig]
+  if not content then
+    content = UI.AboutContent(panel.scroll, { news = news })
+    panel.cache[sig] = content
+  end
+  content:Show()
+  panel.content = content
+  panel.scroll:SetScrollChild(content)
   local s = state()
   panel.check:SetChecked(not (s and s.seen))
   panel.frame:Show()
 end
 
 -- Opens the screen with no "What's new" (a manual reopen; the About tab has the history).
+-- Does not change the seen flag.
 function Welcome:Show()
-  local s = state()
-  if s then s.seen = Welcome.Version() end
-  present({})
+  present({}) -- leaves the seen flag alone, so a checked "Show this next time" stays checked
 end
 
 -- A true value means: show this screen again next time the window opens (clears the seen flag).

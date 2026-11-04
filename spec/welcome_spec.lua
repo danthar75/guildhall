@@ -1,4 +1,10 @@
 -- Welcome screen and About tab: WhatsNew data, when the screen shows, and the shared content.
+-- Only bytes below 0x80, plus the exact sequences for U+00B7 and U+00D7.
+local function isAllowed(s)
+  s = s:gsub("\194\183", ""):gsub("\195\151", "")
+  return not s:find("[\128-\255]")
+end
+
 describe("WhatsNew", function()
   local ns
   before_each(function()
@@ -78,9 +84,9 @@ describe("WhatsNew", function()
     end)
   end)
 
-  it("ships no glyphs above U+00FF except none at all", function()
+  it("WhatsNew lines are ASCII (plus middle dot and multiplication sign)", function()
     for _, e in ipairs(ns.WhatsNew.ENTRIES) do
-      for _, l in ipairs(e.lines) do assert.is_nil(l:find("[\xC4-\xFF]")) end
+      for _, l in ipairs(e.lines) do assert.is_true(isAllowed(l), l) end
     end
   end)
 end)
@@ -93,9 +99,6 @@ describe("Welcome", function()
 
   local function allText()
     local out = {}
-    for _, f in ipairs(W.created) do
-      for _, list in pairs(f[2].calls) do end
-    end
     for _, t in ipairs(ns.texts) do out[#out + 1] = tostring(t.text) end
     return table.concat(out, "\n")
   end
@@ -212,13 +215,39 @@ describe("Welcome", function()
   end)
 
   it("the show-next-time checkbox clears and restores the seen flag", function()
-    ns.UI.Welcome:Show()
-    ns.UI.Welcome.check.checked = true
-    ns.UI.Welcome.check.calls.SetScript = ns.UI.Welcome.check.calls.SetScript or {}
-    ns.UI.Welcome:SetShowNext(true)
-    assert.is_nil(personal.welcome.seen)
-    ns.UI.Welcome:SetShowNext(false)
+    ns.UI.Welcome:MaybeShow()
     assert.equal("0.1.0", personal.welcome.seen)
+    local check = ns.UI.Welcome.check
+    local onClick
+    for _, c in ipairs(check.calls.SetScript) do if c[1] == "OnClick" then onClick = c[2] end end
+    check.checked = true
+    onClick(check)
+    assert.is_nil(personal.welcome.seen)
+    check.checked = false
+    onClick(check)
+    assert.equal("0.1.0", personal.welcome.seen)
+  end)
+
+  it("a manual reopen keeps a checked show-next-time", function()
+    ns.UI.Welcome:MaybeShow()
+    ns.UI.Welcome:SetShowNext(true)
+    ns.UI.Welcome:Show()
+    assert.is_nil(personal.welcome.seen)
+    assert.is_true(ns.UI.Welcome.check.checked)
+  end)
+
+  it("reopening with the same news builds the content once", function()
+    ns.UI.Welcome:Show()
+    local n = #W.created
+    ns.UI.Welcome:Hide(); ns.UI.Welcome:Show()
+    ns.UI.Welcome:Hide(); ns.UI.Welcome:Show()
+    assert.equal(n, #W.created)
+  end)
+
+  it("welcome and module text is allowed glyphs only", function()
+    ns.UI.Welcome:Show()
+    for _, t in ipairs(ns.texts) do assert.is_true(isAllowed(tostring(t.text)), tostring(t.text)) end
+    for _, s in ipairs(ns.CoreAbout) do for _, l in ipairs(s.lines) do assert.is_true(isAllowed(l), l) end end
   end)
 
   it("registers for Esc", function()
@@ -244,5 +273,20 @@ describe("release check", function()
   it("the current TOC version has an entry", function()
     local code = run("")
     assert.equal(0, code)
+  end)
+end)
+
+describe("real about text", function()
+  local function isAllowedReal(s)
+    s = s:gsub("\194\183", ""):gsub("\195\151", "")
+    return not s:find("[\128-\255]")
+  end
+  local function check(path)
+    local f = assert(io.open(path)); local src = f:read("*a"); f:close()
+    for str in src:gmatch('"([^"\n]*)"') do assert.is_true(isAllowedReal(str), path .. ": " .. str) end
+  end
+  it("Init, Exchange, Leaderboard and Welcome sources use allowed glyphs only", function()
+    for _, p in ipairs({ "Guildhall/Core/Init.lua", "Guildhall/Core/UI/Welcome.lua", "Guildhall/Core/WhatsNew.lua",
+      "Guildhall/Modules/Exchange/Exchange.lua", "Guildhall/Core/Leaderboard/Module.lua" }) do check(p) end
   end)
 end)
