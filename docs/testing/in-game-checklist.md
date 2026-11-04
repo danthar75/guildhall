@@ -126,6 +126,7 @@ Keep `/console scriptErrors 1` on (or BugSack installed) for every session.
 - [ ] [Era] Drag an item from bags onto the slot. It loads, and the cursor is cleared.
 - [ ] [Era] Clear (X) empties the slot.
 - [ ] [Era] Another member's listing shows the right icon on their client.
+- [ ] [Forever] Listings for quality-tier reagents (name shows a tier icon) and ordinary items render as coloured links with tooltips on other clients, not as escaped `||c…` text. If not, `Util.IsItemLink` needs the client's link shape.
 - [ ] [Forever] Shift-click a recipe in the profession list. The slot loads the crafted item, or falls back to a typed name with no error.
 - [ ] [Forever] Shift-click from bags uses the `ChatFrameUtil.InsertLink` hook (link is its first argument); `/dump ChatFrameUtil.InsertLink` exists. No taint warnings ("blocked action") after using the form and then entering combat.
 - [ ] [Forever] The slot icon comes from `C_Item.GetItemIconByID`. Drag-and-drop from bags works (`GetCursorInfo` returns "item", id, link).
