@@ -28,7 +28,7 @@ Delete `Interface\AddOns\Guildhall`. To remove its saved data as well, also dele
 
 ### Is it safe?
 
-- The zip contains only plain-text `.toc` and `.lua` files. There are no programs or installers, and you can open every file in Notepad.
+- The zip contains plain-text `.toc` and `.lua` files plus one picture (`Media\Logo.tga`, the minimap logo). There are no programs or installers, and you can open every text file in Notepad.
 - WoW addons run inside the game's sandbox. They can't access the internet, your files or your account.
 - Guildhall never sends a whisper, mail or trade for you. It only fills in the text, and you press Send yourself.
 - The full source code is in this repository.

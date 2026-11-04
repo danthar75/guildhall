@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/media/logo-256.png" width="128" alt="Guildhall logo"></p>
+
 # Guildhall
 
 A guild-helper addon for **World of Warcraft: Forever**. Its first feature is **Exchange**: an in-game LF / WTS board shared by everyone in your guild who runs Guildhall. Members can see who's buying and selling without alt-tabbing to Discord.
@@ -45,7 +47,7 @@ Open it with `/gh` (or `/guildhall`) or the minimap button. `/gh help` lists the
 
 Short version: a WoW addon is plain-text Lua that the game runs inside a sandbox. It can't touch your files, your PC or your Battle.net account.
 
-- **Text only.** The zip contains only `.toc` and `.lua` text files: no executables, no installers, no scripts that run outside the game. You can open every file in Notepad and read it.
+- **Text plus one picture.** The zip contains `.toc` and `.lua` text files and one image, `Media\Logo.tga` (the logo shown on the minimap button). There are no executables, no installers and nothing that runs outside the game. You can open every text file in Notepad and read it; the logo is drawn by `tools/make-logo.py` in this repository.
 - **Open source.** All of the code is in this repository, and each release zip is built from it by `tools/release.sh`.
 - **Checksums.** Each release lists the zip's SHA-256, so you can confirm your download is the published file.
 - **Easy to remove.** Delete the `Interface\AddOns\Guildhall` folder. To also clear its saved data, delete `Guildhall.lua` from your SavedVariables folder.

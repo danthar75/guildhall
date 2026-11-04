@@ -126,10 +126,9 @@ function Launcher:Init()
   bg:SetPoint("TOPLEFT", 7, -5)
 
   local icon = button:CreateTexture(nil, "ARTWORK")
-  icon:SetTexture("Interface\\Icons\\INV_Misc_Note_01")
-  icon:SetSize(17, 17)
-  icon:SetPoint("TOPLEFT", 7, -6)
-  icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
+  icon:SetTexture(UI.LOGO)
+  icon:SetSize(19, 19)
+  icon:SetPoint("TOPLEFT", 6, -6)
 
   local border = button:CreateTexture(nil, "OVERLAY")
   border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
