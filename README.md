@@ -33,6 +33,7 @@ Open it with `/gh` (or `/guildhall`) or the minimap button. `/gh help` lists the
 - **Shows who's online.** The online dot counts all of the poster's linked characters.
 - **One click to respond.** **Whisper** opens chat with a message ready to send. **Mail** fills in a letter at the mailbox.
 - **Copy for Discord.** Turns any listing into a post in the guild's pinned `#exchange` format, so members without the addon still see it.
+- **Leaderboard.** A guild ranking for the month, the week and the last 400 days. Only deals made through Exchange listings and checked by both players' clients count, plus guild bank donations. Everyone sees totals, you see your own breakdown, and officers see everyone's. You can turn off "Show me on the leaderboard" in Settings. Guild Info tags tune it, and they must be written without spaces, for example `[Guildhall donations=3,4]` (only those bank tabs count) and `[Guildhall bankexclude=0,1]` (those ranks' deposits never count). `/gh lbdemo` shows fake data on your own screen so you can look around.
 - **Officer clean-up and an activity log.** Officers can remove any listing. Who counts as an officer is set by a tag in the Guild Information text, e.g. `[Guildhall officers=2]`. Every change is recorded in a local log, along with who passed it along.
 
 ## What it does *not* do

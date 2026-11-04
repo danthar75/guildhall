@@ -112,6 +112,7 @@ function Log:Export(entries)
     lines[#lines + 1] = table.concat({ ts, str(e.action), str(e.result), idv, who, str(e.reason) }, " | ")
     if e.before ~= nil then lines[#lines + 1] = "  before: " .. fields(e.before) end
     if e.after ~= nil then lines[#lines + 1] = "  after: " .. fields(e.after) end
+    if e.detail ~= nil then lines[#lines + 1] = "  detail: " .. fields(e.detail) end
   end
   return table.concat(lines, "\n")
 end

@@ -59,6 +59,12 @@ end
 local function services() return ns.services end
 local function lb() return ns.leaderboard end
 
+-- Who the people are: the real profiles, or the made-up ones while /gh lbdemo is on.
+local function profiles()
+  local l = lb()
+  return (l and l.demoProfile) or services().profile
+end
+
 local function isOfficer()
   local s = services()
   return s ~= nil and s.roster:IsOfficer(s.playerChar) == true
@@ -117,7 +123,7 @@ local function serverDate(t, fmt)
 end
 
 local function nameOf(profileId)
-  return Util.Escape(ns.LbConfig._displayName(services().profile, profileId))
+  return Util.Escape(ns.LbConfig._displayName(profiles(), profileId))
 end
 
 -- Data ----------------------------------------------------------------------------------
@@ -133,7 +139,7 @@ local function model()
       m.goldKept = rec.goldKept or 0
       local list = view.board == "overall" and rec.overall or (rec.boards or {})[view.board] or {}
       for _, e in ipairs(list) do
-        local hidden = s.profile:IsHidden(e.profile) == true
+        local hidden = profiles():IsHidden(e.profile) == true
         m.entries[#m.entries + 1] = { profile = e.profile, value = e.value, rank = e.rank, hidden = hidden,
           name = hidden and "(hidden)" or Util.Escape(Util.DisplayName(e.name)), online = false }
       end
@@ -146,13 +152,13 @@ local function model()
   local result = l.ledger:Query({ from = m.from, to = m.to })
   m.goldKept = result.goldKept or 0
   local board = ns.Scoring.Board(result, view.board, m.weights, {
-    isHidden = function(id) return s.profile:IsHidden(id) == true end,
+    isHidden = function(id) return profiles():IsHidden(id) == true end,
   })
   for _, e in ipairs(board) do
     m.entries[#m.entries + 1] = { profile = e.profile, value = e.value, rank = e.rank, hidden = false,
-      name = nameOf(e.profile), online = s.profile:OnlineChar(e.profile) ~= nil }
+      name = nameOf(e.profile), online = profiles():OnlineChar(e.profile) ~= nil }
   end
-  local me = s.profile:Id()
+  local me = profiles():Id()
   if me ~= nil then
     local ranked = false
     for _, e in ipairs(m.entries) do if e.profile == me then ranked = true end end
@@ -164,8 +170,7 @@ local function model()
 end
 
 local function myId()
-  local s = services()
-  return s.profile:Id()
+  return profiles():Id()
 end
 
 -- The entry shown on the right: the chosen one, else yours, else the top.

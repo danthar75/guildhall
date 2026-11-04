@@ -13,7 +13,20 @@ local function help()
   print("  /gh  - open or close the Guildhall window")
   print("  /gh log  - open the Log tab")
   print("  /gh names  - show how the game reports character names (for troubleshooting)")
+  print("  /gh lbdemo - show fake leaderboard data (only on your screen)")
   print("  /gh help  - show this list")
+end
+
+-- Fake leaderboard data, on this screen only. Nothing is saved or sent.
+function Launcher.LeaderboardDemo(on)
+  local demo = ns.Leaderboard and ns.Leaderboard.Demo
+  if not (demo and demo.Set(ns, on)) then
+    print("|cffffd200Guildhall|r the Leaderboard isn't running (are you in a guild?).")
+  elseif on then
+    print("|cffffd200Guildhall|r showing fake leaderboard data. Type /gh lbdemo off to go back.")
+  else
+    print("|cffffd200Guildhall|r back to the real leaderboard.")
+  end
 end
 
 SLASH_GUILDHALL1 = "/gh"
@@ -27,6 +40,8 @@ SlashCmdList.GUILDHALL = function(msg)
       UI.Window:Show("Log")
     elseif cmd == "names" then
       Launcher.PrintNames()
+    elseif cmd == "lbdemo" or cmd == "lbdemo off" then
+      Launcher.LeaderboardDemo(cmd == "lbdemo")
     else
       help()
     end

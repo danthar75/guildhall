@@ -81,14 +81,27 @@ New files (like the logo) need a full game restart, not just `/reload`.
 ### Officers
 - [ ] An officer (`[Guildhall officers=N]` in Guild Info) sees "Remove (officer)" on the other person's listing, and it works. A non-officer never sees it.
 
-## Later: Leaderboard (once it's built)
+## Leaderboard
 
-Needs Forever. Most of it needs the second account.
-- [ ] Solo: the tab opens, the periods switch, your own row shows your breakdown, and opting out hides you.
-- [ ] Solo, once the guild has a bank tab (it may need gold to buy one): your guild bank deposits appear as observations, and moves between tabs don't count.
-- [ ] With the second account: a trade-window deal matched to a listing pairs and counts for both of you.
-- [ ] With the second account: a CoD mail deal pairs and counts.
-- [ ] With the second account: "Record a deal" plus their confirmation counts.
-- [ ] With the second account: a listing still up after 24 hours gets witnessed and counts.
-- [ ] With the second account at a non-officer rank: they see totals only, can open only their own breakdown, and their Log tab shows counts only.
-- [ ] With the second account also reading the bank log: bank entries pair. Excluded ranks and tabs don't count.
+Needs Forever. Account A and account B are your two accounts, both in the guild with Guildhall. Give B a low rank (not an officer) unless a step says otherwise. Run `/console scriptErrors 1` on both. After each step, open the Leaderboard tab and use `/gh log` to see what happened.
+
+### Solo
+
+- [ ] **Tab, periods and opting out.** Open the Leaderboard tab. Click Week, Month, All time and Past months. Expected: each switches with no Lua error, and your own row shows your breakdown. In Settings, turn off "Show me on the leaderboard": your row disappears from the list, and the guild total still counts you.
+- [ ] **Guild bank deposits (needs a guild bank tab, which may need gold).** Deposit an item into a tab, then open the bank so the log loads. Expected: the Log tab shows an "observations" line of counts, and moving an item between tabs adds nothing.
+- [ ] **Secret values.** Open a trade window, the mailbox and the guild bank inside an instance (or with `/console addonChatRestrictionsForced 1` and `/console addonMapRestrictionsForced 1`). Expected: no Lua errors and no half-recorded entries. A skipped read is simply not recorded.
+- [ ] **Glyph check.** Open the Leaderboard tab, its settings and the Past months list. Expected: every label, button and number renders as real text, with no empty boxes or question marks.
+- [ ] **Demo mode.** Type `/gh lbdemo`. Expected: the tab shows an orange "Demo data, not real" banner, 12 made-up players, and data under Week, Month, All time and Past months. Type `/gh lbdemo off`, or `/reload`: real data returns, and nothing was sent (the other account sees nothing).
+- [ ] **Guild Info tags are written without spaces.** In Guild Info, write `[Guildhall donations=3,4]` (and `[Guildhall bankexclude=0,1]`). Expected after `/reload`: tabs 3 and 4 count, and ranks 0 and 1 never count. With a space after a comma (`donations=3, 4`) the tag is not read, so no tag means all tabs count.
+
+### Needs a second client (your second account)
+
+- [ ] **`TRADE_ACCEPT_UPDATE` fires with (1,1) when both players accept on Forever.** On A run `/etrace` (or `/dump` in a frame event watcher) filtered to TRADE_ACCEPT_UPDATE, open a trade with B, put something in, and have both press Accept. Expected: the last event shows `1, 1`. If it shows something else, the trade pairing needs a different completion check.
+- [ ] **Trade deal pairs.** Post a listing on A, then trade the item to B for the listed gold. Expected: both clients log an "observations" line, and the deal appears on both Leaderboards (sales for A, purchases for B).
+- [ ] **CoD mail pairs.** On A, post a CoD listing. Send a CoD mail with one attachment to B, then take it on B. Expected: both sides publish a CoD observation (the Log tab shows an "observations" line on each), and the deal pairs on the Leaderboard on both clients.
+- [ ] **Guild bank needs a second reader.** On A, deposit an item. Expected: nothing counts yet. On B, open the guild bank so B reads the log. Expected: the deposit now counts for A, and moves between tabs and ranks from `bankexclude` don't count.
+- [ ] **Opt-out hides you on other clients.** On A, turn off "Show me on the leaderboard". Expected: on B, A disappears from the list within a minute (their activity still counts toward the guild total). Turn it back on and A returns.
+- [ ] **Record a deal needs confirmation.** On A, use Record a deal for a trade with B. Expected: it shows "waiting for confirmation" until B confirms, then counts for both.
+- [ ] **A listing is witnessed.** Leave a listing up for 24 hours. Expected: the other account counts as a witness, and A's listings posted goes up by 1.
+- [ ] **A non-officer sees counts only.** With B at a non-officer rank: B sees totals for others, can open only their own breakdown, and in B's Log tab observation entries read "received N (trade 2, bank 10)" with no names or amounts. An officer's Log tab shows the full entries.
+- [ ] **Long message check (later).** In a test guild (or later, once the real guild has 5 or more saved months), install Guildhall fresh on one account and log in. Expected: it receives every saved month, with none missing from Past months.
