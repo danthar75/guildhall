@@ -3,13 +3,15 @@ local ADDON, ns = ...
 -- Compact tagged format (no NUL bytes, no code evaluation):
 --   n            nil
 --   t / f        true / false
---   d<num>;      number, "%.17g"
+--   d<num>;      number, "%.17g" (finite only: NaN and +-inf are refused both ways)
 --   s<text>;     string; "\" escapes "\", ";" and NUL (as "\0")
 --   {k v k v }   table: key/value pairs, closed by "}"
 local Serialize = {}
 ns.Serialize = Serialize
 
 local MAX_DEPTH = 32
+
+local function finite(n) return n == n and n ~= math.huge and n ~= -math.huge end
 
 local function escape(s)
   return (s:gsub("[;%z\\]", function(c)
@@ -22,7 +24,9 @@ local function enc(v, out, depth)
   local t = type(v)
   if t == "nil" then out[#out + 1] = "n"
   elseif t == "boolean" then out[#out + 1] = v and "t" or "f"
-  elseif t == "number" then out[#out + 1] = "d" .. string.format("%.17g", v) .. ";"
+  elseif t == "number" then
+    if not finite(v) then error("non-finite number") end
+    out[#out + 1] = "d" .. string.format("%.17g", v) .. ";"
   elseif t == "string" then out[#out + 1] = "s" .. escape(v) .. ";"
   elseif t == "table" then
     if depth > MAX_DEPTH then error("table too deep") end
@@ -55,7 +59,7 @@ local function dec(s, i, depth)
     local e = s:find(";", i + 1, true)
     if not e then error("unterminated number at " .. i) end
     local n = tonumber(s:sub(i + 1, e - 1))
-    if not n then error("bad number at " .. i) end
+    if not n or not finite(n) then error("bad number at " .. i) end
     return n, e + 1
   elseif tag == "s" then
     local parts, p = {}, i + 1
