@@ -18,7 +18,7 @@ local FIELDS = {
   { key = "discord", label = "Copy for Discord" },
 }
 local ROW_H = 44
-local HINT = "Placeholders: {item} {itemName} {qtySuffix} {kind} {matsWord} {codWord} {noteLine} {char}. Type \\n for a new line."
+local HINT = "Placeholders: {item} {itemName} {qtySuffix} {kind} {matsLine} {matsWord} {codWord} {noteLine} {char}. Type \\n for a new line."
 
 local function on(w, event, fn)
   w:SetScript(event, function(...) return UI.Try(fn, ...) end)

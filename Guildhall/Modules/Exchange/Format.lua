@@ -12,7 +12,7 @@ Format.DEFAULTS = {
   mailSubject = "Guildhall: {itemName}",
   mailBodyLF = "Hi! Saw your Guildhall listing for {itemName}. Are you still looking?",
   mailBodyWTS = "Hi! Saw your Guildhall listing for {itemName}. Is it still available?",
-  discord = "{kind} {itemName}{qtySuffix}\nI {matsWord} provide materials\nI am {codWord} to CoD{noteLine}\n({char}, in game via Guildhall)",
+  discord = "{kind} {itemName}{qtySuffix}{matsLine}\nI am {codWord} to CoD{noteLine}\n({char}, in game via Guildhall)",
 }
 
 local function usable(s)
@@ -36,6 +36,8 @@ function Format.Vars(rec)
     itemName = ns.Util.ItemName(item),
     qtySuffix = d.qty and (" x" .. d.qty) or "",
     matsWord = d.mats and "will" or "will not",
+    -- Empty when the materials question doesn't apply to this item (d.mats == nil).
+    matsLine = d.mats == nil and "" or ("\nI " .. (d.mats and "will" or "will not") .. " provide materials"),
     codWord = d.cod and "open" or "not open",
     noteLine = usable(d.note) and ("\nNote: " .. d.note) or "",
     char = char or "",

@@ -29,6 +29,14 @@ describe("Exchange.Format", function()
     assert.is_truthy(out:find("I am not open to CoD", 1, true))
   end)
 
+  it("Discord leaves out the materials line when it doesn't apply", function()
+    local r = rec({ kind = "WTS", item = "Runecloth", qty = 40, cod = true })
+    r.d.mats = nil
+    local out = F.Discord(r)
+    assert.is_nil(out:find("provide materials", 1, true))
+    assert.equal("WTS Runecloth x40\nI am open to CoD\n(Thalwyn, in game via Guildhall)", out)
+  end)
+
   it("Whisper keeps item link", function()
     assert.is_truthy(F.Whisper(rec()):find(LINK, 1, true))
     assert.is_truthy(F.Whisper(rec({ kind = "WTS" })):find("still available", 1, true))

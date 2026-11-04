@@ -131,11 +131,49 @@ local function profLabel(key)
   return key and ns.Exchange.Category.ProfName(key) or "None"
 end
 
+-- Shows only the optional fields that make sense for the current item (Category.Applies) and
+-- stacks the rows below them so hidden ones leave no gap.
+local function currentItem() return f.link or Util.Trim(f.name:GetText() or "") end
+
+local function fieldsApply()
+  local ok, m, p = pcall(ns.Exchange.Category.Applies, { item = currentItem(), prof = f.prof })
+  if not ok then return true, true end
+  return m, p
+end
+
+local function relayout()
+  if not f.error then return end -- still building
+  local matsOn, profOn = fieldsApply()
+  f.matsOn, f.profOn = matsOn, profOn
+  local y = -182
+  if matsOn then
+    f.mats:ClearAllPoints(); f.mats:SetPoint("TOPLEFT", 16, y); f.mats:Show()
+    y = y - 26
+  else
+    f.mats:Hide()
+  end
+  f.cod:ClearAllPoints(); f.cod:SetPoint("TOPLEFT", 16, y)
+  y = y - 34
+  if profOn then
+    f.profLabelText:ClearAllPoints(); f.profLabelText:SetPoint("TOPLEFT", 20, y - 4)
+    f.profBtn:ClearAllPoints(); f.profBtn:SetPoint("TOPLEFT", 92, y)
+    f.profLabelText:Show(); f.profBtn:Show(); f.profHint:Show()
+    y = y - 36
+  else
+    f.profLabelText:Hide(); f.profBtn:Hide(); f.profHint:Hide()
+  end
+  f.noteLabel:ClearAllPoints(); f.noteLabel:SetPoint("TOPLEFT", 20, y)
+  f.count:ClearAllPoints(); f.count:SetPoint("TOPRIGHT", -20, y - 2)
+  f.note:ClearAllPoints(); f.note:SetPoint("TOPLEFT", 24, y - 18)
+  f.error:ClearAllPoints(); f.error:SetPoint("TOPLEFT", 20, y - 48)
+end
+
 -- fromUser marks a hand-made choice, which auto-fill then leaves alone for the same item.
 local function setProf(key, fromUser)
   f.prof = key
   if f.profBtn then f.profBtn:SetText(profLabel(key)) end
   if fromUser then f.profManualFor = f.link or Util.Trim(f.name:GetText() or "") end
+  relayout()
 end
 
 local function openProfPicker()
@@ -168,6 +206,7 @@ function Form.SetLink(link)
   showSlot()
   setError(nil)
   UI.Try(autoFillProf, link)
+  relayout()
 end
 
 local function setTypedName(name)
@@ -177,6 +216,7 @@ local function setTypedName(name)
   f.settingName = nil
   lockName(false)
   showSlot()
+  relayout()
 end
 
 -- Loads any link: item links directly, recipe links via the crafted item, else the plain name.
@@ -251,10 +291,11 @@ local function payload()
     kind = f.kind,
     item = item,
     qty = qty,
-    mats = f.mats:GetChecked() and true or false,
+    -- nil when the field doesn't apply to this item (hidden on the form).
+    mats = f.matsOn ~= false and (f.mats:GetChecked() and true or false) or nil,
     cod = f.cod:GetChecked() and true or false,
     note = note ~= "" and note or nil,
-    prof = f.prof,
+    prof = f.profOn ~= false and f.prof or nil,
   }
 end
 
@@ -265,7 +306,8 @@ local function submit()
   local ok, res
   if f.editing then
     ok, res = ex:Edit(f.editing, {
-      kind = d.kind, item = d.item, qty = d.qty or false, mats = d.mats, cod = d.cod,
+      kind = d.kind, item = d.item, qty = d.qty or false, cod = d.cod,
+      mats = d.mats == nil and ns.Exchange.Listing.CLEAR or d.mats,
       note = d.note or false, prof = d.prof or false,
     })
   else
@@ -284,7 +326,7 @@ local function check(parent, label, x, y)
   local c = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
   c:SetSize(24, 24)
   c:SetPoint("TOPLEFT", x, y)
-  local t = UI.Text(parent, "GameFontHighlight", label)
+  local t = UI.Text(c, "GameFontHighlight", label) -- child of the box, so it hides with it
   t:SetPoint("LEFT", c, "RIGHT", 4, 0)
   return c
 end
@@ -371,15 +413,15 @@ local function build()
   f.mats = check(frame, "I will provide materials", 16, -182)
   f.cod = check(frame, "I am open to COD", 16, -208)
 
-  local profLabelText = UI.Text(frame, "GameFontNormal", "Profession:")
-  profLabelText:SetPoint("TOPLEFT", 20, -242)
+  f.profLabelText = UI.Text(frame, "GameFontNormal", "Profession:")
+  f.profLabelText:SetPoint("TOPLEFT", 20, -242)
   f.profBtn = UI.Button(frame, "None", 160, openProfPicker)
   f.profBtn:SetPoint("TOPLEFT", 92, -238)
-  local profHint = UI.Text(frame, "GameFontDisableSmall", "optional")
-  profHint:SetPoint("LEFT", f.profBtn, "RIGHT", 8, 0)
+  f.profHint = UI.Text(frame, "GameFontDisableSmall", "optional")
+  f.profHint:SetPoint("LEFT", f.profBtn, "RIGHT", 8, 0)
 
-  local noteLabel = UI.Text(frame, "GameFontNormal", "Note (optional):")
-  noteLabel:SetPoint("TOPLEFT", 20, -274)
+  f.noteLabel = UI.Text(frame, "GameFontNormal", "Note (optional):")
+  f.noteLabel:SetPoint("TOPLEFT", 20, -274)
   f.count = UI.Text(frame, "GameFontDisableSmall")
   f.count:SetPoint("TOPRIGHT", -20, -276)
   f.note = input(frame, 356)
@@ -428,6 +470,7 @@ function Form.Open(rec, defaultKind)
   f.note:SetText(d and d.note or "")
   f.count:SetText(string.format("%d/%d", #(f.note:GetText() or ""), NOTE_MAX))
   setError(nil)
+  relayout()
   frame:ClearAllPoints()
   frame:SetPoint("CENTER")
   frame:Show()

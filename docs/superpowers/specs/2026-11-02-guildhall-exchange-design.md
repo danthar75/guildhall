@@ -203,6 +203,19 @@ Branding can then be added later as configuration or a small theme file, without
   Stored as optional `d.prof`. The profession list and names come from the game where possible, so it holds for Forever.
 - **Categories from item class:** trade goods and reagents → Materials; recipes → Recipes; weapons and armour without a profession → Gear (BoE), since soulbound items cannot be traded; anything with a profession (other than recipes) → Crafted / that profession; hand-typed names and everything else → Other. The game has no "crafted" flag, so Crafted means "tagged with a profession".
 
+### Fields that apply per category (added 2026-11-04; the user asked for this)
+The form shows only the optional fields that make sense for the item; a hidden field is not stored, and the details pane and Copy for Discord leave its line out.
+
+| Category | "I will provide materials" | Profession picker |
+|---|---|---|
+| Crafted | shown | shown |
+| Materials | hidden | hidden |
+| Recipes | hidden | hidden (the recipe implies it) |
+| Gear (BoE) | hidden until a profession is chosen, which makes it Crafted | shown |
+| Other (incl. typed names) | shown | shown |
+
+COD and quantity always apply. `d.mats` may be nil ("doesn't apply"). The default Discord template uses `{matsLine}`, which is empty in that case.
+
 ### Deal tracking and leaderboard (planned; design in progress 2026-11-04)
 The motivation for the Exchange is keeping gold in the guild. The user wants a guild total of gold kept in the guild, plus a fun leaderboard to promote use: listings posted, purchases, gold earned from guildmates, gold paid to guildmates.
 - **Only listing-matched deals count** (user's decision). A deal is a trade-window trade or CoD mail between the poster and a guildmate, for the listed item.

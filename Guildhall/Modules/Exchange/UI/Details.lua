@@ -29,10 +29,11 @@ end
 
 local function detailBody(rec, now)
   local d = rec.d
-  local lines = {
-    "I |cffffffff" .. (d.mats and "will" or "will not") .. "|r provide materials",
-    "I am |cffffffff" .. (d.cod and "open" or "not open") .. "|r to COD",
-  }
+  local lines = {}
+  if d.mats ~= nil then -- nil: the materials question doesn't apply to this item
+    lines[#lines + 1] = "I |cffffffff" .. (d.mats and "will" or "will not") .. "|r provide materials"
+  end
+  lines[#lines + 1] = "I am |cffffffff" .. (d.cod and "open" or "not open") .. "|r to COD"
   if type(d.note) == "string" and d.note ~= "" then
     lines[#lines + 1] = ""
     lines[#lines + 1] = "|cffc8b98aNote:|r " .. escape(d.note)

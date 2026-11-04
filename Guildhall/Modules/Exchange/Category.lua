@@ -144,6 +144,17 @@ function Category.Of(d)
   return "other", nil
 end
 
+-- Which optional form fields make sense for a listing payload: matsApplies, profApplies.
+-- "I will provide materials" only means something for crafting (a profession is set) or
+-- for items we can't classify (a typed name may be a crafting request). The profession
+-- picker is pointless for materials, and implied by the recipe itself for recipes.
+function Category.Applies(d)
+  local cat = Category.Of(d)
+  if cat == "materials" or cat == "recipes" then return false, false end
+  if cat == "gear" then return false, true end
+  return true, true -- crafted, other
+end
+
 -- Profession window detection (auto-fill) -------------------------------------------
 
 -- Profession key for a localized or English name, nil when unknown.

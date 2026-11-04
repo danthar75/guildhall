@@ -33,7 +33,7 @@ function Listing.Validate(d)
   if d.kind ~= "LF" and d.kind ~= "WTS" then return false, "bad kind" end
   if type(d.item) ~= "string" or #d.item < 1 or #d.item > 255 then return false, "bad item" end
   if d.qty ~= nil and not (isInt(d.qty) and d.qty >= 1 and d.qty <= 9999) then return false, "bad qty" end
-  if type(d.mats) ~= "boolean" then return false, "bad mats" end
+  if d.mats ~= nil and type(d.mats) ~= "boolean" then return false, "bad mats" end -- nil: not applicable
   if type(d.cod) ~= "boolean" then return false, "bad cod" end
   if d.note ~= nil and (type(d.note) ~= "string" or #d.note > 200) then return false, "bad note" end
   if d.prof ~= nil and not isProfKey(d.prof) then return false, "bad prof" end
@@ -60,13 +60,20 @@ local function backfillCreated(n, rec)
   if type(n.d) == "table" and n.d.created == nil and isInt(rec.t) then n.d.created = rec.t end
 end
 
--- changes: shallow-merged into a copy of d. qty/note/prof == false removes the field.
+-- Edit sentinel: removes a field whose false is meaningful (mats: nil = "doesn't apply").
+Listing.CLEAR = {}
+
+-- changes: shallow-merged into a copy of d. qty/note/prof == false and CLEAR remove the field.
 -- The result is NOT validated; callers validate d before publishing.
 function Listing.Edit(rec, changes, char, now)
   local n = copy(rec)
   n.d = type(rec.d) == "table" and copy(rec.d) or {}
   for k, v in pairs(changes) do
-    if v == false and (k == "qty" or k == "note" or k == "prof") then n.d[k] = nil else n.d[k] = v end
+    if v == Listing.CLEAR or (v == false and (k == "qty" or k == "note" or k == "prof")) then
+      n.d[k] = nil
+    else
+      n.d[k] = v
+    end
   end
   n.v, n.t, n.char = rec.v + 1, now, char
   backfillCreated(n, rec)

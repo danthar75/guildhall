@@ -36,6 +36,19 @@ describe("Exchange.Category", function()
   end)
   after_each(function() for _, k in ipairs(GLOBALS) do _G[k] = saved[k] end end)
 
+  it("Applies: which form fields make sense for an item", function()
+    local function ap(d) local m, p = C.Applies(d); return { m, p } end
+    assert.same({ false, false }, ap({ item = link(1) }))                     -- materials
+    assert.same({ false, false }, ap({ item = link(2) }))                     -- reagent
+    assert.same({ false, false }, ap({ item = link(5) }))                     -- recipe
+    assert.same({ false, true }, ap({ item = link(3) }))                      -- BoE gear
+    assert.same({ true, true }, ap({ item = link(3), prof = "blacksmithing" })) -- crafted gear
+    assert.same({ true, true }, ap({ item = link(6) }))                       -- potion: crafted
+    assert.same({ true, true }, ap({ item = link(11) }))                      -- other
+    assert.same({ true, true }, ap({ item = "Custom robe" }))                 -- typed name
+    assert.same({ true, true }, ap({}))
+  end)
+
   it("IsProfKey accepts canonical and plausible future keys only", function()
     assert.is_true(C.IsProfKey("tailoring"))
     assert.is_true(C.IsProfKey("jewelcrafting"))

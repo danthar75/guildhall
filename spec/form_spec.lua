@@ -7,6 +7,7 @@ describe("Exchange.Form", function()
     "GetItemInfoInstant", "ProfessionsFrame", "C_TradeSkillUI", "TradeSkillFrame", "CraftFrame" }
   local picked
   local POTION = "|cffffffff|Hitem:118::::::::60:::::|h[Potion]|h|r"
+  local CLOTH = "|cffffffff|Hitem:4306::::::::60:::::|h[Silk Cloth]|h|r"
   local LINK = "|cffa335ee|Hitem:14152::::::::60:::::|h[Robe of the Archmage]|h|r"
   local SECRET = "|cff1eff00|Hitem:2589::::::::60:::::|h[Linen Cloth]|h|r"
 
@@ -19,6 +20,7 @@ describe("Exchange.Form", function()
     _G.ProfessionsFrame, _G.TradeSkillFrame, _G.CraftFrame, _G.C_TradeSkillUI = nil, nil, nil, nil
     _G.GetItemInfoInstant = function(l)
       if tostring(l):find("item:118:", 1, true) then return 118, "", "", "", 1, 0, 1 end -- potion
+      if tostring(l):find("item:4306:", 1, true) then return 4306, "", "", "", 1, 7, 5 end -- cloth
       return 14152, "", "", "", 1, 4, 1
     end
     picked = nil
@@ -29,6 +31,7 @@ describe("Exchange.Form", function()
     ns = {}
     loadAddonFile(ns, "Guildhall/Core/Util.lua")
     loadAddonFile(ns, "Guildhall/Modules/Exchange/Category.lua")
+    loadAddonFile(ns, "Guildhall/Modules/Exchange/Listing.lua")
     ns.compat = fakes.compat({ issecretvalue = function(v) return v == SECRET end })
     ns.OnError = function(e) errors[#errors + 1] = e end
     ns.UI = {
@@ -156,6 +159,46 @@ describe("Exchange.Form", function()
       buttons["None"].onClick(); choose("tailoring")
       ns.Exchange.Form.Open()
       assert.equal("None", buttons["None"].text)
+    end)
+  end)
+
+  describe("fields that don't apply are hidden", function()
+    -- CheckButtons in creation order: LF radio, WTS radio, mats, cod.
+    local function mats() return W.ofKind("CheckButton")[3] end
+    local function posted()
+      local d
+      ns.exchange = { Post = function(_, x) d = x; return true, {} end }
+      buttons["Post"].onClick()
+      return d
+    end
+
+    it("materials hide the materials question and the profession picker", function()
+      hook(CLOTH)
+      assert.is_false(mats().shown)
+      assert.is_false(buttons["None"].shown)
+      local d = posted()
+      assert.is_nil(d.mats); assert.is_nil(d.prof)
+    end)
+
+    it("BoE gear hides the materials question until a profession is chosen", function()
+      hook(LINK)
+      assert.is_false(mats().shown)
+      assert.is_true(buttons["None"].shown)
+      buttons["None"].onClick(); picked.onPick("tailoring")
+      assert.is_true(mats().shown)
+    end)
+
+    it("a typed name shows everything", function()
+      assert.is_true(mats().shown)
+      assert.is_true(buttons["None"].shown)
+    end)
+
+    it("saving an edit to a materials listing clears its old materials answer", function()
+      local sent
+      ns.exchange = { Edit = function(_, id, ch) sent = ch; return true, {} end }
+      ns.Exchange.Form.Open({ id = "p:1", d = { kind = "WTS", item = CLOTH, mats = true, cod = false } })
+      buttons["Post"].onClick()
+      assert.equal(ns.Exchange.Listing.CLEAR, sent.mats)
     end)
   end)
 

@@ -75,6 +75,14 @@ describe("Exchange.Listing", function()
     assert.equals(1000, r.d.created)
   end)
 
+  it("mats may be absent (not applicable) but not a non-boolean; Edit can clear it", function()
+    local d = good(); d.mats = nil
+    assert.is_true((L.Validate(d)))
+    assert.is_false((L.Validate(good({ mats = "yes" }))))
+    local r = L.New(good(), "p1", "Bob-Realm", 1000, 1)
+    assert.is_nil(L.Edit(r, { mats = L.CLEAR }, "Bob-Realm", 2000).d.mats)
+  end)
+
   it("Renew and Edit keep the original post time (d.created)", function()
     local r = L.New(good(), "p1", "Bob-Realm", 1000, 1)
     assert.equals(1000, L.Renew(r, "Bob-Realm", 5000).d.created)
