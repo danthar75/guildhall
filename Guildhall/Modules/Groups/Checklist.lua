@@ -578,7 +578,9 @@ function L:Confirm(raiderChar, instance, ok)
   if type(raiderChar) ~= "string" or raiderChar == "" or #raiderChar > RAIDER_MAX then return false, "bad raider" end
   if type(instance) ~= "string" or not ns.Instances.Get(instance) then return false, "bad instance" end
   if type(ok) ~= "boolean" then return false, "bad ok" end
-  if not self:_can("prepared", instance) then return false, REFUSED end
+  -- the live leader/assistant role counts here (Ruling F5); the deriver still verifies
+  local live = ns.Groups.Credit.LiveLeaders(self.compat, self.playerChar, instance, self:_today())
+  if not self.perms:Can(self.playerChar, "prepared", { raidLeaders = live }) then return false, REFUSED end
   local status, rec = self.obs:Publish({ kind = "prepared", raider = raiderChar, instance = instance, ok = ok,
     at = math.floor(self.now()) })
   if status ~= "accepted" then return false, status end

@@ -70,11 +70,6 @@ local function tzOf(config, compat, now)
   return ns.Scoring.Clock(config, compat, finite(now) and now or 0).tz
 end
 
-local function leaders(instance, dayKey)
-  local Credit = ns.Groups.Credit
-  if not (Credit and Credit.RaidLeaders) then return {} end
-  return Credit.RaidLeaders(instance, dayKey) or {}
-end
 
 -- Deriver -----------------------------------------------------------------------------------
 
@@ -226,7 +221,8 @@ function F:Ask(raiderChar, instance, note)
     if #note > MAX_STR then return false, "bad note" end
     if note == "" then note = nil end
   end
-  if not self.perms:Can(self.playerChar, "flex", { raidLeaders = leaders(instance, self:_today()) }) then
+  local live = ns.Groups.Credit.LiveLeaders(self.compat, self.playerChar, instance, self:_today())
+  if not self.perms:Can(self.playerChar, "flex", { raidLeaders = live }) then
     return false, REFUSED
   end
   if self:_ownChars()[raiderChar] then return false, "not yourself" end

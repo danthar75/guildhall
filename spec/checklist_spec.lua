@@ -254,6 +254,33 @@ describe("Groups Checklist", function()
     assert.is_false((asst.cl:Confirm("Raider-R", "mc", true)))
   end)
 
+  it("a raidlead-only assistant can confirm before the night's first kill while assisting the raid now", function()
+    grant({ prepared = { ranks = { 1 }, raidlead = true } })
+    local asst = client("Asst-R")
+    local snap
+    asst.compat.GroupSnapshot = function() return snap end
+    -- not grouped, secret (nil), or grouped but not leader/assistant: refused
+    assert.is_false((asst.cl:Confirm("Raider-R", "mc", true)))
+    snap = { members = { "Gm-R", "Asst-R", "Raider-R" }, leader = "Gm-R", assists = {} }
+    assert.is_false((asst.cl:Confirm("Raider-R", "mc", true)))
+    -- assisting now: accepted locally
+    snap.assists = { "Asst-R" }
+    assert.is_true((asst.cl:Confirm("Raider-R", "mc", true)))
+    snap = { members = { "Asst-R", "Raider-R" }, leader = "Asst-R", assists = {} }
+    assert.is_true((asst.cl:Confirm("Raider-R", "mc", true)))
+    -- the deriver still needs a verified kill the assistant led
+    assert.equal(0, prepared(derive(asst), "Raider-R"))
+    verifiedKill(clock.now() + 600, "Gm-R", {})
+    assert.equal(0, prepared(derive(asst), "Raider-R"))
+    kills = {}
+    verifiedKill(clock.now() + 600, "Gm-R", { "Asst-R" })
+    assert.equal(1, prepared(derive(asst), "Raider-R"))
+    -- the live role never lets a raidlead-only author save a checklist (peers check verified kills)
+    grant({ prepared = { ranks = { 1 }, raidlead = true }, checklists = { ranks = { 1 }, raidlead = true } })
+    kills = {}
+    assert.is_false((asst.cl:Save(LIST)))
+  end)
+
   it("the newest confirmation wins (untick after tick removes credit)", function()
     grant({ prepared = { ranks = { 1 }, raidlead = false } })
     local off = client("Off-R")

@@ -317,6 +317,20 @@ describe("Groups.View", function()
 
   -- More ------------------------------------------------------------------------------------
 
+  it("Prepared and Ask to switch are offered to the current raid leader or assistant (raidlead grant)", function()
+    ns.leaderboard.permissions.Can = function(_, char, _, opts)
+      return type(opts) == "table" and type(opts.raidLeaders) == "table" and opts.raidLeaders[char] == true
+    end
+    local D = ns.Groups.Details
+    assert.is_false(D.Can("flex", "mc"))
+    ns.services.compat.GroupSnapshot = function() return { members = { "Dor-R", "X-R" }, leader = "X-R", assists = { "Dor-R" } } end
+    assert.is_true(D.Can("flex", "mc"))
+    assert.is_true(D.Can("prepared", "mc"))
+    assert.is_false(D.Can("checklists", "mc")) -- checklists need a verified kill they led
+    ns.services.compat.GroupSnapshot = function() return { members = { "Dor-R", "X-R" }, leader = "X-R", assists = {} } end
+    assert.is_false(D.Can("flex", "mc"))
+  end)
+
   it("shows the empty state when nothing is posted", function()
     build()
     assert.is_true(has("No runs posted. Post one, or mark yourself Ready now so guildmates know."))

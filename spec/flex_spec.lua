@@ -196,6 +196,24 @@ describe("Groups Flex", function()
     assert.equal("already credited tonight", second.why)
   end)
 
+  it("a raidlead-only assistant can ask before the night's first kill while leading or assisting now", function()
+    ranks["Asst-R"] = 4
+    grant({ flex = { ranks = { 1 }, raidlead = true } })
+    local asst = client("Asst-R")
+    local snap
+    asst.compat.GroupSnapshot = function() return snap end
+    local ok, err = asst.fx:Ask("Raider-R", "mc")
+    assert.is_false(ok)
+    assert.equal("no permission", err)
+    snap = { members = { "Asst-R", "Raider-R" }, leader = "Raider-R", assists = {} }
+    assert.is_false((asst.fx:Ask("Raider-R", "mc")))
+    snap.assists = { "Asst-R" }
+    assert.is_true((asst.fx:Ask("Raider-R", "mc")))
+    -- a compat without GroupSnapshot behaves as before
+    asst.compat.GroupSnapshot = nil
+    assert.is_false((asst.fx:Ask("Raider-R", "mc")))
+  end)
+
   it("an ask 7 h before any kill earns nothing", function()
     grant({ flex = { ranks = { 1 }, raidlead = false } })
     spec = 1

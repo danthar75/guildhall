@@ -590,3 +590,20 @@ function Credit.RaidLeaders(instance, dayKey)
   if not attached then return {} end
   return attached:RaidLeaders(instance, dayKey)
 end
+
+-- Ruling F5, for local permission checks only (Flex:Ask, Checklist:Confirm and their buttons):
+-- RaidLeaders(instance, dayKey) plus playerChar when the current group snapshot (Compat, nil- and
+-- secret-safe) shows them as leader or assistant, so a raidlead-only assistant can act before the
+-- night's first kill. The derivers still require a verified kill the author led.
+function Credit.LiveLeaders(compat, playerChar, instance, dayKey)
+  local set = Credit.RaidLeaders(instance, dayKey) or {}
+  local snap = compat and compat.GroupSnapshot and compat:GroupSnapshot() or nil
+  if type(playerChar) == "string" and type(snap) == "table" then
+    local lead = snap.leader == playerChar
+    for _, n in ipairs(type(snap.assists) == "table" and snap.assists or {}) do
+      if n == playerChar then lead = true end
+    end
+    if lead then set[playerChar] = true end
+  end
+  return set
+end

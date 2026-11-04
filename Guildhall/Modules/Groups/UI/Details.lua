@@ -174,11 +174,18 @@ local function perms()
 end
 
 -- Whether this character holds a group permission tonight in an instance (a raidlead grant counts
--- on nights it led or assisted a verified kill there).
+-- on nights it led or assisted a verified kill there; for "prepared" and "flex" also while the
+-- current group shows it as leader or assistant, as Checklist:Confirm and Flex:Ask allow).
 function Details.Can(key, instance)
   local s, p = services(), perms()
   if not (s and p and instance) then return false end
-  local leaders = ns.Groups.Credit and ns.Groups.Credit.RaidLeaders(instance, Details.Today()) or {}
+  local C = ns.Groups.Credit
+  local leaders
+  if C and C.LiveLeaders and (key == "prepared" or key == "flex") then
+    leaders = C.LiveLeaders(s.compat, s.playerChar, instance, Details.Today())
+  else
+    leaders = C and C.RaidLeaders(instance, Details.Today()) or {}
+  end
   return p:Can(s.playerChar, key, { raidLeaders = leaders }) == true
 end
 
