@@ -26,9 +26,8 @@ local function coreLines()
 
   local p = UI.Personal()
   local chars = p and p.profile and p.profile.chars or {}
-  local names = {}
-  for name in pairs(chars) do names[#names + 1] = name end
-  table.sort(names)
+  local names = s.profile:GuildChars() -- only this guild's characters
+
   local charLines = {}
   for _, name in ipairs(names) do
     local inc = chars[name].included
@@ -36,7 +35,7 @@ local function coreLines()
     charLines[#charLines + 1] = "  " .. ns.Util.DisplayName(name) .. "  " .. state
   end
   if #charLines == 0 then charLines[1] = "  (none yet)" end
-  return table.concat(lines, "\n"), "Characters:\n" .. table.concat(charLines, "\n")
+  return table.concat(lines, "\n"), "Characters in this guild:\n" .. table.concat(charLines, "\n")
 end
 
 function SettingsView.Build(parent)

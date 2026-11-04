@@ -102,28 +102,24 @@ end
 function Boot.ShowConsent()
   local s = ns.services
   if not s or not s.profile:NeedsConsent() then return end
-  ns.UI.Consent:Show(s.profile:PendingChars(), function(excluded) onConsentDone(excluded) end)
+  ns.UI.Consent:Show(s.profile:PendingChars(), function(excluded) onConsentDone(excluded) end, nil, s.guildKey)
 end
 
--- Re-asks for every known character (Settings "Change…").
+-- Re-asks for every known character in this guild (Settings "Change…").
 function Boot.ChangeConsent()
   local s, p = ns.services, ns.UI.Personal()
   if not (s and p and p.profile and type(p.profile.chars) == "table") then return end
-  local chars, names, excludedNow = p.profile.chars, {}, {}
-  for name, e in pairs(chars) do
-    if type(e) == "table" then
-      names[#names + 1] = name
-      if e.included == false then excludedNow[name] = true end
-    end
+  local chars, names, excludedNow = p.profile.chars, s.profile:GuildChars(), {}
+  for _, name in ipairs(names) do
+    if chars[name].included == false then excludedNow[name] = true end
   end
-  table.sort(names)
   ns.UI.Consent:Show(names, function(excluded)
     -- Profile:Consent only decides pending characters, so mark them all pending first.
     for _, name in ipairs(names) do
       if type(chars[name]) == "table" then chars[name].included = nil end
     end
     onConsentDone(excluded)
-  end, excludedNow)
+  end, excludedNow, s.guildKey)
 end
 
 -- Services ---------------------------------------------------------------------
@@ -159,7 +155,7 @@ local function buildServices(guildKey)
   local profileSet = ns.ReplicatedSet.new("profiles", g.sets.profiles, { now = now })
   local profile = ns.Profile.new({
     personal = sv.personal, set = profileSet, roster = roster, now = now, random = random,
-    playerChar = playerChar,
+    playerChar = playerChar, guildKey = guildKey,
     defaultRealm = GetNormalizedRealmName and GetNormalizedRealmName() or nil,
   })
   profileSync = ns.Sync.new({

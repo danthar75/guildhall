@@ -38,6 +38,7 @@ describe("Exchange", function()
     n.profile = ns.Profile.new({
       personal = personal, set = n.profSet, now = clock.now, roster = n.roster,
       random = function() return ids or 7 end, playerChar = name, defaultRealm = "Realm",
+      guildKey = "Guild-Realm",
     })
     n.profile:SeeCharacter(name)
     if o.consent ~= false then n.profile:Consent({}) end

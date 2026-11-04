@@ -5,7 +5,7 @@ describe("Profile", function()
   local function mk(extra)
     local o = {
       personal = personal, set = set, now = function() return now end,
-      random = math.random, playerChar = "Me-Realm", defaultRealm = "Realm",
+      random = math.random, playerChar = "Me-Realm", defaultRealm = "Realm", guildKey = "GuildA-Realm",
       roster = { IsOnline = function(_, n) return online[n] end },
     }
     for k, v in pairs(extra or {}) do o[k] = v end
@@ -111,5 +111,46 @@ describe("Profile", function()
     assert.is_true(p:IsMine(p:Id()))
     assert.is_false(p:IsMine("zzz"))
     assert.same({ "Me-Realm" }, p:CharsOf(p:Id()))
+  end)
+  -- I2: characters are scoped to the guild they were seen in.
+  it("Record for guild A lists only characters seen in guild A", function()
+    local a = mk({ guildKey = "GuildA-Realm", playerChar = "Main-Realm" })
+    a:SeeCharacter("Main-Realm"); a:Consent({})
+    local b = mk({ guildKey = "GuildB-Realm", playerChar = "Alt-Realm" })
+    b:SeeCharacter("Alt-Realm")
+    assert.same({ "Alt-Realm" }, b:PendingChars()) -- Main is not asked about in guild B
+    b:Consent({})
+    assert.same({ "Alt-Realm" }, b:Record().d.chars)
+    assert.same({ "Main-Realm" }, a:Record().d.chars)
+    assert.same({ "Main-Realm" }, a:GuildChars())
+    assert.same({ "Alt-Realm" }, b:GuildChars())
+    assert.equal("GuildA-Realm", personal.profile.chars["Main-Realm"].guild)
+    assert.equal("GuildB-Realm", personal.profile.chars["Alt-Realm"].guild)
+    assert.is_nil(a:OwnerOf("Alt-Realm"))
+  end)
+
+  it("legacy entries without a guild key are not shared and are re-asked when next seen", function()
+    personal.profile.consented = true
+    personal.profile.chars["Old-Realm"] = { included = true }
+    personal.profile.chars["Me-Realm"] = { included = true }
+    local p = mk()
+    assert.is_false(p:NeedsConsent())
+    assert.same({}, p:Record().d.chars)
+    assert.same({}, p:GuildChars())
+    p:SeeCharacter("Me-Realm") -- logged in with this guild: stamped, pending again
+    assert.equal("GuildA-Realm", personal.profile.chars["Me-Realm"].guild)
+    assert.same({ "Me-Realm" }, p:PendingChars())
+    p:Consent({})
+    assert.same({ "Me-Realm" }, p:Record().d.chars)
+    assert.is_nil(personal.profile.chars["Old-Realm"].guild) -- untouched until it logs in
+  end)
+
+  it("a character seen in a different guild moves to it and is re-asked", function()
+    local a = mk({ guildKey = "GuildA-Realm" })
+    a:SeeCharacter("Me-Realm"); a:Consent({})
+    local b = mk({ guildKey = "GuildB-Realm" })
+    b:SeeCharacter("Me-Realm")
+    assert.same({ "Me-Realm" }, b:PendingChars())
+    assert.same({}, a:Record().d.chars)
   end)
 end)

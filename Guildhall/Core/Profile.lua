@@ -1,11 +1,17 @@
 local ADDON, ns = ...
 
 -- Player identity: a random id per WoW account plus the characters the player
--- has consented to link. Per-character decisions live in
--- personal.profile.chars[fullName] = { included = true|false }; an entry with
--- included == nil is "seen but undecided" (pending). personal.profile.excluded
--- is an array of excluded names; personal.profile.consented means "consented
--- at least once".
+-- has consented to link. Per-character decisions live in the account-wide
+-- personal.profile.chars[fullName] = { guild = guildKey, included = true|false };
+-- an entry with included == nil is "seen but undecided" (pending).
+-- A Profile is bound to one guild (opts.guildKey): only entries whose guild matches
+-- are asked about, published or claimed, so an alt in another guild never leaks into
+-- this guild's profile. An entry with no guild (saved before guild scoping) belongs to
+-- no guild; when that character next logs in, SeeCharacter stamps it with the current
+-- guild and makes it pending, so it is re-asked once with the guild known. The same
+-- happens when a character turns up in a different guild.
+-- personal.profile.excluded is an array of excluded names (all guilds);
+-- personal.profile.consented means "consented at least once".
 local Profile = {}
 ns.Profile = Profile
 Profile.__index = Profile
@@ -21,6 +27,7 @@ function Profile.new(opts)
   self.random = opts.random or math.random
   self.playerChar = opts.playerChar
   self.defaultRealm = opts.defaultRealm
+  self.guildKey = opts.guildKey
   local p = self.personal
   p.profile = p.profile or {}
   p = p.profile
@@ -45,22 +52,38 @@ function Profile:Id()
   return self.p.id
 end
 
+-- Records that fullName is logged in with this guild (see the header for migration).
 function Profile:SeeCharacter(fullName)
   local n = self:_norm(fullName)
-  if n and not self.p.chars[n] then self.p.chars[n] = {} end
+  if not n or self.guildKey == nil then return end
+  local e = self.p.chars[n]
+  if type(e) ~= "table" then
+    self.p.chars[n] = { guild = self.guildKey }
+  elseif e.guild ~= self.guildKey then
+    e.guild, e.included = self.guildKey, nil
+  end
 end
 
-local function sortedNames(chars, pred)
+function Profile:_inGuild(e)
+  return type(e) == "table" and e.guild ~= nil and e.guild == self.guildKey
+end
+
+function Profile:_names(pred)
   local out = {}
-  for name, e in pairs(chars) do
-    if type(e) == "table" and pred(e) then out[#out + 1] = name end
+  for name, e in pairs(self.p.chars) do
+    if self:_inGuild(e) and pred(e) then out[#out + 1] = name end
   end
   table.sort(out)
   return out
 end
 
+-- Every known character in this guild, decided or not (Settings, "Change...").
+function Profile:GuildChars()
+  return self:_names(function() return true end)
+end
+
 function Profile:PendingChars()
-  return sortedNames(self.p.chars, function(e) return e.included == nil end)
+  return self:_names(function(e) return e.included == nil end)
 end
 
 function Profile:NeedsConsent()
@@ -76,13 +99,17 @@ function Profile:Consent(excludedArray)
   for _, name in ipairs(self:PendingChars()) do
     self.p.chars[name].included = not ex[name]
   end
-  local list = sortedNames(self.p.chars, function(e) return e.included == false end)
+  local list = {}
+  for name, e in pairs(self.p.chars) do
+    if type(e) == "table" and e.included == false then list[#list + 1] = name end
+  end
+  table.sort(list)
   self.p.excluded = list
   self.p.consented = true
 end
 
 function Profile:_included()
-  return sortedNames(self.p.chars, function(e) return e.included == true end)
+  return self:_names(function(e) return e.included == true end)
 end
 
 function Profile:Record()
@@ -140,7 +167,7 @@ function Profile:OwnerOf(fullName)
   -- Our own locally included chars count before we publish.
   if not myRecListsIt and self.p.consented then
     local c = self.p.chars[target]
-    if c and c.included == true then consider(now, self:Id()) end
+    if self:_inGuild(c) and c.included == true then consider(now, self:Id()) end
   end
   return best and best.id or nil
 end

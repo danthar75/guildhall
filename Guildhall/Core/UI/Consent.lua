@@ -2,14 +2,16 @@ local ADDON, ns = ...
 
 -- Consent dialog: one checkbox per character (checked = share/link). Never sends anything;
 -- the caller decides what to do with the excluded list.
--- Consent:Show(chars, onDone(excludedArray), initiallyExcluded?) where initiallyExcluded is a
--- set {name = true} used to pre-uncheck boxes (e.g. when changing an earlier choice).
+-- Consent:Show(chars, onDone(excludedArray), initiallyExcluded?, guildKey?) where initiallyExcluded
+-- is a set {name = true} used to pre-uncheck boxes (e.g. when changing an earlier choice) and
+-- guildKey names the guild that will see the linked characters.
 local UI = ns.UI
 local Consent = {}
 UI.Consent = Consent
 
 local ROW = 24
 local TEXT = "Guildhall links your characters so guildmates can reach you on whichever one is online. Uncheck any you don't want shared."
+local GUILD_TEXT = "Guildhall links your characters in %s so guildmates there can reach you on whichever one is online. Only characters in %s are listed. Uncheck any you don't want shared."
 
 local frame, rows, onDone, names
 
@@ -56,8 +58,14 @@ local function row(i)
   return r
 end
 
-function Consent:Show(chars, done, initiallyExcluded)
+function Consent:Show(chars, done, initiallyExcluded, guildKey)
   build()
+  if type(guildKey) == "string" and guildKey ~= "" then
+    local g = (ns.Util.DisplayName(guildKey):gsub("|", "||"))
+    frame.text:SetText(string.format(GUILD_TEXT, g, g))
+  else
+    frame.text:SetText(TEXT)
+  end
   names = {}
   for _, n in ipairs(chars or {}) do
     if type(n) == "string" then names[#names + 1] = n end
