@@ -176,6 +176,9 @@ describe("Boot", function()
     assert.equal(ns.services.playerChar, kctx.playerChar)
     assert.equal(ns.groups.after, kctx.after)
     assert.is_table(kctx.db.killPending) -- pending reports persist in the Groups module db
+    -- the calendar announces guildraid notices on the guarded timer, with the random source
+    assert.equal(ns.groups.after, ns.groups.calendar.ctx.after)
+    assert.equal(ns.services.random, ns.groups.calendar.ctx.random)
     assert.equal(ns.services.profile, ns.groups.credit.ctx.profile)
   end)
 

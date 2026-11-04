@@ -19,7 +19,8 @@ local ADDON, ns = ...
 -- ref = "signup:<char>:<instance>:<dayKey>".
 -- Uncounted rows ("no verified kill yet", "already credited tonight") go to the deriving client's own chars.
 --
--- Wiring (Task 9): Calendar.new(ctx) with ctx { config, observations, compat, now, playerChar, profile, db };
+-- Wiring (Task 9): Calendar.new(ctx) with ctx { config, observations, compat, now, playerChar, profile, db,
+-- after?, random? } (after = the module's guarded timer);
 -- call cal:Refresh() on login, CALENDAR_UPDATE_EVENT_LIST and on leaving an instance.
 --
 -- Globals: ns.Groups.Calendar.
@@ -215,8 +216,9 @@ function Calendar.new(ctx)
 end
 
 -- Reads the guild calendar (today + 14 days) and publishes the player's own accepted/signed-up events,
--- once per (title, start), and a guildraid notice for each raid event not over yet that the store
--- doesn't hold yet. A nil reading (instance, restricted, secret) changes nothing.
+-- once per (title, start), and (after a random wait, see _scheduleAnnounce) a guildraid notice for each
+-- raid event not over yet that the store doesn't hold from 2 linked profiles yet. A nil reading
+-- (instance, restricted, secret) changes nothing.
 function C:Refresh()
   local now = math.floor(self.now())
   for k, start in pairs(self.sent) do
@@ -227,7 +229,7 @@ function C:Refresh()
   self.events = list
   local p = self.profile
   if p and p.NeedsConsent and p:NeedsConsent() then return true end
-  self:_announceRaids(list, now)
+  self:_scheduleAnnounce()
   for _, ev in ipairs(list) do
     if ev.myStatus == "accepted" or ev.myStatus == "signedup" then
       local title = ev.title:sub(1, MAX_STR)
@@ -240,6 +242,30 @@ function C:Refresh()
     end
   end
   return true
+end
+
+-- Announcing waits a random 30-120 s (ctx.after, ctx.random; Ruling F9): the login Refresh runs
+-- before sync has delivered other members' notices, so announcing at once would make nearly every
+-- client publish one. When the wait ends the store is checked again. One wait at a time; without
+-- ctx.after it announces at once.
+local ANNOUNCE_MIN, ANNOUNCE_MAX = 30, 120
+
+function C:_scheduleAnnounce()
+  local ctx = self.ctx
+  if type(ctx.after) ~= "function" then
+    self:_announceRaids(self.events, math.floor(self.now()))
+    return
+  end
+  if self.announcing then return end
+  self.announcing = true
+  local r = ctx.random or math.random
+  local wait = r(ANNOUNCE_MIN, ANNOUNCE_MAX)
+  if type(wait) ~= "number" or wait ~= wait then wait = ANNOUNCE_MIN end
+  wait = math.max(ANNOUNCE_MIN, math.min(ANNOUNCE_MAX, wait))
+  ctx.after(wait, function()
+    self.announcing = false
+    self:_announceRaids(self.events, math.floor(self.now()))
+  end)
 end
 
 function C:_announceRaids(list, now)

@@ -401,6 +401,67 @@ describe("Groups Calendar", function()
       assert.same({}, raidboss(d2))
     end)
 
+    describe("announcing waits a random 30-120 s, then re-checks the store", function()
+      local waits, asked
+      local function delayed(char)
+        local c = client(char)
+        c.cal = ns.Groups.Calendar.new({ config = c.cfg, observations = c.obs, compat = c.compat, now = clock.now,
+          playerChar = char, profile = c.profile, db = c.db,
+          after = function(sec, fn) waits[#waits + 1] = { s = sec, fn = fn } end,
+          random = function(lo, hi) asked = { lo, hi }; return 75 end })
+        return c
+      end
+      local function run() local list = waits; waits = {}; for _, t in ipairs(list) do t.fn() end end
+      before_each(function() waits = {} end)
+
+      it("nothing is published when 2 linked profiles' notices arrived during the wait", function()
+        local start = clock.now() + DAY
+        local evs = { { title = "MC", start = start, instance = "mc", myStatus = "accepted" } }
+        local c = delayed("Raider-R")
+        c.events = evs
+        assert.is_true(c.cal:Refresh())
+        assert.same({ 30, 120 }, asked)
+        assert.equal(1, #waits)
+        assert.equal(75, waits[1].s)
+        assert.equal(0, #c.obs:List("guildraid"))
+        -- a second refresh while waiting doesn't schedule another
+        c.cal:Refresh()
+        assert.equal(1, #waits)
+        -- two other members announce it meanwhile
+        local a, b = client("A-R"), client("B-R")
+        a.events, b.events = evs, evs
+        a.cal:Refresh(); b.cal:Refresh()
+        assert.equal(2, #c.obs:List("guildraid"))
+        run()
+        assert.equal(2, #c.obs:List("guildraid"))
+      end)
+
+      it("without them, one notice is published when the wait ends", function()
+        local start = clock.now() + DAY
+        local c = delayed("Raider-R")
+        c.events = { { title = "MC", start = start, instance = "mc", myStatus = "accepted" } }
+        c.cal:Refresh()
+        assert.equal(0, #c.obs:List("guildraid"))
+        clock.advance(75)
+        run()
+        local list = c.obs:List("guildraid")
+        assert.equal(1, #list)
+        assert.equal("pRaider", list[1].by)
+        -- the next refresh can schedule again, and then adds nothing (this profile already sent it)
+        c.cal:Refresh()
+        run()
+        assert.equal(1, #c.obs:List("guildraid"))
+      end)
+
+      it("an out-of-range random wait is clamped to 30-120 s", function()
+        local c = delayed("Raider-R")
+        c.cal.ctx.random = function() return 5000 end
+        c.events = { { title = "MC", start = clock.now() + DAY, instance = "mc" } }
+        c.cal:Refresh()
+        assert.equal(120, waits[1].s)
+      end)
+    end)
+
     it("the validator is strict", function()
       local V = ns.Observations.Validate
       local function g(x)

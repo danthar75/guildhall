@@ -160,7 +160,7 @@ local function build(n, s)
   local credit = G.Credit.new(creditCtx)
   G.Credit.Attach(creditCtx)
   local svcCtx = { config = config, observations = observations, compat = s.compat, now = s.now,
-    playerChar = s.playerChar, profile = s.profile, perms = perms, db = db }
+    playerChar = s.playerChar, profile = s.profile, perms = perms, db = db, after = g.after, random = s.random }
   local checklist = G.Checklist.new(svcCtx)
   local flex = G.Flex.new(svcCtx)
   local calendar = G.Calendar.new(svcCtx)
