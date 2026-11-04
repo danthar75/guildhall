@@ -263,7 +263,11 @@ local function mineLines()
   for _, line in ipairs(lines) do
     local row = line.row
     local text = describe(row, line.inst, line.n)
-    if not row.counted then text = text .. ", " .. (WHY[row.why] or "not counted") end
+    if not row.counted then
+      local why = WHY[row.why]
+      if row.why == "not a guild group" and not D.GroupSettings().other then why = "not an all-guild group" end
+      text = text .. ", " .. (why or "not counted")
+    end
     out[#out + 1] = { at = line.at, text = text, gray = not row.counted }
   end
   return out
@@ -278,7 +282,7 @@ local function namesText(chars)
   return names[1] .. ", " .. names[2] .. " and " .. (#names - 2) .. " more"
 end
 
--- Verified clears with a guild majority, newest first.
+-- Verified clears by a guild group (the guild setting decides what that is), newest first.
 local function guildLines()
   local l, s = ns.leaderboard, services()
   local obs = l and l.observations
@@ -286,7 +290,8 @@ local function guildLines()
   local out = {}
   local cfg = l.realConfig or l.config
   local clock = ns.Scoring.Clock(cfg, s and s.compat, D.Now())
-  for _, c in ipairs(ns.Groups.Credit.Clears(obs:List("kill"), s and s.roster, clock, s and s.profile)) do
+  for _, c in ipairs(ns.Groups.Credit.Clears(obs:List("kill"), s and s.roster, clock, s and s.profile,
+    ns.Groups.Credit.Rules(cfg, obs))) do
     local inst = ns.Instances.Get(c.instance)
     local text = Util.Escape(inst.short) .. " cleared by " .. namesText(c.names)
     if c.dur then text = text .. ", " .. math.floor(c.dur / 60 + 0.5) .. " min" end

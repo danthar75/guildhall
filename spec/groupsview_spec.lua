@@ -254,6 +254,19 @@ describe("Groups.View", function()
     signups["p3:g1_1"] = { { profile = "p2", char = "Brakka-R", roles = { d = true }, at = NOW - 60 } }
     night = { ["Brakka-R"] = { ok = true, miss = 0 } }
     build()
+    -- the raid footnote states the rule raid kills follow
+    local function foot() return view.d.raidFoot.text end
+    assert.truthy(foot():find("Guild calendar raids count with non-guild players.", 1, true))
+    local gs
+    ns.leaderboard.config.set = { Get = function(_, id) if id == "groupsettings" then return { id = id, d = gs } end end }
+    gs = { calendar = false, other = false }
+    view:Refresh()
+    assert.truthy(foot():find("Raid kills count for all-guild groups.", 1, true))
+    gs = { calendar = false, other = true }
+    view:Refresh()
+    assert.truthy(foot():find("Raid kills count when most of the group is guild.", 1, true))
+    ns.leaderboard.config.set = nil
+    view:Refresh()
     local row = view.d.roster[1]
     assert.is_true(row.shown)
     assert.equal(true, row.check.checked) -- pre-ticked from the raider's own check
@@ -316,7 +329,14 @@ describe("Groups.View", function()
     assert.is_true(has("Stratholme (Undead) · Now"))
     assert.is_true(has("Posted by Brakka 10 min ago · \"fast run\""))
     assert.is_true(has("Group (1 of 5) · 1 online"))
+    -- "Count runs with non-guild players" is off by default
+    assert.is_true(has("Credit when an all-guild group kills the last boss. Once per dungeon per player per day."))
+    ns.leaderboard.config.set = { Get = function(_, id)
+      if id == "groupsettings" then return { id = id, d = { calendar = true, other = true } } end
+    end }
+    view:Refresh()
     assert.is_true(has("Credit when the group kills the last boss with 3+ guild members. Once per dungeon per player per day."))
+    ns.leaderboard.config.set = nil
     assert.is_true(buttons["Sign up"].shown)
     assert.is_false(buttons["Close post"].shown)
     click(buttons["Sign up"])
@@ -388,6 +408,16 @@ describe("Groups.View", function()
     assert.equal("Cleared Strat UD", view.hist.lines[2].text.text)
     assert.is_false(view.hist.lines[3].shown)
     assert.is_false(hasLike("not verified"))
+    -- a pug run reads by the guild setting
+    rows[2].why = "not a guild group"
+    view:Refresh()
+    assert.equal("Cleared RFC, not an all-guild group", view.hist.lines[1].text.text)
+    ns.leaderboard.config.set = { Get = function(_, id)
+      if id == "groupsettings" then return { id = id, d = { calendar = true, other = true } } end
+    end }
+    view:Refresh()
+    assert.equal("Cleared RFC, not mostly guild members", view.hist.lines[1].text.text)
+    ns.leaderboard.config.set = nil
     assert.same({}, errors)
   end)
 

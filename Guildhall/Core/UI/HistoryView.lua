@@ -257,6 +257,14 @@ function HistoryView.Describe(e)
     describePerms(e, out)
   elseif e.what == "checklist" then
     describeChecklist(e, out)
+  elseif e.what == "groups" then
+    local b = type(e.before) == "table" and e.before or {}
+    local a = type(e.after) == "table" and e.after or {}
+    for _, k in ipairs({ { "calendar", "raids on the guild calendar" }, { "other", "other runs" } }) do
+      if type(a[k[1]]) == "boolean" and a[k[1]] ~= b[k[1]] then
+        out[#out + 1] = "Groups: " .. k[2] .. (a[k[1]] and " count" or " don't count") .. " with non-guild players"
+      end
+    end
   elseif e.what == "bank" then
     local a = type(e.after) == "table" and e.after or {}
     local head = "Bank entry " .. (bankEntryText(e.key) or "(no longer in the ledger)") .. ": "

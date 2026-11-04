@@ -66,8 +66,35 @@ function Calendar.ValidateSignup(d)
   return true
 end
 
+-- guildraid { instance (a raid), start, title? (<= 64), at }: "this raid is on the guild calendar".
+-- Any member's client publishes one from cal:Refresh for each guild calendar event that maps to a
+-- raid, unless the store already holds one for (instance, start). Credit reads only these synced
+-- notices (Ruling U1b), never the local calendar, so every client decides a kill the same way. It
+-- lives until 400 days after the raid's window ends (start + 6 h + 1 day slack), so it outlives
+-- every kill it can match: exp = start + 21600 + 86400 + 400 days, inside the kind's retention.
+local RAID_FIELDS = { kind = true, instance = true, start = true, title = true, at = true }
+local OBS_RETENTION = 34560000
+local RAID_SLACK = 86400
+local RAID_RETENTION = OBS_RETENTION + 15 * 86400 + 21600 + 2 * RAID_SLACK
+
+function Calendar.ValidateGuildraid(d)
+  if type(d) ~= "table" then return false, "not a table" end
+  for k in pairs(d) do
+    if not RAID_FIELDS[k] then return false, "bad field: " .. tostring(k) end
+  end
+  local entry = type(d.instance) == "string" and ns.Instances.Get(d.instance)
+  if not entry or entry.kind ~= "raid" then return false, "bad instance" end
+  if not inT(d.at) or not inT(d.start) then return false, "bad time" end
+  if d.title ~= nil and not str(d.title) then return false, "bad title" end
+  if d.start > d.at + 15 * 86400 + RAID_SLACK or d.start < d.at - POST_WINDOW - RAID_SLACK then
+    return false, "bad start"
+  end
+  return true
+end
+
 if ns.Observations and ns.Observations.AddKind then
   ns.Observations.AddKind("signup", Calendar.ValidateSignup)
+  ns.Observations.AddKind("guildraid", Calendar.ValidateGuildraid, { retention = RAID_RETENTION })
 end
 
 local function tzOf(config, compat, now)
@@ -187,7 +214,8 @@ function Calendar.new(ctx)
 end
 
 -- Reads the guild calendar (today + 14 days) and publishes the player's own accepted/signed-up events,
--- once per (title, start). A nil reading (instance, restricted, secret) changes nothing.
+-- once per (title, start), and a guildraid notice for each raid event not over yet that the store
+-- doesn't hold yet. A nil reading (instance, restricted, secret) changes nothing.
 function C:Refresh()
   local now = math.floor(self.now())
   for k, start in pairs(self.sent) do
@@ -198,6 +226,7 @@ function C:Refresh()
   self.events = list
   local p = self.profile
   if p and p.NeedsConsent and p:NeedsConsent() then return true end
+  self:_announceRaids(list, now)
   for _, ev in ipairs(list) do
     if ev.myStatus == "accepted" or ev.myStatus == "signedup" then
       local title = ev.title:sub(1, MAX_STR)
@@ -210,6 +239,24 @@ function C:Refresh()
     end
   end
   return true
+end
+
+function C:_announceRaids(list, now)
+  local have = {}
+  for _, rec in ipairs(self.obs:List("guildraid")) do
+    local d = type(rec) == "table" and rec.d
+    if type(d) == "table" then have[tostring(d.instance) .. "|" .. tostring(d.start)] = true end
+  end
+  for _, ev in ipairs(list) do
+    local entry = ev.instance and ns.Instances.Get(ev.instance)
+    local key = tostring(ev.instance) .. "|" .. tostring(ev.start)
+    if entry and entry.kind == "raid" and isInt(ev.start) and ev.start >= now - POST_WINDOW and not have[key] then
+      local title = type(ev.title) == "string" and #ev.title <= MAX_STR and ev.title ~= "" and ev.title or nil
+      local status = self.obs:Publish({ kind = "guildraid", instance = ev.instance, start = ev.start, title = title,
+        at = now }, { exp = ev.start + POST_WINDOW + RAID_SLACK + OBS_RETENTION })
+      if status == "accepted" then have[key] = true end
+    end
+  end
 end
 
 -- The chars whose own signup observation for the event (title, start) exists, sorted.

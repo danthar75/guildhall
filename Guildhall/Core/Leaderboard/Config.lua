@@ -10,7 +10,8 @@ local ADDON, ns = ...
 --                   Newest version wins (re-ticking publishes excluded = false); expires after 2
 --                   years, which outlives the 400-day observations it points to.
 --   "history:<profile>:<t>:<n>"  append-only log of one decision (a weights change, a month
---                   retake, a permissions change or a bank review): { what, key, before, after,
+--                   retake, a permissions change, a bank review, a checklist change or a group
+--                   finder guild setting, what = "groups"): { what, key, before, after,
 --                   by = char, at }. Never replaced (a second version is rejected); expires after
 --                   2 years. n is a per-session counter.
 -- Weights, retakes and bank reviews need the "weights" / "retake" / "bankreview" permission (guild
@@ -45,7 +46,7 @@ local MAX_VALUE = 1e12
 local RETENTION = 34560000
 local HISTORY_RETENTION = 63072000 -- 2 years
 -- What a history record may describe.
-local HISTORY_WHAT = { weights = true, month = true, perms = true, bank = true, checklist = true }
+local HISTORY_WHAT = { weights = true, month = true, perms = true, bank = true, checklist = true, groups = true }
 local MAX_REF, MAX_REASON = 48, 80
 local EXCLUDE_FIELDS = { ref = true, excluded = true, reason = true, by = true, at = true }
 local REFUSED = "no permission"
@@ -75,6 +76,7 @@ local function canWriteHistory(self, char, what)
   if what == "perms" then return self.perms:IsGuildMaster(char) end
   if what == "bank" then return self.perms:Can(char, "bankreview") end
   if what == "checklist" then return self.perms:Can(char, "checklists") end
+  if what == "groups" then return self.perms:IsGuildMaster(char) end
   return canAdminister(self.roster, char)
 end
 
@@ -292,6 +294,17 @@ local function validHistory(self, rec)
   if d.what == "bank" then
     if not validRef(d.key) then return false, "bad key" end
     if not validBankState(d.before) or not validBankState(d.after) then return false, "bad bank change" end
+    return true
+  end
+  if d.what == "groups" then
+    -- the group finder guild settings: key "settings", sides { calendar = bool, other = bool }
+    local function side(x)
+      if type(x) ~= "table" or type(x.calendar) ~= "boolean" or type(x.other) ~= "boolean" then return false end
+      for k in pairs(x) do if k ~= "calendar" and k ~= "other" then return false end end
+      return true
+    end
+    if d.key ~= "settings" then return false, "bad key" end
+    if not side(d.before) or not side(d.after) then return false, "bad groups change" end
     return true
   end
   if d.what == "checklist" then

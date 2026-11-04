@@ -254,6 +254,19 @@ describe("Change history view", function()
         after = { name = "Fire", lines = { { kind = "item", item = 4242, count = 5 } } } }))
     end)
 
+    it("the group finder guild settings", function()
+      assert.same({ "Groups: raids on the guild calendar don't count with non-guild players" },
+        D({ what = "groups", key = "settings", before = { calendar = true, other = false },
+          after = { calendar = false, other = false } }))
+      assert.same({ "Groups: raids on the guild calendar count with non-guild players",
+        "Groups: other runs count with non-guild players" },
+        D({ what = "groups", key = "settings", before = { calendar = false, other = false },
+          after = { calendar = true, other = true } }))
+      assert.same({ "Groups: other runs don't count with non-guild players" },
+        D({ what = "groups", key = "settings", before = { calendar = true, other = true },
+          after = { calendar = true, other = false } }))
+    end)
+
     it("a weight type this version doesn't know", function()
       assert.same({ "Leaderboard weight an unknown activity: 1 -> 2" },
         D({ what = "weights", before = { ["future.kind"] = 1 }, after = { ["future.kind"] = 2 } }))
@@ -449,6 +462,77 @@ describe("Groups settings", function()
     assert.same({ h = true }, g.roles)
     assert.is_true(section.roles.h:GetChecked())
     assert.is_true(has("Keep at least one role."))
+  end)
+
+  describe("the guild section", function()
+    local state, gm, sets
+    before_each(function()
+      _G.GuildhallDB = { personal = {} }
+      state, gm, sets = { calendar = true, other = false }, false, {}
+      ns.leaderboard = { config = {} }
+      ns.Groups.Credit = {
+        Settings = function(cfg)
+          assert.equal(ns.leaderboard and ns.leaderboard.config, cfg)
+          return { calendar = state.calendar, other = state.other }
+        end,
+        CanSetSettings = function() return gm end,
+        SetSetting = function(_, key, on)
+          sets[#sets + 1] = key .. "=" .. tostring(on)
+          state[key] = on
+          return true
+        end,
+      }
+    end)
+
+    it("the guild master gets two checkboxes with the defaults, each saving its setting", function()
+      gm = true
+      build()
+      assert.is_true(has("Guild settings (guild master)"))
+      assert.is_true(has("Raids on the guild calendar count with non-guild players"))
+      assert.is_true(has("Other runs count with non-guild players"))
+      assert.is_true(section.calendar.shown)
+      assert.is_true(section.other.shown)
+      assert.is_true(section.calendar:GetChecked())
+      assert.is_false(section.other:GetChecked())
+      toggle(section.other, true)
+      toggle(section.calendar, false)
+      assert.same({ "other=true", "calendar=false" }, sets)
+      assert.is_true(section.other:GetChecked())
+      assert.is_false(section.calendar:GetChecked())
+      assert.same({}, errors)
+    end)
+
+    it("a refused save shows why and resets the box", function()
+      gm = true
+      build()
+      ns.Groups.Credit.SetSetting = function() return false, "no permission" end
+      toggle(section.other, true)
+      assert.is_false(section.other:GetChecked())
+      assert.is_true(has("Only the guild master can change this."))
+    end)
+
+    it("everyone else sees the current state as text", function()
+      build()
+      assert.is_false(section.calendar.shown)
+      assert.is_false(section.other.shown)
+      assert.is_true(has("Raids on the guild calendar with non-guild players: count"))
+      assert.is_true(has("Other runs with non-guild players: don't count"))
+      state = { calendar = false, other = true }
+      section.refresh()
+      assert.is_true(has("Raids on the guild calendar with non-guild players: don't count"))
+      assert.is_true(has("Other runs with non-guild players: count"))
+      assert.same({}, errors)
+    end)
+
+    it("without the leaderboard it reads as the defaults and offers nothing", function()
+      ns.leaderboard = nil
+      gm = true
+      ns.Groups.Credit.CanSetSettings = function(cfg) return cfg ~= nil end
+      build()
+      assert.is_false(section.calendar.shown)
+      assert.is_true(has("Raids on the guild calendar with non-guild players: count"))
+      assert.is_true(has("Other runs with non-guild players: don't count"))
+    end)
   end)
 
   it("My usual roles feed Ready now and Sign up", function()

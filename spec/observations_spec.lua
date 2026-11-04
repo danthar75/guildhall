@@ -183,6 +183,22 @@ describe("Observations", function()
       assert.equal("accepted", (a.obs:Publish(trade(now), { exp = now + RETENTION })))
     end)
 
+    it("a kind may declare a longer retention, which bounds its exp instead", function()
+      local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+      a.ns.Observations.AddKind("longish", nil, { retention = RETENTION + 1000 })
+      b.ns.Observations.AddKind("longish", nil, { retention = RETENTION + 1000 })
+      local now = clock.now()
+      local d = { kind = "longish", at = now }
+      assert.equal("accepted", (a.obs:Publish(d, { exp = now + RETENTION + 1000 })))
+      assert.equal("invalid", (a.obs:Publish(d, { exp = now + RETENTION + 1001 })))
+      assert.equal(1, #b.obs:List("longish"))
+      local by = a.profile:Id()
+      forge(a, { id = "long:o9", v = 1, t = now, exp = now + RETENTION + 1001, by = by, char = "Alice-Realm", d = d })
+      assert.is_nil(b.obs.set:Get("long:o9"))
+      -- other kinds keep 400 days
+      assert.equal("invalid", (a.obs:Publish(trade(now), { exp = now + RETENTION + 1 })))
+    end)
+
     it("an incoming record with exp past t + 400 days or before d.at is rejected", function()
       local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
       local now = clock.now()

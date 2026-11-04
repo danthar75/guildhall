@@ -339,6 +339,80 @@ describe("Groups Calendar", function()
     assert.is_nil(c.db.calSent["MC night|" .. start])
   end)
 
+  describe("guildraid notices", function()
+    local RETENTION = 34560000
+
+    it("any reader publishes one per (instance, start) for raid events, whatever their own status", function()
+      local a, b = client("A-R"), client("B-R")
+      local start = clock.now() + DAY
+      local evs = { { title = "MC night", start = start, instance = "mc", myStatus = nil },
+        { title = "Fun", start = start, instance = nil, myStatus = "accepted" },
+        { title = "Dungeon", start = start, instance = "strat_ud", myStatus = "accepted" },
+        { title = "Old MC", start = clock.now() - 7 * 3600, instance = "mc" } }
+      a.events, b.events = evs, evs
+      assert.is_true(a.cal:Refresh())
+      local list = a.obs:List("guildraid")
+      assert.equal(1, #list)
+      assert.same({ kind = "guildraid", instance = "mc", start = start, title = "MC night", at = clock.now() },
+        list[1].d)
+      assert.equal(start + 21600 + DAY + RETENTION, list[1].exp)
+      -- another client that already holds it, or a second refresh, doesn't add one
+      b.cal:Refresh()
+      a.cal:Refresh()
+      assert.equal(1, #b.obs:List("guildraid"))
+    end)
+
+    it("a calendar match seen by only one client gives the same credit on every client", function()
+      local a, b = client("A-R"), client("B-R")
+      local start = clock.now() + 600
+      a.events = { { title = "MC pug night", start = start, instance = "mc", myStatus = "accepted" } }
+      b.events = {}
+      a.cal:Refresh()
+      b.cal:Refresh()
+      local pugs = { "A-R", "B-R", "Raider-R" }
+      for i = 1, 12 do pugs[#pugs + 1] = "Pug" .. i .. "-X" end
+      verifiedKill(start + 3600, pugs)
+      local function raidboss(c)
+        local all = { List = function(_, kind) if kind == "kill" then return kills end return c.obs:List(kind) end }
+        local ctx = { roster = roster, config = c.cfg, compat = c.compat, now = clock.now, observations = all,
+          profile = c.profile }
+        local got = {}
+        for _, x in ipairs(ns.Activity.Deriver("kill")(kills, ctx)) do
+          if x.type == "groups.raidboss" and x.counted then got[#got + 1] = x.char end
+        end
+        table.sort(got)
+        return got
+      end
+      assert.same({ "A-R", "B-R", "Raider-R" }, raidboss(a))
+      assert.same(raidboss(a), raidboss(b))
+      -- with no notice anywhere, neither client credits the pug raid
+      obsStore = {}
+      local c2, d2 = client("Gm-R"), client("Raider-R")
+      assert.same({}, raidboss(c2))
+      assert.same({}, raidboss(d2))
+    end)
+
+    it("the validator is strict", function()
+      local V = ns.Observations.Validate
+      local function g(x)
+        local d = { kind = "guildraid", instance = "mc", start = 200000, title = "MC", at = 100000 }
+        for k, v in pairs(x or {}) do d[k] = v end
+        return d
+      end
+      assert.is_true((V(g())))
+      assert.is_true((V(g({ title = false }))) == false)
+      local nt = g(); nt.title = nil
+      assert.is_true((V(nt)))
+      assert.is_false((V(g({ instance = "strat_ud" }))))   -- not a raid
+      assert.is_false((V(g({ instance = "nope" }))))
+      assert.is_false((V(g({ title = string.rep("x", 65) }))))
+      assert.is_false((V(g({ extra = 1 }))))
+      assert.is_false((V(g({ start = 100000 + 15 * DAY + DAY + 1 }))))   -- too far ahead of at
+      assert.is_false((V(g({ start = 100000 - 21600 - DAY - 1 }))))      -- long over when announced
+      assert.is_false((V(g({ start = 1.5 }))))
+    end)
+  end)
+
   it("a nil reading publishes nothing and keeps the cached events", function()
     local c = client("Raider-R")
     local start = clock.now() + DAY

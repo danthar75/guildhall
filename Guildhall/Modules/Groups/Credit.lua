@@ -12,11 +12,13 @@ local ADDON, ns = ...
 -- with it. A cluster with two or more profiles is verified. Reports of one profile never verify
 -- each other. A member is credited, and a leader or assistant counts for RaidLeaders, only when at
 -- least 2 of the cluster's reporters list the name (one forged list can't add anyone).
--- Majority: a verified kill counts only when EVERY report's own member list has a guild majority:
--- guild members (Roster:IsMember == true; an unknown roster counts as non-guild) are more than half
--- of that list's distinct names. One honest list therefore vetoes a forged list padded with guild
--- names. A verified kill without a majority gives uncounted rows, why = "not a guild group", to its
--- reporters' own chars.
+-- Guild group (Ruling U1b, settings below): a raid kill on the guild calendar counts with any
+-- group while "calendar" is on (the default). Any other kill counts only when EVERY report's own
+-- member list passes "other": OFF (the default) every name on the list is a guild member
+-- (Roster:IsMember == true; an unknown roster counts as non-guild); ON guild members are more than
+-- half of the list's distinct names. Names a client couldn't read are absent and don't block. One
+-- honest list therefore vetoes a forged list padded with guild names. A verified kill that isn't a
+-- guild group gives uncounted rows, why = "not a guild group", to its reporters' own chars.
 -- Credit (char = member Name-Realm; the Ledger resolves the profile), deduplicated at derivation
 -- time, keeping the first in time order:
 --   groups.dungeon   per guild member at a counted final dungeon kill, once per
@@ -173,12 +175,117 @@ function Credit.Verified(kills, profile)
   return out
 end
 
+-- Guild settings (Ruling U1b) -------------------------------------------------------------
+-- core.config record "groupsettings" { calendar = bool, other = bool, by = author char, at = rec.t },
+-- exp = t + 10 years, sync bucket "c", version floor. Only the guild master (rank 0) may change it;
+-- on arrival an unknown roster rejects for now and an author who left the guild is accepted (the
+-- Leaderboard's model, as for perms). Without a record: calendar ON, other OFF.
+--   calendar  "Raids on the guild calendar count with non-guild players": a verified raid kill that
+--             matches a guild calendar raid (a synced "guildraid" observation of that instance with
+--             start - 1800 <= kill.at <= start + 21600) needs no guild share; pugs earn nothing
+--             anyway (they aren't Guildhall users). OFF: calendar raids follow `other`.
+--   other     "Other runs count with non-guild players" (dungeons, and raids not on the calendar):
+--             OFF = every name on every report is a guild member; ON = a guild majority on every
+--             report (I1).
+-- A change writes a history entry what = "groups", key = "settings", before/after
+-- { calendar, other }.
+local SETTINGS_ID = "groupsettings"
+local SETTINGS_RETENTION = 345600000 -- 10 years
+local SETTINGS_FIELDS = { calendar = true, other = true, by = true, at = true }
+local DEFAULTS = { calendar = true, other = false }
+local CAL_BEFORE, CAL_AFTER = 1800, 21600
+
+function Credit.ValidateSettings(config, rec)
+  if rec.id ~= SETTINGS_ID then return false, "bad settings id" end
+  local d = rec.d
+  if type(d) ~= "table" then return false, "not a table" end
+  for k in pairs(d) do if not SETTINGS_FIELDS[k] then return false, "unknown settings field" end end
+  if type(d.calendar) ~= "boolean" or type(d.other) ~= "boolean" then return false, "bad setting" end
+  if d.by ~= rec.char then return false, "settings author mismatch" end
+  if not finite(d.at) or d.at ~= rec.t then return false, "bad settings time" end
+  if rec.exp ~= rec.t + SETTINGS_RETENTION then return false, "bad settings expiry" end
+  local Config = ns.LbConfig
+  local status = Config.AuthorStatus(config.roster, rec.char)
+  if status == "unknown" or status == "bad" then return false, "roster unknown" end
+  if status == "left" then return true, Config.LEFT end
+  if not config.perms:IsGuildMaster(rec.char) then return false, "author not the guild master" end
+  return true
+end
+
+if ns.LbConfig and ns.LbConfig.AddRecordKind then
+  ns.LbConfig.AddRecordKind(SETTINGS_ID, { validate = Credit.ValidateSettings, bucket = "c", floor = true })
+end
+
+-- The guild settings { calendar, other } (the defaults without a record or config).
+function Credit.Settings(config)
+  local set = type(config) == "table" and config.set
+  local rec = type(set) == "table" and set.Get and set:Get(SETTINGS_ID) or nil
+  local d = type(rec) == "table" and rec.del ~= true and type(rec.d) == "table" and rec.d or {}
+  local out = {}
+  for k, v in pairs(DEFAULTS) do
+    if type(d[k]) == "boolean" then out[k] = d[k] else out[k] = v end
+  end
+  return out
+end
+
+-- Whether this client's player may change the settings (the guild master).
+function Credit.CanSetSettings(config)
+  return type(config) == "table" and config.perms ~= nil and config.perms:IsGuildMaster(config.playerChar) == true
+end
+
+-- Sets one setting ("calendar" or "other"). Returns true (also when unchanged) or false, reason.
+function Credit.SetSetting(config, key, on)
+  if DEFAULTS[key] == nil or type(on) ~= "boolean" then return false, "bad value" end
+  if not Credit.CanSetSettings(config) then return false, "no permission" end
+  local before = Credit.Settings(config)
+  if before[key] == on then return true end
+  local after = { calendar = before.calendar, other = before.other }
+  after[key] = on
+  local t = config.now()
+  local ok, err = config:PublishChecked(SETTINGS_ID, { calendar = after.calendar, other = after.other,
+    by = config.playerChar, at = t }, t + SETTINGS_RETENTION, t)
+  if not ok then return false, err end
+  config:_safeLogHistory("groups", "settings", before, after)
+  return true
+end
+
+-- The rules a derivation uses: the settings plus the guild calendar raids seen in the synced
+-- "guildraid" observations, by instance (start times). observations: anything with List(kind).
+function Credit.Rules(config, observations)
+  local rules = Credit.Settings(config)
+  local raids = {}
+  local list = observations and observations.List and observations:List("guildraid") or {}
+  for _, rec in ipairs(list) do
+    local d = type(rec) == "table" and rec.d
+    if type(d) == "table" and d.kind == "guildraid" and finite(d.start) and type(d.instance) == "string" then
+      raids[d.instance] = raids[d.instance] or {}
+      raids[d.instance][#raids[d.instance] + 1] = d.start
+    end
+  end
+  rules.raids = raids
+  return rules
+end
+
+-- Whether a raid kill matches a guild calendar raid of its instance in rules.raids.
+function Credit.OnCalendar(rules, kill)
+  local starts = type(rules) == "table" and type(rules.raids) == "table" and rules.raids[kill.instance]
+  if not starts then return false end
+  local entry = ns.Instances.Get(kill.instance)
+  if not entry or entry.kind ~= "raid" then return false end
+  for _, start in ipairs(starts) do
+    if kill.at >= start - CAL_BEFORE and kill.at <= start + CAL_AFTER then return true end
+  end
+  return false
+end
+
 local function isGuild(roster, n)
   return roster ~= nil and roster.IsMember ~= nil and roster:IsMember(n) == true
 end
 
--- Whether guild members are more than half of the distinct names of one list.
-local function guildMajority(names, roster)
+-- Whether one list is a guild group: mixed (the guild setting on) = guild members are more than
+-- half of its distinct names; otherwise every name is a guild member. Names a client couldn't read
+-- are simply not in the list.
+local function guildList(names, roster, mixed)
   local seen, n, g = {}, 0, 0
   for _, name in ipairs(names or {}) do
     if type(name) == "string" and not seen[name] then
@@ -187,23 +294,30 @@ local function guildMajority(names, roster)
       if isGuild(roster, name) then g = g + 1 end
     end
   end
-  return n > 0 and g > n / 2
+  if n == 0 then return false end
+  if mixed then return g > n / 2 end
+  return g == n
 end
 
--- The guild members a kill credits (confirmed names only), and whether it is a guild group: every
--- report's own member list has a guild majority (a kill without reports: its member list).
-function Credit.GuildMembers(kill, roster)
-  local majority = true
-  if type(kill.reports) == "table" and #kill.reports > 0 then
-    for _, r in ipairs(kill.reports) do
-      if not guildMajority(r.d and r.d.members, roster) then majority = false; break end
-    end
-  else
-    majority = guildMajority(kill.members, roster)
-  end
+-- The guild members a kill credits (confirmed names only), and whether it is a guild group. rules
+-- (Credit.Rules; nil = the defaults with no calendar raids): a raid kill on the guild calendar
+-- with rules.calendar needs no guild share; otherwise every report's own member list passes
+-- guildList with mixed = rules.other (a kill without reports: its member list).
+function Credit.GuildMembers(kill, roster, rules)
+  rules = type(rules) == "table" and rules or DEFAULTS
   local list = {}
   for _, n in ipairs(kill.confirmed or {}) do
     if isGuild(roster, n) then list[#list + 1] = n end
+  end
+  if rules.calendar and Credit.OnCalendar(rules, kill) then return list, true end
+  local mixed = rules.other == true
+  local majority = true
+  if type(kill.reports) == "table" and #kill.reports > 0 then
+    for _, r in ipairs(kill.reports) do
+      if not guildList(r.d and r.d.members, roster, mixed) then majority = false; break end
+    end
+  else
+    majority = guildList(kill.members, roster, mixed)
   end
   return list, majority
 end
@@ -217,6 +331,7 @@ end
 function Credit.Derive(list, ctx)
   local clock = clockOf(ctx)
   local roster, profile = ctx and ctx.roster, profileOf(ctx)
+  local rules = Credit.Rules(ctx and ctx.config, ctx and ctx.observations)
   local Scoring, Instances = ns.Scoring, ns.Instances
   local out, seen = {}, {}
 
@@ -265,7 +380,7 @@ function Credit.Derive(list, ctx)
   -- Pass 1: verified kills with a guild majority, in time order.
   for _, k in ipairs(clusters) do
     if k.verified then
-      local guild, majority = Credit.GuildMembers(k, roster)
+      local guild, majority = Credit.GuildMembers(k, roster, rules)
       if majority then
         local entry = Instances.ByEncounter(k.encounter)
         for _, ch in ipairs(guild) do emitKill(ch, k, nil) end
@@ -293,7 +408,7 @@ function Credit.Derive(list, ctx)
     local why
     if not k.verified then
       why = "not verified"
-    elseif not select(2, Credit.GuildMembers(k, roster)) then
+    elseif not select(2, Credit.GuildMembers(k, roster, rules)) then
       why = "not a guild group"
     end
     if why then
@@ -368,12 +483,13 @@ end
 -- has such a kill within one weekly reset period (Scoring.WeekStart); the entry is the kill that
 -- completed the set (its time and its guild members), and the set then starts again.
 -- clock: a Scoring clock ({ tz, weekStart? }); defaults to { tz = 0 }. profile: as Clusters.
-function Credit.Clears(kills, roster, clock, profile)
+-- rules: Credit.Rules (nil = the defaults, no calendar raids).
+function Credit.Clears(kills, roster, clock, profile, rules)
   clock = clock or { tz = 0 }
   local out, covered = {}, {}
   for _, k in ipairs(Credit.Verified(kills, profile)) do
     local entry, isFinal = ns.Instances.ByEncounter(k.encounter)
-    local guild, majority = Credit.GuildMembers(k, roster)
+    local guild, majority = Credit.GuildMembers(k, roster, rules)
     if majority and entry.kind == "dungeon" and isFinal then
       local dur
       for _, r in ipairs(k.reports) do

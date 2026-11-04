@@ -1,5 +1,5 @@
 describe("Groups Credit", function()
-  local ns, Credit, ctx, guild, chars, tz, seq, unknownRoster
+  local ns, Credit, ctx, guild, chars, tz, seq, unknownRoster, mixed
   local DAY, HOUR = 86400, 3600
   -- 20000 days after the epoch: a Friday, 00:00 UTC. The fallback weekly reset is Tuesday 15:00 UTC.
   local T0 = 20000 * DAY
@@ -47,7 +47,7 @@ describe("Groups Credit", function()
     loadAddonFile(ns, "Guildhall/Modules/Groups/Instances.lua")
     loadAddonFile(ns, "Guildhall/Modules/Groups/Credit.lua")
     Credit = ns.Groups.Credit
-    seq, tz, unknownRoster = 0, 0, false
+    seq, tz, unknownRoster, mixed = 0, 0, false, false
     guild = {}
     for _, n in ipairs({ "A-R", "B-R", "C-R", "D-R", "E-R", "F-R", "Helper-R" }) do guild[n] = true end
     chars = { p1 = { "A-R" }, p2 = { "B-R" }, p3 = { "C-R" } }
@@ -62,7 +62,11 @@ describe("Groups Credit", function()
           for p, list in pairs(chars) do for _, c in ipairs(list) do if c == ch then return p end end end
         end,
       },
-      config = { Tz = function() return tz end },
+      config = { Tz = function() return tz end, set = { Get = function(_, id)
+        if id == "groupsettings" and mixed then
+          return { id = id, d = type(mixed) == "table" and mixed or { calendar = true, other = true } }
+        end
+      end } },
       now = function() return T0 + 30 * DAY end,
     }
   end)
@@ -114,6 +118,7 @@ describe("Groups Credit", function()
   end)
 
   it("2 guild + 3 pugs at the last boss gives no credit even if 4 guild started", function()
+    mixed = true -- "Count runs with non-guild players" on: the majority rule
     local list = {}
     pair(list, "deadmines", 2741, { "A-R", "B-R", "C-R", "D-R", "X-R" }, T0 + HOUR)
     pair(list, "deadmines", 2747, { "A-R", "B-R", "X-R", "Y-R", "Z-R" }, T0 + 2 * HOUR)
@@ -215,6 +220,7 @@ describe("Groups Credit", function()
   end)
 
   it("a guild member without Guildhall earns nothing, not even toward the guild total", function()
+    mixed = true -- "Count runs with non-guild players" on: the majority rule
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Ledger.lua")
     ns.Observations = { KINDS = { kill = true } }
     local members = { "A-R", "B-R", "C-R", "X-R", "Y-R" } -- C-R is guild but has no profile
@@ -258,6 +264,83 @@ describe("Groups Credit", function()
     assert.equal(3, lists)
   end)
 
+  describe("the guild settings (Ruling U1b)", function()
+    local PUG1 = { "A-R", "B-R", "C-R", "D-R", "X-P" }
+    local THREE = { "A-R", "B-R", "C-R", "X-P", "Y-P" }
+    local raids
+    local function raidNight(start)
+      raids[#raids + 1] = { id = "gr" .. #raids, by = "p3", char = "C-R",
+        d = { kind = "guildraid", instance = "mc", start = start, at = start - DAY } }
+    end
+    -- 5 guild members and 15 pugs
+    local function mcPug()
+      local m = { "A-R", "B-R", "C-R", "D-R", "E-R" }
+      for i = 1, 15 do m[#m + 1] = "Pug" .. i .. "-P" end
+      return m
+    end
+    before_each(function()
+      raids = {}
+      ctx.observations = { changes = 1, List = function(_, kind) return kind == "guildraid" and raids or {} end }
+    end)
+
+    it("by default one non-guild player in a 5-man means no credit, why 'not a guild group'", function()
+      local list = pair({}, "rfc", RFC_FINAL, PUG1, T0)
+      local out = derive(list)
+      assert.same({}, charsOf(out, "groups.dungeon"))
+      assert.same({ "A-R", "B-R" }, charsOf(out, "groups.dungeon", false))
+      for _, c in ipairs(out) do assert.equal("not a guild group", c.why) end
+      assert.same({}, Credit.Clears(list, ctx.roster, nil, ctx.profile))
+      local k = Credit.Verified(list, ctx.profile)[1]
+      assert.is_false(select(2, Credit.GuildMembers(k, ctx.roster)))
+      -- an all-guild group counts
+      assert.same(FIVE, charsOf(derive(pair({}, "rfc", RFC_FINAL, FIVE, T0 + DAY)), "groups.dungeon"))
+    end)
+
+    it("by default a calendar MC with 15 pugs credits its guild members; without the event, nothing", function()
+      local start = T0 + 20 * HOUR
+      local list = pair({}, "mc", 663, mcPug(), start + HOUR)
+      assert.same({}, charsOf(derive(list), "groups.raidboss"))             -- no calendar event
+      raidNight(start)
+      assert.same(FIVE, charsOf(derive(list), "groups.raidboss"))           -- pugs earn nothing
+      local rules = Credit.Rules(ctx.config, ctx.observations)
+      local k = Credit.Verified(list, ctx.profile)[1]
+      assert.is_true(select(2, Credit.GuildMembers(k, ctx.roster, rules)))
+      -- the window is start - 30 min .. start + 6 h, and the event must be that raid
+      assert.same({}, charsOf(derive(pair({}, "mc", 664, mcPug(), start + 6 * HOUR + 1)), "groups.raidboss"))
+      assert.same(FIVE, charsOf(derive(pair({}, "mc", 665, mcPug(), start - 30 * 60)), "groups.raidboss"))
+      assert.same({}, charsOf(derive(pair({}, "bwl", 610, mcPug(), start + HOUR)), "groups.raidboss"))
+    end)
+
+    it("calendar off: calendar raids follow 'other'", function()
+      local start = T0 + 20 * HOUR
+      raidNight(start)
+      mixed = { calendar = false, other = false }
+      assert.same({}, charsOf(derive(pair({}, "mc", 663, mcPug(), start + HOUR)), "groups.raidboss"))
+      mixed = { calendar = false, other = true }  -- 5 of 20 isn't a majority either
+      assert.same({}, charsOf(derive(pair({}, "mc", 663, mcPug(), start + HOUR)), "groups.raidboss"))
+      local twelve = { "A-R", "B-R", "C-R", "D-R", "E-R", "F-R", "Helper-R", "X1-P", "X2-P", "X3-P" }
+      assert.same({ "A-R", "B-R", "C-R", "D-R", "E-R", "F-R", "Helper-R" },
+        charsOf(derive(pair({}, "mc", 664, twelve, start + HOUR)), "groups.raidboss"))
+    end)
+
+    it("other on: a guild majority on every report counts, 3 of 5 included", function()
+      mixed = { calendar = true, other = true }
+      local list = pair({}, "rfc", RFC_FINAL, THREE, T0)
+      assert.same({ "A-R", "B-R", "C-R" }, charsOf(derive(list), "groups.dungeon"))
+      local rules = Credit.Rules(ctx.config, ctx.observations)
+      assert.equal(1, #Credit.Clears(list, ctx.roster, nil, ctx.profile, rules))
+      assert.same({}, Credit.Clears(list, ctx.roster, nil, ctx.profile))
+      assert.same({}, charsOf(derive(pair({}, "rfc", RFC_FINAL, { "A-R", "B-R", "X-P", "Y-P", "Z-P" }, T0 + DAY)),
+        "groups.dungeon"))
+    end)
+
+    it("names a client couldn't read are just absent and don't block", function()
+      local list = pair({}, "rfc", RFC_FINAL, FIVE, T0)
+      list[2].d.members = { "A-R", "B-R", "C-R" } -- the other two were secret on that client
+      assert.same({ "A-R", "B-R", "C-R" }, charsOf(derive(list), "groups.dungeon"))
+    end)
+  end)
+
   it("one forged member list can't make a pug a guild group: the honest list vetoes", function()
     -- honest: 2 guild of 5. The forged list pads the union with guild names (5 guild of 8).
     local honest = kill("p2", "rfc", RFC_FINAL, { "B-R", "X-P", "Y-P", "Z-P", "C-R" }, T0)
@@ -273,24 +356,25 @@ describe("Groups Credit", function()
   end)
 
   it("a guild group needs a guild majority in every report's own list", function()
+    mixed = true
     local guild4 = { "A-R", "B-R", "C-R", "D-R", "X-P" }
     -- both lists 4 guild of 5: counted
     local list = pair({}, "rfc", RFC_FINAL, guild4, T0)
     assert.same({ "A-R", "B-R", "C-R", "D-R" }, charsOf(derive(list), "groups.dungeon"))
     local k = Credit.Verified(list, ctx.profile)[1]
-    assert.is_true(select(2, Credit.GuildMembers(k, ctx.roster)))
+    assert.is_true(select(2, Credit.GuildMembers(k, ctx.roster, { calendar = true, other = true })))
     -- a third report whose own list is exactly half guild (a client that couldn't read some names):
     -- not more than half, so the kill is not a guild group
     list[#list + 1] = kill("p3", "rfc", RFC_FINAL, { "A-R", "B-R", "X-P", "Y-P" }, T0 + 60)
     k = Credit.Verified(list, ctx.profile)[1]
     assert.equal(3, #k.reports)
-    assert.is_false(select(2, Credit.GuildMembers(k, ctx.roster)))
+    assert.is_false(select(2, Credit.GuildMembers(k, ctx.roster, { calendar = true, other = true })))
     assert.same({}, charsOf(derive(list), "groups.dungeon"))
     -- duplicate names in a list count once
     local dup = pair({}, "rfc", RFC_FINAL, { "A-R", "B-R", "X-P", "Y-P", "Z-P" }, T0 + DAY)
     dup[2].d.members = { "A-R", "B-R", "A-R", "B-R", "A-R", "X-P", "Y-P", "Z-P" }
     k = Credit.Verified(dup, ctx.profile)[1]
-    assert.is_false(select(2, Credit.GuildMembers(k, ctx.roster)))
+    assert.is_false(select(2, Credit.GuildMembers(k, ctx.roster, { calendar = true, other = true })))
   end)
 
   it("a report counts only from a linked profile that owns its char", function()

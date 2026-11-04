@@ -8,8 +8,11 @@ local ADDON, ns = ...
 --              ns.Groups.Details.PersonalRoles). At least one role stays ticked.
 -- Missing values are filled by Reminders.Defaults (never by DB.lua's merge, which would add DPS back
 -- to a saved choice). Without SavedVariables the boxes show the defaults and save nothing.
--- SettingsView.Build(parent) -> section { refresh, reminders, sound, roles = { t, h, d } }; sets the
--- parent's height. No named globals.
+-- Below them, the guild settings (Ruling U1b, ns.Groups.Credit.Settings / SetSetting on the real
+-- Leaderboard config): two checkboxes for the guild master, the current state as text for everyone
+-- else.
+-- SettingsView.Build(parent) -> section { refresh, reminders, sound, roles = { t, h, d }, calendar,
+-- other }; sets the parent's height. No named globals.
 ns.Groups = ns.Groups or {}
 local UI = ns.UI
 local SettingsView = {}
@@ -18,6 +21,30 @@ ns.Groups.SettingsView = SettingsView
 local ROLES = { "t", "h", "d" }
 local ROLE_NAME = { t = "Tank", h = "Healer", d = "DPS" }
 local KEEP_ONE = "Keep at least one role."
+local GUILD_ONLY = "Only the guild master can change this."
+local NOT_SAVED = "Couldn't save that. Try again."
+local GUILD_KEYS = {
+  { key = "calendar", box = "Raids on the guild calendar count with non-guild players",
+    text = "Raids on the guild calendar with non-guild players: " },
+  { key = "other", box = "Other runs count with non-guild players",
+    text = "Other runs with non-guild players: " },
+}
+
+local function guildConfig()
+  local l = ns.leaderboard
+  return l and (l.realConfig or l.config) or nil
+end
+
+local function guildSettings()
+  local C = ns.Groups.Credit
+  if C and C.Settings then return C.Settings(guildConfig()) end
+  return { calendar = true, other = false }
+end
+
+local function canSetGuild()
+  local C, cfg = ns.Groups.Credit, guildConfig()
+  return cfg ~= nil and C ~= nil and C.CanSetSettings ~= nil and C.CanSetSettings(cfg) == true
+end
 
 local function on(w, event, fn)
   w:SetScript(event, function(...) return UI.Try(fn, ...) end)
@@ -84,7 +111,27 @@ function SettingsView.Build(parent)
   end
   section.status = UI.Text(parent, "GameFontDisableSmall", "")
   section.status:SetPoint("TOPLEFT", 4, -116)
-  if parent.SetHeight then parent:SetHeight(136) end
+
+  -- Guild settings
+  section.guildHead = UI.Text(parent, "GameFontNormal", "Guild settings")
+  section.guildHead:SetPoint("TOPLEFT", 4, -140)
+  section.guildRows = {}
+  for i, g in ipairs(GUILD_KEYS) do
+    local y = -160 - (i - 1) * 26
+    local cb, label = checkbox(parent, g.box, 0, y)
+    local state = UI.Text(parent, "GameFontHighlight", "")
+    state:SetPoint("TOPLEFT", 4, y - 5)
+    on(cb, "OnClick", function(self)
+      local ok, err = ns.Groups.Credit.SetSetting(guildConfig(), g.key, self:GetChecked() == true)
+      section.guildStatus:SetText(ok and "" or (err == "no permission" and GUILD_ONLY or NOT_SAVED))
+      section.refresh()
+    end)
+    section[g.key] = cb
+    section.guildRows[i] = { cb = cb, label = label, state = state, def = g }
+  end
+  section.guildStatus = UI.Text(parent, "GameFontDisableSmall", "")
+  section.guildStatus:SetPoint("TOPLEFT", 4, -214)
+  if parent.SetHeight then parent:SetHeight(234) end
 
   function section.refresh()
     local c = current()
@@ -96,6 +143,19 @@ function SettingsView.Build(parent)
       section.soundLabel:SetTextColor(v, v, v)
     end
     for _, r in ipairs(ROLES) do section.roles[r]:SetChecked(c.roles[r] == true) end
+    local gs, gm = guildSettings(), canSetGuild()
+    section.guildHead:SetText(gm and "Guild settings (guild master)" or "Guild settings")
+    for _, row in ipairs(section.guildRows) do
+      local v = gs[row.def.key] == true
+      if gm then
+        row.cb:SetChecked(v)
+        row.cb:Show(); row.label:Show(); row.state:Hide()
+      else
+        row.cb:Hide(); row.label:Hide()
+        row.state:SetText(row.def.text .. (v and "count" or "don't count"))
+        row.state:Show()
+      end
+    end
   end
 
   section.refresh()

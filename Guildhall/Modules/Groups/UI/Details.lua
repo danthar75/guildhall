@@ -30,9 +30,15 @@ Details.LAYOUT = { signHead = SIGN_HEAD_Y, signTop = SIGN_Y, signRow = SIGN_H, s
   foot = FOOT_Y, footH = FOOT_H, button = BUTTON_H, buttonGap = BUTTON_GAP }
 local ACTIVE = 7200 -- a raid within 2 h of its start counts the current group as its roster
 
-local DUNGEON_FOOT = "Credit when the group kills the last boss with 3+ guild members. Once per dungeon per player per day."
+-- The footnotes follow the guild settings (Ruling U1b): the dungeon one "Other runs count with
+-- non-guild players", the raid one adds the rule raid kills follow.
+local DUNGEON_FOOT_MIXED = "Credit when the group kills the last boss with 3+ guild members. Once per dungeon per player per day."
+local DUNGEON_FOOT = "Credit when an all-guild group kills the last boss. Once per dungeon per player per day."
 local RAID_FOOT = "Ticks are pre-filled from each raider's own bag and gear check. Only your tick earns \"prepared\" "
   .. "credit. Every change is in the change history."
+local RAID_RULE_CAL = " Guild calendar raids count with non-guild players."
+local RAID_RULE_ALL = " Raid kills count for all-guild groups."
+local RAID_RULE_MOST = " Raid kills count when most of the group is guild."
 local ERRORS = {
   consent = "Choose which characters to share first (Settings).",
   trial = "Trial accounts can't post or sign up.",
@@ -52,6 +58,14 @@ end
 
 local function services() return ns.services end
 local function lb() return ns.leaderboard end
+
+-- The guild settings { calendar, other } (Credit.Settings; the defaults while unknown).
+function Details.GroupSettings()
+  local l, C = lb(), ns.Groups.Credit
+  local cfg = l and (l.realConfig or l.config)
+  if C and C.Settings then return C.Settings(cfg) end
+  return { calendar = true, other = false }
+end
 
 function Details.Now()
   local s = services()
@@ -360,7 +374,7 @@ local function showDungeon(post)
     d.signMore:Show()
   end
 
-  d.foot:SetText(DUNGEON_FOOT)
+  d.foot:SetText(Details.GroupSettings().other and DUNGEON_FOOT_MIXED or DUNGEON_FOOT)
   d.foot:Show()
   if mine then
     d.postLF:Show(); d.copy:Show(); d.close:Show()
@@ -567,7 +581,8 @@ local function showRaid(entry)
     d.rosterEmpty:SetText("Nobody has signed up yet.")
     d.rosterEmpty:Show()
   end
-  d.raidFoot:SetText(RAID_FOOT)
+  local gs = Details.GroupSettings()
+  d.raidFoot:SetText(RAID_FOOT .. (gs.calendar and RAID_RULE_CAL or gs.other and RAID_RULE_MOST or RAID_RULE_ALL))
   d.raidFoot:Show()
   if canPrep and #chars > 0 then d.confirmAll:Show() end
   if instance and Details.Can("checklists", instance) then d.editCl:Show() end

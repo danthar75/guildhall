@@ -15,16 +15,19 @@ local MAX_STR, MAX_ITEMS = 64, 6
 
 Obs.KINDS = { trade = true, cod = true, manual = true, witness = true, bank = true }
 
-local VALIDATORS, FIELDS = {}, {}
+local VALIDATORS, FIELDS, KEEP = {}, {}, {}
 local MAX_NAMES = 40
 
 -- Registers a kind. validateFn(d) -> ok, err is an optional strict check that runs after the
 -- generic ones. opts.fields = { members = true, assists = true } declares the array fields the kind
--- may carry; other kinds reject them.
+-- may carry; other kinds reject them. opts.retention (seconds) replaces the 400-day bound on that
+-- kind's exp (exp <= t + retention).
 function Obs.AddKind(kind, validateFn, opts)
   if type(kind) == "string" and kind ~= "" then
     Obs.KINDS[kind] = true
     FIELDS[kind] = type(opts) == "table" and type(opts.fields) == "table" and opts.fields or nil
+    local keep = type(opts) == "table" and opts.retention or nil
+    KEEP[kind] = type(keep) == "number" and keep > 0 and keep or nil
     VALIDATORS[kind] = type(validateFn) == "function" and validateFn or nil
   end
 end
@@ -39,10 +42,10 @@ end
 
 local function finite(x) return type(x) == "number" and x == x and x ~= math.huge and x ~= -math.huge end
 
--- A record's expiry is valid when it is no later than the retention after its publish time and no
--- earlier than the event it records.
-local function validExp(exp, t, at)
-  return finite(exp) and finite(t) and finite(at) and exp <= t + RETENTION and exp >= at
+-- A record's expiry is valid when it is no later than its kind's retention (400 days unless the kind
+-- declares one) after its publish time and no earlier than the event it records.
+local function validExp(exp, t, at, kind)
+  return finite(exp) and finite(t) and finite(at) and exp <= t + (KEEP[kind] or RETENTION) and exp >= at
 end
 
 function Obs.Validate(d)
@@ -158,7 +161,7 @@ function Obs.New(ctx)
         local ok, err = Obs.Validate(rec.d)
         if not ok then return false, err end
         if rec.d.at > self.now() + DAY then return false, "at too far ahead" end
-        if not validExp(rec.exp, rec.t, rec.d.at) then return false, "bad exp" end
+        if not validExp(rec.exp, rec.t, rec.d.at, rec.d.kind) then return false, "bad exp" end
       end
       return true
     end,
@@ -195,7 +198,7 @@ function O:Publish(d, opts)
   local t = self.now()
   local exp = t + RETENTION
   if type(opts) == "table" and opts.exp ~= nil then
-    if not validExp(opts.exp, t, d.at) then return "invalid", "bad exp" end
+    if not validExp(opts.exp, t, d.at, d.kind) then return "invalid", "bad exp" end
     exp = opts.exp
   end
   local rec = { id = self:_nextId(), v = 1, t = t, exp = exp,
