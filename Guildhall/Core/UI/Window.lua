@@ -1,7 +1,8 @@
 local ADDON, ns = ...
 
 -- Main window plus small shared UI helpers used by the other Core/UI files.
--- Named globals: "GuildhallMainFrame" (required so ESC can close it via UISpecialFrames).
+-- Named globals: "GuildhallMainFrame" and "GuildhallUIPickList" (both required so ESC can close
+-- them via UISpecialFrames).
 local UI = ns.UI or {}
 ns.UI = UI
 
@@ -56,6 +57,7 @@ end
 
 -- Icon texture for a listing's item: the item's own icon for an item link, otherwise a
 -- question mark (typed names, Discord imports, items the client hasn't cached).
+UI.LOGO = "Interface\\AddOns\\Guildhall\\Media\\Logo"
 UI.UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 function UI.ItemIcon(item)
   local id = ns.Util.IsItemLink(item) and ns.Util.ItemIdFromLink(item) or nil
@@ -91,7 +93,7 @@ end
 -- Small custom popup list (no UIDropDownMenu / Menu API: they differ between clients).
 -- UI.PickList(anchor, items, onPick, current): items = { {label=, value=, indent=?}, ... };
 -- onPick(value, item) runs after the popup closes. Closed by a choice, a click elsewhere
--- (a full-screen catcher behind it) or Esc (the catcher takes the key). Long lists scroll
+-- (a full-screen catcher behind it) or Esc (UISpecialFrames; this also closes the main window). Long lists scroll
 -- with the mouse wheel. One shared, unnamed popup; opening it again re-fills it.
 local PICK_ROW, PICK_MAX = 18, 16
 local pick -- { catcher, frame, rows }
@@ -124,9 +126,10 @@ local function pickBuild()
   catcher:SetAllPoints(UIParent)
   catcher:SetFrameStrata("FULLSCREEN")
   catcher:RegisterForClicks("AnyUp")
-  catcher:EnableKeyboard(true)
   catcher:Hide()
-  local frame = CreateFrame("Frame", nil, UIParent, BACKDROP_TEMPLATE)
+  -- Named only so Esc can close it through UISpecialFrames. A keyboard-catching frame would
+  -- need SetPropagateKeyboardInput, which is blocked in combat and could swallow movement keys.
+  local frame = CreateFrame("Frame", "GuildhallUIPickList", UIParent, BACKDROP_TEMPLATE)
   frame:SetFrameStrata("FULLSCREEN_DIALOG")
   frame:SetClampedToScreen(true)
   frame:EnableMouse(true)
@@ -135,14 +138,8 @@ local function pickBuild()
   frame:Hide()
   pick = { catcher = catcher, frame = frame, rows = {}, items = {}, offset = 0 }
   catcher:SetScript("OnClick", function() UI.Try(pickClose) end)
-  catcher:SetScript("OnKeyDown", function(self, key)
-    UI.Try(function()
-      -- Esc closes the popup only; every other key still reaches the game.
-      local esc = key == "ESCAPE"
-      if self.SetPropagateKeyboardInput then pcall(self.SetPropagateKeyboardInput, self, not esc) end
-      if esc then pickClose() end
-    end)
-  end)
+  frame:SetScript("OnHide", function() UI.Try(function() catcher:Hide() end) end)
+  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhallUIPickList") end
   frame:SetScript("OnMouseWheel", function(_, delta)
     UI.Try(function() pick.offset = pick.offset - delta; pickRender() end)
   end)
@@ -292,7 +289,7 @@ local Window = {}
 UI.Window = Window
 
 local WIDTH, HEIGHT = 760, 500
-local frame, tabs, current, titleText, tabard
+local frame, tabs, current, titleText, tabard, logo
 
 local function collectTabs()
   local list = {}
@@ -404,6 +401,11 @@ local function build()
 
   tabard = UI.Tabard(frame, 44)
   tabard:SetPoint("TOPLEFT", 12, -10)
+  -- Guildhall's own logo takes the tabard's place outside a guild.
+  logo = frame:CreateTexture(nil, "ARTWORK")
+  logo:SetTexture(UI.LOGO)
+  logo:SetSize(44, 44)
+  logo:SetPoint("TOPLEFT", 12, -10)
 
   titleText = UI.Text(frame, "GameFontNormalLarge")
   titleText:SetPoint("TOPLEFT", 16, -14)
@@ -457,7 +459,9 @@ end
 local function applyTitle()
   local guild = ns.compat and ns.compat:GuildName()
   local branded = guild ~= nil and UI.Try(UI.ApplyTabard, tabard) == true
-  local left = branded and 64 or 16
+  if not branded then tabard:Hide() end
+  if branded then logo:Hide() else logo:Show() end
+  local left = 64
   titleText:ClearAllPoints()
   titleText:SetPoint("TOPLEFT", left, -14)
   local base = ns.Theme.Get("title") or "Guildhall"
@@ -468,7 +472,7 @@ local function applyTitle()
   end
   local accent = ns.Theme.Get("accent")
   if accent then titleText:SetTextColor(accent[1], accent[2], accent[3]) end
-  local x = branded and 62 or 14
+  local x = 62
   for _, tab in ipairs(tabs or {}) do
     tab.button:ClearAllPoints()
     tab.button:SetPoint("TOPLEFT", x, -40)
