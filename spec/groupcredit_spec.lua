@@ -541,6 +541,23 @@ describe("Groups Credit", function()
       assert.is_nil(credit:AttendedNear("mc", "A-R", T0 + HOUR))
     end)
 
+    it("also returns the first kill of the run: that instance's kills chained with gaps under 6 h", function()
+      local list = {}
+      pair(list, "mc", 663, FIVE, T0 + 23 * HOUR + 50 * MIN)        -- 23:50
+      pair(list, "mc", 664, FIVE, T0 + DAY + 40 * MIN)              -- 00:40 the next day
+      pair(list, "mc", 665, FIVE, T0 + DAY + 40 * MIN + 6 * HOUR)   -- exactly 6 h later: a new run
+      pair(list, "bwl", 610, FIVE, T0 + DAY + 50 * MIN)             -- another instance never chains
+      local credit = service(list)
+      local k, first = credit:AttendedNear("mc", "A-R", T0 + DAY + 30 * MIN)
+      assert.equal(664, k.encounter)
+      assert.equal(663, first.encounter)
+      local k2, first2 = credit:AttendedNear("mc", "A-R", T0 + DAY + 40 * MIN + 6 * HOUR)
+      assert.equal(665, k2.encounter)
+      assert.equal(665, first2.encounter)
+      local _, bfirst = credit:AttendedNear("bwl", "A-R", T0 + DAY + 50 * MIN)
+      assert.equal(610, bfirst.encounter)
+    end)
+
     it("non-final dungeon kills don't count (they expire after 2 days)", function()
       local list = pair({}, "deadmines", 2741, FIVE, T0 + HOUR)
       local credit = service(list)

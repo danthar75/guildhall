@@ -426,6 +426,7 @@ C.__index = C
 
 -- Bumped on ProfilesChanged: a newly linked char can verify a kill without a new observation.
 local profileGen = 0
+local RUN_GAP = 21600 -- kills of one instance less than 6 h apart are one run
 
 function Credit.ProfilesChanged()
   profileGen = profileGen + 1
@@ -469,6 +470,13 @@ function C:_dayIndex()
       local bset = bosses[key] or {}
       bosses[key] = bset
       bset[k.encounter] = true
+    end
+    -- runs: an instance's kills chained with gaps under 6 h; r.first = the run's first kill
+    local last = {}
+    for _, r in ipairs(runs) do
+      local k, prev = r.kill, last[r.kill.instance]
+      r.first = (prev and k.at - prev.kill.at < RUN_GAP) and prev.first or k
+      last[k.instance] = r
     end
     cache = { changes = changes, tz = tz, gen = profileGen, byDay = byDay, members = members, bosses = bosses,
       runs = runs }
@@ -538,7 +546,8 @@ end
 local ATTEND_BEFORE, ATTEND_AFTER = 1800, 21600
 
 -- The earliest verified kill (Credit.Verified's table; read-only) of `instance` (nil = any raid) with
--- from <= kill.at <= to that credits `char` (named by at least 2 of its reporters), or nil.
+-- from <= kill.at <= to that credits `char` (named by at least 2 of its reporters), and the first
+-- kill of its run (that instance's verified kills chained with gaps under 6 h), or nil.
 -- Non-final dungeon boss kills never count (they expire after 2 days).
 function C:AttendedIn(instance, char, from, to)
   if type(char) ~= "string" or not finite(from) or not finite(to) then return nil end
@@ -546,16 +555,17 @@ function C:AttendedIn(instance, char, from, to)
     local k = r.kill
     if k.at > to then break end
     if k.at >= from and r.confirmed[char] and (k.instance == instance or (instance == nil and r.raid)) then
-      return k
+      return k, r.first
     end
   end
   return nil
 end
 
 -- The earliest verified kill of `instance` crediting `char` with kill.at in [at - 1800, at + 21600],
--- or nil: a raider counts as present for a confirmation, ask or signup at `at` when this returns a
--- kill. Callers key "one per night" on the server day of the returned kill, not of `at`, so a raid
--- that forms before midnight and kills after it is one night.
+-- and the first kill of its run, or nil: a raider counts as present for a confirmation, ask or
+-- signup at `at` when this returns a kill. Prepared and flex key "one per night" on the run (its
+-- first kill, credited on that kill's server day, Ruling F4), so a raid that forms before midnight
+-- and kills on both sides of it is one night.
 function C:AttendedNear(instance, char, at)
   if not finite(at) then return nil end
   return self:AttendedIn(instance, char, at - ATTEND_BEFORE, at + ATTEND_AFTER)

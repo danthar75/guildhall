@@ -16,7 +16,8 @@ local ADDON, ns = ...
 --     from the roster means not permitted; a raidlead grant needs Credit.RaidLeaders that night);
 --   * a flexdone from the raider's profile (profile:OwnerOf(raider) == rec.by) with 0 <= at - ask.at <=
 --     900, or a flexok from the asker's profile (rec.by equal to the ask's rec.by), exists.
--- One groups.flex per raider per instance per night: the first qualifying ask by (at, id) counts, later
+-- One groups.flex per raider per instance per raid run (the instance's verified kills chained with gaps
+-- under 6 h, Ruling F4): the first qualifying ask by (at, id) counts, later
 -- ones get an uncounted row, why = "already credited tonight" (own chars only).
 -- An ask whose asker's profile owns the raider never counts. Uncounted rows ("waiting for the switch",
 -- "not permitted") go only to the raider's own chars (the deriving client's profile).
@@ -129,7 +130,7 @@ function Flex.Derive(list, ctx)
   local leadersOf, out = {}, {}
   for _, rec in ipairs(asks) do
     local d = rec.d
-    local kill = credit:AttendedNear(d.instance, d.raider, d.at)
+    local kill, first = credit:AttendedNear(d.instance, d.raider, d.at)
     local day = kill and ns.Scoring.DayKey(kill.at, tz)
     local lk = kill and d.instance .. "|" .. day
     if lk then leadersOf[lk] = leadersOf[lk] or credit:RaidLeaders(d.instance, day) end
@@ -153,7 +154,7 @@ function Flex.Derive(list, ctx)
           end
         end
         if done then
-          local ck = d.raider .. "|" .. lk
+          local ck = d.raider .. "|" .. d.instance .. "|" .. tostring(first.at) .. "|" .. tostring(first.id)
           if credited[ck] then
             row.counted, row.why = false, "already credited tonight"
           else

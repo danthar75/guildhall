@@ -544,6 +544,36 @@ describe("Groups Checklist", function()
       assert.equal(1, #derive(off))
     end)
 
+    it("one raid run across midnight earns one prepared, whichever day each confirmation matched", function()
+      grant({ prepared = { ranks = { 1 }, raidlead = false } })
+      local off = client("Off-R")
+      clock.advance(3 * 3600 + 40 * 60) -- 23:40
+      local t0 = clock.now()
+      assert.is_true((off.cl:Confirm("Raider-R", "mc", true)))
+      verifiedKill(t0 + 10 * 60, "Gm-R", {}) -- 23:50
+      clock.advance(50 * 60)                 -- 00:30
+      assert.is_true((off.cl:Confirm("Raider-R", "mc", true)))
+      verifiedKill(t0 + 60 * 60, "Gm-R", {}) -- 00:40
+      kills[#kills].d.encounter, kills[#kills - 1].d.encounter = MC[2], MC[2]
+      local out = derive(off)
+      assert.equal(1, prepared(out, "Raider-R"))
+      assert.equal(1, #out)
+      assert.equal("prepared:mc:" .. ns.Scoring.DayKey(t0 + 10 * 60, 0) .. ":Raider-R", out[1].ref)
+    end)
+
+    it("two runs of one instance on one server day earn two prepared with distinct refs", function()
+      grant({ prepared = { ranks = { 1 }, raidlead = false } })
+      local off = client("Off-R")
+      local t0 = clock.now() - 12 * 3600 -- 08:00
+      off.obs:Publish({ kind = "prepared", raider = "Raider-R", instance = "mc", ok = true, at = t0 })
+      verifiedKill(t0 + 600, "Gm-R", {})
+      off.obs:Publish({ kind = "prepared", raider = "Raider-R", instance = "mc", ok = true, at = t0 + 8 * 3600 })
+      verifiedKill(t0 + 8 * 3600 + 600, "Gm-R", {})
+      local out = derive(off)
+      assert.equal(2, prepared(out, "Raider-R"))
+      assert.not_equal(out[1].ref, out[2].ref)
+    end)
+
     it("a confirmation 7 h before any kill earns nothing", function()
       grant({ prepared = { ranks = { 1 }, raidlead = false } })
       local off = client("Off-R")

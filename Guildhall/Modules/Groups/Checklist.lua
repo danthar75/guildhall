@@ -35,11 +35,12 @@ local ADDON, ns = ...
 -- Deriver "prepared": a confirmation counts only when the raider attended: Credit's AttendedNear finds a
 -- verified kill of that instance crediting the raider (named by at least 2 reports) with kill.at in
 -- [at - 30 min, at + 6 h], so a confirmation backdated to a night the raider wasn't there earns
--- nothing, and one at 23:40 before kills after midnight still counts. The night is the server day of
--- that kill. Per (raider, instance, night), the newest confirmation whose author is permitted when
--- deriving wins (the author's rank from this client's roster; not on the roster means not permitted;
--- a raidlead grant needs Credit.RaidLeaders for that instance and night). One groups.prepared
--- contribution when it says ok = true.
+-- nothing, and one at 23:40 before kills after midnight still counts. The night is the raid run of
+-- that kill (the instance's kills chained with gaps under 6 h, Ruling F4), credited on the server day
+-- of the run's first kill. Per (raider, instance, run), the newest confirmation whose author is
+-- permitted when deriving wins (the author's rank from this client's roster; not on the roster means
+-- not permitted; a raidlead grant needs Credit.RaidLeaders for that instance on the matched kill's
+-- day). One groups.prepared contribution when it says ok = true.
 --
 -- Globals: ns.Groups.Checklist.
 ns.Groups = ns.Groups or {}
@@ -200,17 +201,17 @@ function Checklist.DerivePrepared(list, ctx)
     local d = type(rec) == "table" and rec.d
     if type(d) == "table" and d.kind == "prepared" and type(d.raider) == "string" and type(d.ok) == "boolean"
         and finite(d.at) and ns.Instances.Get(d.instance) and type(rec.char) == "string" then
-      local kill = credit:AttendedNear(d.instance, d.raider, d.at)
+      local kill, first = credit:AttendedNear(d.instance, d.raider, d.at)
       if kill then
-        local day = ns.Scoring.DayKey(kill.at, tz)
-        local lk = d.instance .. "|" .. day
+        local lk = d.instance .. "|" .. ns.Scoring.DayKey(kill.at, tz)
         local set = leadersOf[lk]
         if not set then
-          set = credit:RaidLeaders(d.instance, day)
+          set = credit:RaidLeaders(d.instance, ns.Scoring.DayKey(kill.at, tz))
           leadersOf[lk] = set
         end
+        local day = ns.Scoring.DayKey(first.at, tz)
         if perms:Can(rec.char, "prepared", { raidLeaders = set }) then
-          local key = d.raider .. "|" .. lk
+          local key = d.raider .. "|" .. d.instance .. "|" .. tostring(first.at) .. "|" .. tostring(first.id)
           local cur = best[key]
           if not cur then keys[#keys + 1] = key end
           if not cur or newer(rec, cur) then best[key], dayOf[key] = rec, day end
@@ -219,13 +220,16 @@ function Checklist.DerivePrepared(list, ctx)
     end
   end
   table.sort(keys)
-  local out = {}
+  -- ref "prepared:<instance>:<day>:<raider>"; a second run of that instance the same day adds ":<n>"
+  local out, used = {}, {}
   for _, key in ipairs(keys) do
     local rec = best[key]
     local d = rec.d
     if d.ok == true then
-      out[#out + 1] = { type = "groups.prepared", char = d.raider, value = 1, at = d.at, counted = true,
-        ref = "prepared:" .. d.instance .. ":" .. dayOf[key] .. ":" .. d.raider }
+      local ref = "prepared:" .. d.instance .. ":" .. dayOf[key] .. ":" .. d.raider
+      used[ref] = (used[ref] or 0) + 1
+      if used[ref] > 1 then ref = ref .. ":" .. used[ref] end
+      out[#out + 1] = { type = "groups.prepared", char = d.raider, value = 1, at = d.at, counted = true, ref = ref }
     end
   end
   return out

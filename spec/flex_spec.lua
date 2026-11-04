@@ -175,6 +175,27 @@ describe("Groups Flex", function()
     assert.equal("already credited tonight", second.why)
   end)
 
+  it("one raid run across midnight earns one flex, whichever day each ask matched", function()
+    grant({ flex = { ranks = { 1 }, raidlead = false } })
+    spec = 1
+    local raider, off = client("Raider-R"), client("Off-R")
+    clock.advance(3 * 3600 + 40 * 60) -- 23:40
+    local t0 = clock.now()
+    off.fx:Ask("Raider-R", "mc")
+    clock.advance(60); spec = 2; raider.fx:OnSpecChanged()
+    verifiedKill(t0 + 10 * 60, "Gm-R", {}) -- 23:50
+    clock.advance(49 * 60)                 -- 00:30
+    local _, id2 = off.fx:Ask("Raider-R", "mc")
+    clock.advance(60); spec = 1; raider.fx:OnSpecChanged()
+    verifiedKill(t0 + 60 * 60, "Gm-R", {}) -- 00:40
+    kills[#kills].d.encounter, kills[#kills - 1].d.encounter = MC[2], MC[2]
+    local out = derive(raider)
+    assert.equal(1, counted(out, "Raider-R"))
+    local second
+    for _, r in ipairs(out) do if r.ref == "flex:" .. id2 then second = r end end
+    assert.equal("already credited tonight", second.why)
+  end)
+
   it("an ask 7 h before any kill earns nothing", function()
     grant({ flex = { ranks = { 1 }, raidlead = false } })
     spec = 1
