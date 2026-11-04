@@ -20,7 +20,7 @@ end
 
 -- About text for the welcome screen and About tab that no module owns. Modules supply their own
 -- as def.about = { title, lines, order }; order places a section (Exchange 10, these 20 and 40,
--- Leaderboard 30). Plain ASCII only.
+-- Leaderboard 30, Groups 35). Plain ASCII only.
 ns.CoreAbout = {
   { title = "Linked characters", order = 20, lines = {
     "Guildmates reach you on whichever character you're on. Only the characters you choose are shared.",

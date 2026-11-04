@@ -17,6 +17,17 @@ describe("Compat", function()
     return env
   end
 
+  it("PlayReadyCheckSound plays SOUNDKIT.READY_CHECK, and is a no-op without SOUNDKIT or PlaySound", function()
+    local played = {}
+    local c = Compat.new({ SOUNDKIT = { READY_CHECK = 8960 }, PlaySound = function(id, ch) played[#played + 1] = { id, ch } end })
+    assert.is_true(c:PlayReadyCheckSound())
+    assert.same({ { 8960, "Master" } }, played)
+    assert.is_false(Compat.new({ PlaySound = function() error("no") end }):PlayReadyCheckSound())
+    assert.is_false(Compat.new({ SOUNDKIT = { READY_CHECK = 8960 } }):PlayReadyCheckSound())
+    assert.is_false(Compat.new({ SOUNDKIT = { READY_CHECK = 8960 }, PlaySound = function() error("x") end })
+      :PlayReadyCheckSound())
+  end)
+
   it("loads and creates ns.compat without WoW APIs", function()
     local ns = {}
     loadAddonFile(ns, "Guildhall/Core/Util.lua")

@@ -224,6 +224,9 @@ local function halt(state, newKey)
   profileSync = nil
   ns.exchange = nil
   ns.leaderboard = nil
+  if ns.groups and ns.groups.reminders then ns.groups.reminders:Stop() end
+  ns.groups = nil
+  if ns.Groups and ns.Groups.Credit then ns.Groups.Credit.Attach(nil) end
   if state == "changed" then
     print("|cffffd200Guildhall|r: you changed guild. Type /reload to switch Guildhall to "
       .. ns.Util.DisplayName(newKey) .. ".")

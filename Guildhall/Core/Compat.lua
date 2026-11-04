@@ -585,6 +585,17 @@ function Compat:ActiveSpecGroup()
   return nil
 end
 
+-- Plays the ready check sound (the group finder reminder). false when SOUNDKIT or PlaySound is missing,
+-- the kit id is unreadable (secret or not a number), or the call fails.
+function Compat:PlayReadyCheckSound()
+  local env = self.env
+  local kit = env.SOUNDKIT
+  if type(kit) ~= "table" or type(env.PlaySound) ~= "function" then return false end
+  local id = self:Safe(kit.READY_CHECK)
+  if type(id) ~= "number" then return false end
+  return (pcall(env.PlaySound, id, "Master"))
+end
+
 -- How many of an item the player carries, or nil when the API is missing or the count is secret.
 function Compat:ItemCount(itemId)
   local env = self.env

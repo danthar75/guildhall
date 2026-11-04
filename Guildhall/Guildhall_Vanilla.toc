@@ -60,4 +60,6 @@ Modules/Groups/Credit.lua
 Modules/Groups/Checklist.lua
 Modules/Groups/Flex.lua
 Modules/Groups/Calendar.lua
+Modules/Groups/Reminders.lua
+Modules/Groups/Module.lua
 Core/Boot.lua
