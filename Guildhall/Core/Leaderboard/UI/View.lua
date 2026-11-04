@@ -326,7 +326,7 @@ end
 
 -- One list line in plain words, from the row's own fields (counterparty is optional).
 local function describe(row)
-  local who = type(row.counterparty) == "string" and Util.Escape(Util.DisplayName(row.counterparty)) or nil
+  local who = type(row.counterparty) == "string" and nameOf(row.counterparty) or nil
   local item = itemText(row.item)
   local t = row.type
   if t == "exchange.sales" then

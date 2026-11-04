@@ -4,6 +4,8 @@ local ADDON, ns = ...
 -- (Whisper/Mail, Copy for Discord, Edit/Renew/Remove, Remove (officer), Remove from my board).
 -- Loaded after Board.lua; Board.Build calls Details.Build(view, pane, innerWidth) and
 -- Board.Refresh calls Details.Show(rec).
+-- Also the "Record a deal" panel (Details.OpenRecordDeal), opened from the details pane.
+-- Named global: "GuildhallUIRecordDeal" (UISpecialFrames needs a name for ESC to close it).
 -- Global table entries: StaticPopupDialogs.GUILDHALL_REMOVE_LISTING / GUILDHALL_OFFICER_REMOVE.
 ns.Exchange = ns.Exchange or {}
 local UI = ns.UI
@@ -18,6 +20,10 @@ ns.Exchange.BoardDetails = Details
 local DRAFTED = "Saved as a mail draft. Guildhall will offer it next time you open a mailbox."
 
 local view -- the board view this pane belongs to
+
+local function on(w, event, fn)
+  w:SetScript(event, function(...) return UI.Try(fn, ...) end)
+end
 
 local function when(t)
   if type(date) == "function" and type(t) == "number" then
@@ -119,6 +125,7 @@ function Details.Show(rec)
     row1[#row1 + 1] = b.contact
   end
   row1[#row1 + 1] = b.discord
+  if not imported then row1[#row1 + 1] = b.record end
   if imported then
     row2[#row2 + 1] = b.removeImported
   elseif ns.Exchange.Listing.CanEdit(rec, s.profile:Id()) then
@@ -182,12 +189,165 @@ if StaticPopupDialogs then
   }
 end
 
+-- Record a deal -----------------------------------------------------------------------------
+
+local MAX_COUNT, MAX_COPPER = 10000, 10000000000
+local rd -- the panel's widgets, built on first use
+
+local RECORD_ERRORS = {
+  ["no partner"] = "Choose who you made the deal with.",
+  ["partner is you"] = "Choose someone other than yourself.",
+  ["bad count"] = "Quantity must be a whole number from 1 to 10000.",
+  ["bad amount"] = "Enter the gold paid, for example 40 or 1.5.",
+  ["unknown listing"] = "That listing is gone.",
+  ["neither of you owns that listing"] = "One of you has to own the listing.",
+  ["listing ended"] = "That listing ended too long ago to record a deal on.",
+  ["already recorded"] = "That deal was already recorded.",
+}
+
+local function profileName(id)
+  local s = ns.services
+  if ns.LbConfig and ns.LbConfig._displayName then return ns.LbConfig._displayName(s.profile, id) end
+  return Util.DisplayName(s.profile:CharsOf(id)[1] or id)
+end
+
+-- Pick list entries for the partner: every other guild profile with a live record, by name.
+-- Members hidden from the leaderboard are still listed: hiding only affects the boards, and
+-- they remain consenting members who can confirm a deal.
+function Details.PartnerItems()
+  local s = ns.services
+  local items, me, now = {}, s.profile:Id(), s.now()
+  for _, rec in ipairs(s.profile.set:List(false)) do
+    if rec.id ~= me and rec.del ~= true and type(rec.exp) == "number" and rec.exp > now then
+      items[#items + 1] = { label = escape(profileName(rec.id)), value = rec.id }
+    end
+  end
+  table.sort(items, function(a, b)
+    local la, lb = a.label:lower(), b.label:lower()
+    if la ~= lb then return la < lb end
+    return a.value < b.value
+  end)
+  return items
+end
+
+-- Whole quantity from a box, or nil.
+local function parseCount(text)
+  local t = Util.Trim(text or "")
+  if not t:match("^%d+$") then return nil end
+  local n = tonumber(t)
+  if n < 1 or n > MAX_COUNT then return nil end
+  return n
+end
+
+-- Gold typed as "40" or "1.5" -> whole copper, or nil.
+local function parseCopper(text)
+  local t = Util.Trim(text or "")
+  if not (t:match("^%d+%.?%d*$") or t:match("^%.%d+$")) then return nil end
+  local copper = math.floor(tonumber(t) * 10000 + 0.5)
+  if copper < 1 or copper > MAX_COPPER then return nil end
+  return copper
+end
+
+local function rdError(text)
+  rd.err:SetText(text or "")
+end
+
+local function submitDeal()
+  local rec = rd.listing
+  if not rec then return end
+  if not rd.partner then return rdError(RECORD_ERRORS["no partner"]) end
+  local count, copper = parseCount(rd.qty:GetText()), parseCopper(rd.gold:GetText())
+  if not count then return rdError(RECORD_ERRORS["bad count"]) end
+  if not copper then return rdError(RECORD_ERRORS["bad amount"]) end
+  local ok, err = ns.exchange:RecordDeal(rec.id, rd.partner, count, copper)
+  if not ok then return rdError(RECORD_ERRORS[err] or ns.Exchange.Form.HandleError(err)) end
+  rd.panel:Hide()
+  Board.SetStatus("Deal recorded. It counts once " .. escape(profileName(rd.partner)) .. " confirms it.")
+  Board.Refresh()
+end
+
+local function buildRecordPanel()
+  rd = {}
+  rd.panel = UI.CreatePanel("GuildhallUIRecordDeal", 360, 250, "Record a deal")
+  if UISpecialFrames then table.insert(UISpecialFrames, "GuildhallUIRecordDeal") end
+  local p = rd.panel
+  rd.item = UI.Text(p, "GameFontHighlight")
+  rd.item:SetPoint("TOPLEFT", 16, -42)
+  rd.item:SetWidth(328)
+  local function label(text, y)
+    local l = UI.Text(p, "GameFontNormalSmall", text)
+    l:SetPoint("TOPLEFT", 16, y)
+  end
+  label("Who was the deal with?", -68)
+  rd.partnerBtn = UI.Button(p, "Choose a player", 200, function()
+    UI.PickList(rd.partnerBtn, Details.PartnerItems(), function(id, item)
+      rd.partner = id
+      rd.partnerBtn:SetText(item.label)
+    end, rd.partner)
+  end)
+  rd.partnerBtn:SetPoint("TOPLEFT", 16, -86)
+  rd.partnerName = UI.Text(p, "GameFontHighlight")
+  rd.partnerName:SetPoint("TOPLEFT", 20, -90)
+  label("Quantity", -120)
+  rd.qty = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
+  rd.qty:SetSize(80, 20)
+  rd.qty:SetAutoFocus(false)
+  rd.qty:SetMaxLetters(5)
+  rd.qty:SetPoint("TOPLEFT", 22, -138)
+  label("Gold paid", -120)
+  rd.gold = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
+  rd.gold:SetSize(100, 20)
+  rd.gold:SetAutoFocus(false)
+  rd.gold:SetMaxLetters(12)
+  rd.gold:SetPoint("TOPLEFT", 150, -138)
+  rd.err = UI.Text(p, "GameFontNormalSmall", "")
+  rd.err:SetTextColor(1, 0.35, 0.35)
+  rd.err:SetPoint("TOPLEFT", 16, -170)
+  rd.err:SetWidth(328)
+  rd.submit = UI.Button(p, "Record", 100, function() submitDeal() end)
+  rd.submit:SetPoint("BOTTOMLEFT", 16, 14)
+  rd.cancel = UI.Button(p, "Cancel", 100, function() p:Hide() end)
+  rd.cancel:SetPoint("LEFT", rd.submit, "RIGHT", 8, 0)
+  for _, box in ipairs({ rd.qty, rd.gold }) do
+    on(box, "OnEnterPressed", function(self) self:ClearFocus() end)
+    on(box, "OnEscapePressed", function(self) self:ClearFocus() end)
+  end
+end
+
+-- Opens the panel for a listing. On someone else's listing the partner is its owner; on mine
+-- you choose who you dealt with.
+function Details.OpenRecordDeal(rec)
+  if not rd then buildRecordPanel() end
+  local s = ns.services
+  rd.listing = rec
+  rd.partner = nil
+  rd.item:SetText((TAG[rec.d.kind] or escape(rec.d.kind)) .. "  " .. itemText(rec.d))
+  rd.qty:SetText(tostring(rec.d.qty or 1))
+  rd.gold:SetText("")
+  rdError("")
+  if s.profile:IsMine(rec.by) then
+    rd.partnerBtn:SetText("Choose a player")
+    rd.partnerBtn:Show()
+    rd.partnerName:Hide()
+  else
+    rd.partner = rec.by
+    rd.partnerBtn:Hide()
+    rd.partnerName:SetText(escape(profileName(rec.by)))
+    rd.partnerName:Show()
+  end
+  rd.panel:Show()
+end
+
 local function buildButtons(det)
   local b = {}
   b.contact = UI.Button(det, "Whisper", 110, doContact)
   b.discord = UI.Button(det, "Copy for Discord", 130, function()
     local rec = selected()
     if rec then UI.CopyBox:Show("Copy for Discord", ns.exchange:DiscordText(rec.id)) end
+  end)
+  b.record = UI.Button(det, "Record a deal", 120, function()
+    local rec = selected()
+    if rec then Details.OpenRecordDeal(rec) end
   end)
   b.edit = UI.Button(det, "Edit", 90, function()
     local rec = selected()

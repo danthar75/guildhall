@@ -29,6 +29,7 @@ function ns.Exchange.Create(ctx)
   db.imported = db.imported or {}
   db.drafts = db.drafts or {}
   db.declined = db.declined or {}
+  db.prompted = db.prompted or {} -- deal ref -> time the "Sold?" prompt was first offered
   self.db = db
   self.listings = ns.ReplicatedSet.new(SET_NAME, db.listings, { now = ctx.now, onChange = function()
     changed()
@@ -186,6 +187,7 @@ function Ex:OfficerRemove(id)
 end
 
 local CONFIRM_WINDOW = 1209600   -- a manual deal waits this long for the other side (14 days)
+local PROMPT_KEEP = 34560000      -- the observations live this long (400 days)
 local WITNESS_AGE = 86400        -- a listing must be this old before anyone witnesses it
 local WITNESS_DELAY = 2          -- listing changes arrive in bursts; witness once they settle
 local MAX_COPPER, MAX_COUNT = 10000000000, 10000
@@ -284,6 +286,29 @@ function Ex:_pruneDeclined()
     if type(at) ~= "number" then self.db.declined[id] = now
     elseif not live[id] or now - at > CONFIRM_WINDOW then self.db.declined[id] = nil end
   end
+  -- Prompt marks outlive the confirmation window (the pairing stays in the observations for as
+  -- long as they are kept), so a deal never prompts twice.
+  for ref, at in pairs(self.db.prompted) do
+    if type(at) ~= "number" or now - at > PROMPT_KEEP then self.db.prompted[ref] = nil end
+  end
+end
+
+-- The next "Sold?" prompt: a recent paired deal on one of my active WTS listings that has not
+-- been offered yet. Returns { ref, listing } and marks it offered, so each deal prompts once
+-- (the UI keeps showing it until dismissed). Nil when there is nothing to ask.
+function Ex:NextSoldPrompt()
+  local obs = self.ctx.observations
+  if not obs then return nil end
+  local me, now = self.profile:Id(), self.now()
+  for _, deal in ipairs(ns.Exchange.Deals.PairedDeals(obs)) do
+    local listing = self.listings:Get(deal.listing)
+    if not self.db.prompted[deal.ref] and now - deal.at <= CONFIRM_WINDOW and listing and listing.by == me
+        and listing.del ~= true and listing.exp > now and type(listing.d) == "table" and listing.d.kind == "WTS" then
+      self.db.prompted[deal.ref] = now
+      return { ref = deal.ref, listing = listing }
+    end
+  end
+  return nil
 end
 
 function Ex:_queueWitness()

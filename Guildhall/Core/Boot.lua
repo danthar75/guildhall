@@ -90,7 +90,10 @@ function Boot.PublishProfile()
   local rec = s.profile:Record()
   if not rec then return end
   local stored = s.profileSet:Get(rec.id)
-  if stored and not stored.del and sameChars(charsOf(stored), charsOf(rec))
+  -- A changed opt-out flag must publish even when the characters are the same.
+  local sameHidden = (type(stored) == "table" and type(stored.d) == "table" and stored.d.hidden == true)
+    == (rec.d.hidden == true)
+  if stored and not stored.del and sameChars(charsOf(stored), charsOf(rec)) and sameHidden
     and type(stored.exp) == "number" and stored.exp - s.now() > PROFILE_REFRESH then
     return
   end

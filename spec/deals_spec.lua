@@ -146,6 +146,15 @@ describe("Exchange deals", function()
       end
     end)
 
+    it("contributions name the other side's profile id as counterparty", function()
+      local two = derive("trade", { rec("o1", "ann", d()), rec("o2", "bob", d()) })
+      for _, c in ipairs(two) do
+        if c.profile == "ann" then assert.equal("bob", c.counterparty) else assert.equal("ann", c.counterparty) end
+      end
+      local one = derive("trade", { rec("o1", "ann", d()) })
+      for _, c in ipairs(one) do assert.equal("bob", c.counterparty) end
+    end)
+
     it("two observations from the same profile never pair", function()
       local list = derive("trade", { rec("o1", "ann", d()), rec("o2", "ann", d({ at = 5001 })) })
       assert.equal(0, (sum(list, "exchange.sales", true)))

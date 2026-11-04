@@ -118,18 +118,19 @@ end
 
 local function rows(d, ref, at, counted, why, sides)
   local out = {}
-  local function add(type_, profile, value)
+  -- counterparty is the other side's profile id (the Leaderboard names it as "to"/"from")
+  local function add(type_, profile, value, other)
     out[#out + 1] = { type = type_, profile = profile, value = value, at = at, item = d.item,
       ref = ref, counted = counted, why = why, listing = d.listing,
-      owner = Deals.OwnerOf(d), listed = d.listed }
+      owner = Deals.OwnerOf(d), listed = d.listed, counterparty = other }
   end
   if sides.seller then
-    add("exchange.sales", d.seller, 1)
-    add("exchange.gold.earned", d.seller, d.copper)
+    add("exchange.sales", d.seller, 1, d.buyer)
+    add("exchange.gold.earned", d.seller, d.copper, d.buyer)
   end
   if sides.buyer then
-    add("exchange.purchases", d.buyer, 1)
-    add("exchange.gold.paid", d.buyer, d.copper)
+    add("exchange.purchases", d.buyer, 1, d.seller)
+    add("exchange.gold.paid", d.buyer, d.copper, d.seller)
   end
   return out
 end
@@ -227,6 +228,24 @@ function Deals.IsDuplicate(autoPaired, key, at)
     if math.abs(at - t) <= WINDOW then return true end
   end
   return false
+end
+
+-- Every paired deal (both sides observed) in the observations, as { ref, listing, seller, buyer,
+-- at, kind }. The ref matches the one the deriver puts on the deal's contributions.
+function Deals.PairedDeals(observations)
+  local out = {}
+  if not observations then return out end
+  local auto = Deals.AutoPaired(observations)
+  for _, kind in ipairs({ "trade", "cod", "manual" }) do
+    for _, p in ipairs(pairUp(kind, observations:List(kind))) do
+      local d = p.a.d
+      if p.mate and not (kind == "manual" and Deals.IsDuplicate(auto, p.key, d.at)) then
+        out[#out + 1] = { ref = "deal:" .. d.listing .. ":" .. tostring(p.a.id), listing = d.listing,
+          seller = d.seller, buyer = d.buyer, at = d.at, kind = kind }
+      end
+    end
+  end
+  return out
 end
 
 local function derive(kind)

@@ -187,6 +187,13 @@ function C:Weights()
   return out
 end
 
+-- Who last published the weights and when: { char, at }, or nil while only defaults apply.
+function C:WeightsInfo()
+  local rec = self.set:Get("weights")
+  if not rec or rec.del or type(rec.d) ~= "table" or type(rec.char) ~= "string" or not finite(rec.t) then return nil end
+  return { char = rec.char, at = rec.t }
+end
+
 function C:Tz()
   local d = liveData(self, "weights")
   return d and finite(d.tz) and d.tz or nil

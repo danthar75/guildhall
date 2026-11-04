@@ -656,7 +656,7 @@ describe("Exchange", function()
   end)
   describe("fix round 2", function()
     local LINK = "|Hitem:2589::|h[Linen Cloth]|h"
-    local function wts(n) return post(n, { kind = "WTS", item = LINK, qty = 20, mats = false, cod = false }) end
+    local function wts(n, kind) return post(n, { kind = kind or "WTS", item = LINK, qty = 20, mats = false, cod = false }) end
     local function ids(n) return n.profile:Id() end
     local function sales(n)
       local k = 0
@@ -701,6 +701,37 @@ describe("Exchange", function()
       local mine = 0
       for _, w in ipairs(b.obs:List("witness")) do if w.by == ids(b) then mine = mine + 1 end end
       assert.equal(1, mine)
+    end)
+
+    describe("Sold? prompt", function()
+      local function paired()
+        local a, b = node("Alice-Realm", { id = 1 }), node("Bob-Realm", { id = 2 })
+        local rec = wts(a)
+        assert.is_true(b.ex:RecordDeal(rec.id, ids(a), 20, 50000))
+        assert.is_nil(a.ex:NextSoldPrompt()) -- still waiting for Alice's confirmation
+        assert.is_true(a.ex:ConfirmDeal(a.ex:PendingConfirmations()[1].obs.id))
+        return a, b, rec
+      end
+
+      it("offers a paired deal on my WTS listing once, and records it in the module db", function()
+        local a, b, rec = paired()
+        assert.is_nil(b.ex:NextSoldPrompt()) -- the buyer has no WTS listing
+        local p = a.ex:NextSoldPrompt()
+        assert.equal(rec.id, p.listing.id)
+        assert.is_number(a.moduleDb.prompted[p.ref])
+        assert.is_nil(a.ex:NextSoldPrompt())
+      end)
+
+      it("does not offer it again after a reload, nor for an LF listing", function()
+        local a, b, rec = paired()
+        a.ex:NextSoldPrompt()
+        a.ex:_pruneDeclined()
+        assert.is_nil(a.ex:NextSoldPrompt())
+        local lf = wts(a, "LF")
+        assert.is_true(b.ex:RecordDeal(lf.id, ids(a), 5, 100))
+        assert.is_true(a.ex:ConfirmDeal(a.ex:PendingConfirmations()[1].obs.id))
+        assert.is_nil(a.ex:NextSoldPrompt())
+      end)
     end)
   end)
 end)

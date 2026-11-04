@@ -110,6 +110,13 @@ describe("Leaderboard Config", function()
     assert.is_string(err)
   end)
 
+  it("WeightsInfo names the author character and the real publish time", function()
+    assert.is_nil(cfg:WeightsInfo())
+    clock.advance(500)
+    assert.is_true((cfg:PublishWeights({ sales = 7 })))
+    assert.same({ char = "Boss-Realm", at = clock.now() }, cfg:WeightsInfo())
+  end)
+
   it("MaybeSaveMonth waits for the 3-day grace", function()
     local l = ledger({ p1 = { sales = 3 } })
     clock.advance(utc(2026, 11, 4, 0) - 1 - clock.now())
