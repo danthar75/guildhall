@@ -1,7 +1,7 @@
 -- Leaderboard section of the Settings tab: opt-out, weights editor, who may publish.
 describe("Leaderboard.SettingsView", function()
   local fakes = require("spec.helpers.fakes")
-  local ns, W, section, buttons, errors, officer, hidden, published, order, pubMap, pubResult, weights, info, rank, history, texts
+  local ns, W, section, buttons, errors, officer, granted, hidden, published, order, pubMap, pubResult, weights, info, rank, history, texts
   local GLOBALS = { "CreateFrame" }
   local saved = {}
 
@@ -42,7 +42,14 @@ describe("Leaderboard.SettingsView", function()
         SetHidden = function(_, on) hidden = on end,
       },
     }
-    ns.leaderboard = { config = {
+    ns.Permissions = { KEYS = { { key = "weights", label = "Edit leaderboard weights" },
+      { key = "bankreview", label = "Review bank contributions" } },
+      Label = function(key) return key == "bankreview" and "Review bank contributions" or key end }
+    granted = {}
+    ns.leaderboard = { permissions = {
+      -- an officer stands for "granted weights" here; spec/permissions_spec.lua covers the ranks
+      Can = function(_, _, key) return (key == "weights" and officer) or granted[key] == true end,
+    }, config = {
       Weights = function() return weights end,
       Tz = function() return 0 end,
       WeightsInfo = function() return info end,
@@ -268,5 +275,28 @@ describe("Leaderboard.SettingsView", function()
       assert.equal(0, section.historyOffset)
       assert.same({}, errors)
     end)
+
+    it("a member granted any permission sees it", function()
+      fill(); granted.bankreview = true; section.refresh()
+      assert.is_true(section.historyBox.shown)
+    end)
+
+    it("a permissions change reads in plain language with the rank names", function()
+      ns.services.roster.RankNames = function() return { "Guild Master", "Officer" } end
+      history = { { what = "perms", by = "Dor-Realm", at = 1700000000,
+        before = { bankreview = { ranks = { 0 }, raidlead = false } },
+        after = { bankreview = { ranks = { 0, 1, 4 }, raidlead = true } } } }
+      becomeOfficer()
+      assert.same({ "2023-11-14 22:13  Dor  Changed Review bank contributions: Guild Master -> "
+        .. "Guild Master, Officer, Rank 4, Raid leader & assistants" }, lines())
+    end)
+  end)
+
+  it("a refused publish names the permission", function()
+    becomeOfficer()
+    pubResult = false
+    ns.leaderboard.config.PublishWeights = function() return false, "no permission" end
+    buttons["Publish weights"].onClick()
+    assert.equal("You don't have permission to publish weights.", section.status.text)
   end)
 end)

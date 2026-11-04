@@ -4,13 +4,16 @@ local ADDON, ns = ...
 --   "weights"       { weights = {[typeId]=0..1000}, tz = server offset seconds }  (newest version wins)
 --   "month:YYYY-MM" frozen top-5 record of a finished month (first accepted wins; an officer
 --                   retake, d.retake = true with a Greater version, replaces it)
---   "history:<profile>:<t>:<n>"  append-only log of one officer decision (a weights change or a
---                   month retake): { what, key, before, after, by = char, at }. Never replaced (a
---                   second version is rejected); expires after 2 years. n is a per-session counter.
--- Other record kinds (perms, exclude:) join later through the id-prefix dispatch in
--- validateRecord. A record is checked against the roster only when it arrives, so a demoted
--- officer's earlier record stays in effect. An unknown roster rejects it for now; the next sync
--- offers it again.
+--   "perms"         guild-rank permissions (ns.Permissions validates it: the author must be rank 0)
+--   "history:<profile>:<t>:<n>"  append-only log of one decision (a weights change, a month
+--                   retake or a permissions change): { what, key, before, after, by = char, at }.
+--                   Never replaced (a second version is rejected); expires after 2 years. n is a
+--                   per-session counter.
+-- Weights and retakes need the "weights" / "retake" permission (guild master only by default); the
+-- automatic month save stays an officer action. Other record kinds (exclude:) join later through
+-- the id-prefix dispatch in validateRecord. A record is checked against the roster and permissions
+-- only when it arrives, so a demoted author's earlier record stays in effect. An unknown roster
+-- rejects it for now; the next sync offers it again.
 ns.LbConfig = ns.LbConfig or {}
 local Config = ns.LbConfig
 
@@ -25,8 +28,9 @@ local MAX_ID, MAX_NAME, MAX_BOARDS, MAX_WEIGHTS = 16, 48, 16, 32
 local MAX_VALUE = 1e12
 local RETENTION = 34560000
 local HISTORY_RETENTION = 63072000 -- 2 years
--- What a history record may describe. Task 16 adds "perms", Task 17 "bank".
-local HISTORY_WHAT = { weights = true, month = true }
+-- What a history record may describe. Task 17 adds "bank".
+local HISTORY_WHAT = { weights = true, month = true, perms = true }
+local REFUSED = "no permission"
 
 local C = {}
 C.__index = C
@@ -37,14 +41,17 @@ local function finite(x)
   return type(x) == "number" and x == x and x ~= math.huge and x ~= -math.huge
 end
 
--- Task 16 replaces this with a Permissions check. true only when the roster is known and says so.
+-- Officer check for the automatic month save. true only when the roster is known and says so.
 local function canAdminister(roster, char)
   return type(char) == "string" and roster ~= nil and roster:IsOfficer(char) == true
 end
 
--- Who may author a history record. Task 16 changes this to "the author held the permission for
--- rec.d.what". Used to mark an entry at display time ("no permission now").
-local function canWriteHistory(self, char)
+-- Whether char may still make the change a history entry describes. Used only to mark an entry
+-- at display time ("no permission now").
+local function canWriteHistory(self, char, what)
+  if what == "weights" then return self.perms:Can(char, "weights") end
+  if what == "month" then return self.perms:Can(char, "retake") end
+  if what == "perms" then return self.perms:IsGuildMaster(char) end
   return canAdminister(self.roster, char)
 end
 
@@ -155,6 +162,11 @@ local function validHistory(self, rec)
     if not ok then return false, err end
     return validWeights(d.after)
   end
+  if d.what == "perms" then
+    local ok, err = ns.Permissions.ValidGrants(d.before)
+    if not ok then return false, err end
+    return ns.Permissions.ValidGrants(d.after)
+  end
   if not validSummary(d.before) or not validSummary(d.after) then return false, "bad summary" end
   return true
 end
@@ -164,8 +176,9 @@ local function validateRecord(self, rec)
   local id = rec.id
   if rec.del == true then return false, "deletions not allowed" end
   if id:sub(1, 8) == "history:" then return validHistory(self, rec) end
-  if not canAdminister(self.roster, rec.char) then return false, "author not an officer" end
+  if id == "perms" then return self.perms:Validate(rec) end
   if id == "weights" then
+    if not self.perms:Can(rec.char, "weights") then return false, "author lacks permission" end
     if type(rec.d) ~= "table" then return false, "not a table" end
     if not validTz(rec.d.tz) then return false, "bad tz" end
     if rec.d.changedBy ~= nil and (type(rec.d.changedBy) ~= "string" or #rec.d.changedBy > MAX_NAME) then
@@ -176,6 +189,11 @@ local function validateRecord(self, rec)
   end
   local ym = id:match("^month:(%d%d%d%d%-%d%d)$")
   if ym then
+    if type(rec.d) == "table" and rec.d.retake == true then
+      if not self.perms:Can(rec.char, "retake") then return false, "author lacks permission" end
+    elseif not canAdminister(self.roster, rec.char) then
+      return false, "author not an officer"
+    end
     local m = tonumber(ym:sub(6, 7))
     if m < 1 or m > 12 then return false, "bad month id" end
     local ok, err = validMonth(ym, rec.d)
@@ -196,6 +214,10 @@ function Config.new(ctx)
   self.roster, self.compat = ctx.roster, ctx.compat
   self.playerChar = ctx.playerChar
   self.historySeq = 0
+  -- Permissions come through ctx (the Module builds them); a bare ctx gets its own.
+  self.perms = ctx.perms or ns.Permissions.new({ roster = ctx.roster, profile = ctx.profile, now = ctx.now,
+    compat = ctx.compat })
+  if self.perms.config == nil then self.perms:Attach(self) end
   self.set = ns.ReplicatedSet.new(SET_NAME, ctx.db, {
     now = ctx.now, maxFuture = 86400,
     onChange = function() if ns.Events then ns.Events:Fire("LeaderboardConfigChanged") end end,
@@ -233,6 +255,7 @@ function C:Start()
 end
 
 function C:_isOfficer() return canAdminister(self.roster, self.playerChar) end
+function C:_can(key) return self.perms:Can(self.playerChar, key) end
 
 function C:_publish(id, d, exp, t)
   t = t or self.now()
@@ -271,7 +294,7 @@ end
 
 -- Whether an entry's author could still make that change now (for the "no permission now" mark).
 function C:HistoryAuthorPermitted(entry)
-  return type(entry) == "table" and canWriteHistory(self, entry.by) == true
+  return type(entry) == "table" and canWriteHistory(self, entry.by, entry.what) == true
 end
 
 -- Change history, newest first: { id, what, key, before, after, by, at }.
@@ -331,7 +354,7 @@ function C:Tz()
 end
 
 function C:PublishWeights(map)
-  if not self:_isOfficer() then return false, "officers only" end
+  if not self:_can("weights") then return false, REFUSED end
   local ok, err = validWeights(map)
   if not ok then return false, err end
   local tz = self.compat:ServerOffset()
@@ -349,8 +372,10 @@ function C:PublishWeights(map)
   return good, (not good) and "not accepted" or nil
 end
 
+-- Republishes the weights record, so it needs the "weights" permission. Without it the tz is
+-- left alone and clients use their own offset.
 function C:MaybeRefreshTz()
-  if not self:_isOfficer() then return false end
+  if not self:_can("weights") then return false end
   local offset = self.compat:ServerOffset()
   if offset == nil then return false end
   -- Only an existing record is refreshed. A client that has not synced yet must not publish
@@ -449,7 +474,7 @@ end
 
 -- Deliberate re-save of a stored month; the caller confirms with the officer first.
 function C:RetakeMonth(ym, ledger)
-  if not self:_isOfficer() then return false, "officers only" end
+  if not self:_can("retake") then return false, REFUSED end
   if not self:Month(ym) then return false, "no such month" end
   local old = self:Month(ym)
   local d = self:_monthData(ym, ledger, self.now())

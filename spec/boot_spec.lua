@@ -57,6 +57,7 @@ describe("Boot", function()
     for _, f in ipairs({ "Activity", "Observations", "Ledger", "Scoring", "Bank", "Config" }) do
       loadAddonFile(ns, "Guildhall/Core/Leaderboard/" .. f .. ".lua")
     end
+    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
     for _, f in ipairs({ "Category", "Listing", "Format", "MailDrafts", "Exchange", "Deals", "DealWatch" }) do
       loadAddonFile(ns, "Guildhall/Modules/Exchange/" .. f .. ".lua")
     end

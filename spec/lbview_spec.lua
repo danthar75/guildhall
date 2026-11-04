@@ -24,6 +24,7 @@ describe("Leaderboard.View", function()
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Scoring.lua")
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Config.lua")
+    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
     ns.OnError = function(e) errors[#errors + 1] = e end
     ns.Events = { On = function(_, event, fn) handlers[#handlers + 1] = { event, fn } end }
     ns.UI = {
@@ -73,6 +74,8 @@ describe("Leaderboard.View", function()
       after = function(delay, cb) timers[#timers + 1] = { delay, cb } end,
     }
     ns.leaderboard = {
+      -- an officer stands for "granted retake" here; spec/permissions_spec.lua covers the ranks
+      permissions = { Can = function(_, _, key) return key == "retake" and officer end },
       ledger = { Query = function() return result end },
       config = {
         Weights = function() return { ["exchange.sales"] = 5, ["exchange.gold.earned"] = 0.1 } end,

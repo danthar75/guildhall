@@ -1,7 +1,8 @@
 local ADDON, ns = ...
 
 -- Settings tab: a core section (guild key, profile id, officer threshold, linked characters)
--- followed by each module's settings.build(parent) section, stacked in a scroll frame.
+-- followed by each module's settings.build(parent) section and the Permissions section
+-- (UI.PermissionsView, looked up when it is built), stacked in a scroll frame.
 -- A module section builder may set its parent's height; the default is 120.
 -- Named global: "GuildhallUISettingsScroll" (scroll frame template needs a name on some clients).
 local UI = ns.UI
@@ -64,7 +65,7 @@ function SettingsView.Build(parent)
   view.chars:SetWidth(WIDTH - 140)
   view.chars:SetSpacing(2)
 
-  view.change = UI.Button(content, "Change…", 100, function()
+  view.change = UI.Button(content, "Change...", 100, function()
     if ns.Boot and ns.Boot.ChangeConsent then ns.Boot.ChangeConsent() end
   end)
   -- Single anchor: sets both axes, keeps the fixed 100 px width.
@@ -98,6 +99,11 @@ function SettingsView.Build(parent)
       view.sections[#view.sections + 1] = sec
     end
   end
+  local perms = { title = UI.Text(content, "GameFontNormalLarge", "Permissions"), build = function(p)
+    return UI.PermissionsView.Build(p)
+  end }
+  buildSection(perms)
+  view.sections[#view.sections + 1] = perms
 
   local function layout()
     local y = -4 - header:GetStringHeight() - 8 - view.info:GetStringHeight() - 10

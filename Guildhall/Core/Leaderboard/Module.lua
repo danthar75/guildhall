@@ -4,7 +4,8 @@ local ADDON, ns = ...
 -- events. Loads after the Exchange files (so the tab reads Exchange, Leaderboard, Log, Settings)
 -- and before Boot, which registers the events declared here.
 --
--- Global: ns.leaderboard = { observations, ledger, config, bank }, set at login, cleared on halt.
+-- Global: ns.leaderboard = { observations, ledger, config, bank, permissions }, set at login,
+-- cleared on halt. permissions is the ns.Permissions object Config checks weights and retakes with.
 -- Also sets ns.services.observations (Exchange and DealWatch read it).
 -- The tab and settings builders (ns.Leaderboard.View.Build, ns.Leaderboard.SettingsView.Build)
 -- are looked up when the tab is built, not at file load; until they exist a plain label shows.
@@ -66,9 +67,11 @@ local function build(n, s)
     comm = s.comm, profile = s.profile, log = s.log, now = s.now, after = s.after, random = s.random,
     playerChar = s.playerChar, db = db.observations, syncs = s.syncs,
   })
+  local permissions = n.Permissions.new({ roster = s.roster, profile = s.profile, now = s.now, compat = s.compat })
   local config = n.LbConfig.new({
     comm = s.comm, compat = s.compat, roster = s.roster, profile = s.profile, log = s.log, now = s.now,
     after = s.after, random = s.random, playerChar = s.playerChar, db = db.config, syncs = s.syncs,
+    perms = permissions,
   })
   local ledger = n.Ledger.new({ observations = observations, profile = s.profile, roster = s.roster, now = s.now })
   local bank = n.Bank.new({
@@ -80,7 +83,8 @@ local function build(n, s)
     end,
   })
   s.observations = observations
-  n.leaderboard = { observations = observations, ledger = ledger, config = config, bank = bank }
+  n.leaderboard = { observations = observations, ledger = ledger, config = config, bank = bank,
+    permissions = permissions }
 
   observations:Start()
   config:Start()

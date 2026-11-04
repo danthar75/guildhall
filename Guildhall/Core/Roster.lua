@@ -1,7 +1,8 @@
 local ADDON, ns = ...
 
 -- Guild roster cache + Guild Info tag config. Online status is session-only (never persisted);
--- rank indexes persist in `cache.ranks` so IsOfficer keeps working when the roster is secret.
+-- rank indexes persist in `cache.ranks` so IsOfficer keeps working when the roster is secret, and
+-- rank names in `cache.rankNames` ({ [rankIndex] = name }) for the Permissions grid.
 -- Secret values are never stored: a secret online flag becomes "unknown" (nil).
 local Roster = {}
 Roster.__index = Roster
@@ -27,6 +28,7 @@ end
 function Roster.new(compat, cache)
   cache.ranks = cache.ranks or {}
   cache.guildConfig = cache.guildConfig or {}
+  cache.rankNames = cache.rankNames or {}
   return setmetatable({ compat = compat, cache = cache, members = {} }, Roster)
 end
 
@@ -42,7 +44,10 @@ function Roster:Refresh()
   compat:RequestRoster()
   local members, ranks, count = {}, {}, 0
   for i = 1, compat:GetNumGuildMembers() do
-    local name, rankIndex, isOnline = compat:GetGuildRosterInfo(i)
+    local name, rankIndex, isOnline, rankName = compat:GetGuildRosterInfo(i)
+    if type(rankIndex) == "number" and type(rankName) == "string" and rankName ~= "" then
+      self.cache.rankNames[rankIndex] = rankName
+    end
     if type(name) == "string" and name ~= "" and type(rankIndex) == "number" then
       local key = self:Norm(name)
       local online -- nil = unknown (secret or unreadable)
@@ -100,4 +105,25 @@ function Roster:IsOfficer(fullName)
   local rank = self:RankIndex(fullName)
   if rank == nil then return nil end
   return rank < self:OfficerThreshold()
+end
+
+-- Rank names in rank order (index 1 is rank 0). From the game when it can be read, else the names
+-- seen in the roster cache, with "Rank N" for a gap. Empty when nothing is known.
+function Roster:RankNames()
+  local live = self.compat.GuildRanks and self.compat:GuildRanks()
+  if type(live) == "table" and #live > 0 then
+    local names = {}
+    for i, name in ipairs(live) do names[i - 1] = name end
+    self.cache.rankNames = names
+    local out = {}
+    for i, name in ipairs(live) do out[i] = name end
+    return out
+  end
+  local max = -1
+  for idx in pairs(self.cache.rankNames) do
+    if type(idx) == "number" and idx > max and idx <= 9 then max = idx end
+  end
+  local out = {}
+  for idx = 0, max do out[idx + 1] = self.cache.rankNames[idx] or ("Rank " .. idx) end
+  return out
 end

@@ -167,6 +167,18 @@ describe("Compat", function()
     assert.is_nil(Compat.new(env(5, { issecretvalue = function(v) return v == 5 end })):ServerOffset())
   end)
 
+  it("GuildRanks reads rank names in order, nil when missing or any name is secret", function()
+    assert.is_nil(Compat.new({}):GuildRanks())
+    local names = { "Guild Master", "Officer", "Member" }
+    local e = { GuildControlGetNumRanks = function() return 3 end,
+      GuildControlGetRankName = function(i) return names[i] end }
+    assert.same({ "Guild Master", "Officer", "Member" }, Compat.new(e):GuildRanks())
+    e.issecretvalue = function(v) return v == "Officer" end
+    assert.is_nil(Compat.new(e):GuildRanks())
+    e.issecretvalue = function(v) return v == 3 end
+    assert.is_nil(Compat.new(e):GuildRanks())
+  end)
+
   it("SecondsUntilWeeklyReset reads the API, nil when missing or secret", function()
     assert.is_nil(Compat.new({}):SecondsUntilWeeklyReset())
     local e = { C_DateAndTime = { GetSecondsUntilWeeklyReset = function() return 12345 end } }

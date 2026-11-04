@@ -8,7 +8,7 @@ local ADDON, ns = ...
 -- Demo.Build(now, clock?) -> store: an observations-like object { List(kind), changes, names
 --   (profile id -> name), month = { ym, rec } }. clock = { tz, weekStart? } as Scoring.Clock builds it.
 -- Demo.Set(ns, on): turns demo mode on or off. While on, ns.leaderboard.demo is true,
---   ns.leaderboard.ledger / .config are demo versions and ns.leaderboard.demoProfile answers the
+--   ns.leaderboard.ledger / .config / .permissions are demo versions and ns.leaderboard.demoProfile answers the
 --   View's profile questions (names, hidden, online, who you are). Returns false without a Leaderboard.
 ns.Leaderboard = ns.Leaderboard or {}
 local Demo = {}
@@ -162,6 +162,16 @@ local function configFor(real, store)
   return c
 end
 
+-- Permissions while the demo is on: the defaults (guild master only), read-only, and every save
+-- refused. The real roster still answers who is who.
+local function permissionsFor(real)
+  local p = ns.Permissions.new({ roster = real and real.roster })
+  function p:Editable() return false end
+  function p:Publish() return false, REFUSED end
+  function p:Attach() end
+  return p
+end
+
 local function refresh()
   local view = ns.Leaderboard.View
   if view and view.Refresh then view.Refresh() end
@@ -176,14 +186,16 @@ function Demo.Set(n, on)
     local clock = ns.Scoring.Clock(lb.config, s.compat, now)
     local store = Demo.Build(now, clock)
     local profile = profileFor(store)
-    lb.realLedger, lb.realConfig = lb.ledger, lb.config
+    lb.realLedger, lb.realConfig, lb.realPermissions = lb.ledger, lb.config, lb.permissions
     lb.ledger = ns.Ledger.new({ observations = store, profile = profile, roster = roster, now = s.now })
     lb.config = configFor(lb.realConfig, store)
+    lb.permissions = permissionsFor(lb.realPermissions or (lb.realConfig and lb.realConfig.perms))
+    lb.config.perms = lb.permissions
     lb.demoProfile, lb.demo = profile, true
   elseif not on and lb.demo then
-    lb.ledger, lb.config = lb.realLedger, lb.realConfig
+    lb.ledger, lb.config, lb.permissions = lb.realLedger, lb.realConfig, lb.realPermissions
     lb.ledger:Invalidate()
-    lb.realLedger, lb.realConfig, lb.demoProfile, lb.demo = nil, nil, nil, nil
+    lb.realLedger, lb.realConfig, lb.realPermissions, lb.demoProfile, lb.demo = nil, nil, nil, nil, nil
   end
   refresh()
   return true

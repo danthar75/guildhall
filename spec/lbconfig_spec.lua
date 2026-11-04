@@ -17,15 +17,18 @@ describe("Leaderboard Config", function()
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Activity.lua")
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Scoring.lua")
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Config.lua")
+    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
     ns.Activity.Register({ id = "sales", label = "Sales", unit = "count", verify = "paired", weight = 5, order = 1 })
     ns.Activity.Register({ id = "gold.earned", label = "Gold earned", unit = "gold", verify = "paired", weight = 0.1, order = 2 })
     store = {}
     ctx = {
       comm = bus:join(char), now = clock.now, after = timers.after, random = function(lo) return lo end,
       log = ns.Log.new({}, clock.now, function() return "" end),
+      -- An officer here is rank 0 (the guild master), who holds every permission by default;
+      -- spec/permissions_spec.lua covers the other ranks.
       roster = { IsOfficer = function(_, name) return officers[name] end,
         HasRanks = function() return true end,
-        RankIndex = function(_, name) if officers[name] ~= nil then return officers[name] and 1 or 5 end end },
+        RankIndex = function(_, name) if officers[name] ~= nil then return officers[name] and 0 or 5 end end },
       profile = {
         Id = function() return "pMe" end,
         OnlineChar = function() return nil end,
@@ -449,7 +452,7 @@ describe("Leaderboard Config", function()
       local ok = cfg:PublishWeights({ sales = 9 })
       assert.is_true(ok)
       local n = #ids()
-      ctx.roster.RankIndex = function() return nil end -- author vanishes from a known roster
+      ctx.profile.Id = function() return string.rep("x", 17) end -- a history id the validator refuses
       assert.is_true((cfg:PublishWeights({ sales = 8 })))
       assert.equal(n, #ids())
       assert.equal(8, cfg:Weights().sales)

@@ -1,9 +1,12 @@
 local ADDON, ns = ...
 
 -- Leaderboard section of the Settings tab: the opt-out checkbox, the privacy note and the
--- activity weights. Officers edit and publish the weights; everyone else sees them read-only.
--- Officers and the guild master also see the shared change history (newest 20 entries, wheel scrolls).
+-- activity weights. Ranks granted "weights" (guild master only by default) edit and publish the
+-- weights; everyone else sees them read-only. Officers, the guild master and anyone holding a
+-- permission also see the shared change history (newest 20 entries, wheel scrolls).
 -- SettingsView.Build(parent) -> section { refresh }; sets the parent's height.
+-- SettingsView.Describe(e) -> plain-language lines for one history entry (PermissionsView uses it).
+-- SettingsView.CanSeeHistory() -> bool.
 -- No named globals.
 ns.Leaderboard = ns.Leaderboard or {}
 local UI = ns.UI
@@ -28,19 +31,30 @@ end
 local function services() return ns.services end
 local function lb() return ns.leaderboard end
 
--- Task 16 switches this to a rank permission (guild master only by default).
-local function canEditWeights()
-  local s = services()
-  return s ~= nil and s.roster:IsOfficer(s.playerChar) == true
+local function perms()
+  local l = lb()
+  return l and l.permissions
 end
 
--- Who sees the change history: officers and the guild master (rank 0). Task 16 may widen this.
+local function can(key)
+  local s, p = services(), perms()
+  return s ~= nil and p ~= nil and p:Can(s.playerChar, key) == true
+end
+
+local function canEditWeights() return can("weights") end
+
+-- Who sees the change history: officers, the guild master (rank 0) and anyone granted a key.
 local function canSeeHistory()
   local s = services()
   if s == nil then return false end
   if s.roster:IsOfficer(s.playerChar) == true then return true end
-  return s.roster.RankIndex ~= nil and s.roster:RankIndex(s.playerChar) == 0
+  if s.roster.RankIndex ~= nil and s.roster:RankIndex(s.playerChar) == 0 then return true end
+  if perms() and ns.Permissions then
+    for _, k in ipairs(ns.Permissions.KEYS) do if can(k.key) then return true end end
+  end
+  return false
 end
+SettingsView.CanSeeHistory = canSeeHistory
 
 local HISTORY_ENTRIES = 20 -- newest entries shown
 local HISTORY_ROWS = 8     -- lines visible at once; the mouse wheel scrolls the rest
@@ -54,8 +68,29 @@ local function weightLabel(id)
   return tostring(id)
 end
 
--- Plain-language lines for one history entry (ASCII only): one per changed weight, or one for a
--- month retake. Nothing for a kind this version doesn't know.
+-- A rank's name for history lines: from the game or the roster cache, else "Rank N".
+local function rankName(i)
+  local s = services()
+  local names = s and s.roster and s.roster.RankNames and s.roster:RankNames() or {}
+  return names[i + 1] or ("Rank " .. tostring(i))
+end
+
+-- "Guild Master, Officer" (plus the raid leader column) for one stored grant.
+local function grantText(g)
+  if type(g) ~= "table" then return "default" end
+  local parts = {}
+  for _, r in ipairs(type(g.ranks) == "table" and g.ranks or {}) do parts[#parts + 1] = Util.Escape(rankName(r)) end
+  if g.raidlead == true then parts[#parts + 1] = "Raid leader & assistants" end
+  if #parts == 0 then return "nobody" end
+  return table.concat(parts, ", ")
+end
+
+local function permLabel(key)
+  return ns.Permissions and ns.Permissions.Label(key) or tostring(key)
+end
+
+-- Plain-language lines for one history entry (ASCII only): one per changed weight, one for a
+-- month retake, or one per changed permission. Nothing for a kind this version doesn't know.
 local function describe(e)
   local out = {}
   if e.what == "weights" then
@@ -77,9 +112,22 @@ local function describe(e)
     local y, m = tostring(e.key):match("^(%d+)-(%d+)$")
     local name = MONTHS[tonumber(m or 0)]
     if name then out[#out + 1] = "Retook " .. name .. " " .. y .. " top 5" end
+  elseif e.what == "perms" then
+    local keys, seen = {}, {}
+    for _, map in ipairs({ e.before or {}, e.after or {} }) do
+      for key in pairs(map) do
+        if not seen[key] then seen[key] = true; keys[#keys + 1] = key end
+      end
+    end
+    table.sort(keys)
+    for _, key in ipairs(keys) do
+      out[#out + 1] = "Changed " .. Util.Escape(permLabel(key)) .. ": "
+        .. grantText((e.before or {})[key]) .. " -> " .. grantText((e.after or {})[key])
+    end
   end
   return out
 end
+SettingsView.Describe = describe
 
 -- A weight box accepts a plain decimal from 0 to 1000. Returns the number, or nil.
 local function parseWeight(text)
@@ -135,7 +183,7 @@ function SettingsView.Build(parent)
   local y = -96
   local head = UI.Text(parent, "GameFontNormal", "Activity weights")
   head:SetPoint("TOPLEFT", 4, y)
-  local sub = UI.Text(parent, "GameFontDisableSmall", "(officers only · applies to the whole guild)")
+  local sub = UI.Text(parent, "GameFontDisableSmall", "(set under Permissions · applies to the whole guild)")
   sub:SetPoint("LEFT", head, "RIGHT", 8, 0)
   y = y - 22
   for _, h in ipairs({ { "Activity", 4 }, { "Weight", 270 }, { "Default", 350 } }) do
@@ -222,7 +270,7 @@ function SettingsView.Build(parent)
       section.status:SetText("Weights published.")
       section.refresh()
     else
-      section.status:SetText(lb().demo and tostring(err) or err == "officers only" and "Only officers can publish weights."
+      section.status:SetText(lb().demo and tostring(err) or err == "no permission" and "You don't have permission to publish weights."
         or ("Couldn't publish the weights: " .. tostring(err) .. "."))
     end
   end)

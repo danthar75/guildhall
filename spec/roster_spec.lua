@@ -151,4 +151,21 @@ describe("Roster", function()
     r2:Refresh()
     assert.is_true(r2:HasRanks())
   end)
+
+  it("RankNames reads the game's ranks and caches them", function()
+    local live = { "Guild Master", "Officer", "Member" }
+    local r, cache = make({}, { GuildControlGetNumRanks = function() return #live end,
+      GuildControlGetRankName = function(i) return live[i] end })
+    assert.same({ "Guild Master", "Officer", "Member" }, r:RankNames())
+    live = {} -- the game stops answering (secret or not loaded): the cache answers
+    assert.same({ "Guild Master", "Officer", "Member" }, r:RankNames())
+    assert.equal("Officer", cache.rankNames[1])
+  end)
+
+  it("RankNames falls back to rank names seen in the roster, with Rank N for a gap", function()
+    local r = make({ { name = "A", rank = 0 }, { name = "B", rank = 2 } })
+    assert.same({}, r:RankNames())
+    r:Refresh()
+    assert.same({ "Rank", "Rank 1", "Rank" }, r:RankNames())
+  end)
 end)

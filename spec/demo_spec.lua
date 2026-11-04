@@ -22,6 +22,7 @@ describe("Leaderboard demo", function()
     loadAddonFile(ns, "Guildhall/Modules/Exchange/Deals.lua")
     ns.Observations = { KINDS = { trade = true, cod = true, manual = true, witness = true, bank = true } }
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Bank.lua")
+    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Demo.lua")
     Demo = ns.Leaderboard.Demo
     publishes, refreshed = 0, 0
@@ -138,6 +139,7 @@ describe("Leaderboard demo never reaches the real guild", function()
     ns.Observations = { KINDS = { trade = true, cod = true, manual = true, witness = true, bank = true } }
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Bank.lua")
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Config.lua")
+    loadAddonFile(ns, "Guildhall/Core/Permissions.lua")
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Demo.lua")
     ns.RegisterModule = function() end
     loadAddonFile(ns, "Guildhall/Core/Leaderboard/Module.lua")
@@ -183,6 +185,25 @@ describe("Leaderboard demo never reaches the real guild", function()
     end
     assert.is_nil(rawget(lb.config, "set"))
     assert.equal(0, sent)
+  end)
+
+  it("demo permissions are the defaults, read-only, and refuse a save", function()
+    local real = cfg.perms
+    lb.permissions = real
+    ns.Leaderboard.Demo.Set(ns, true)
+    local p = lb.permissions
+    assert.not_equal(real, p)
+    assert.equal(p, lb.config.perms)
+    assert.is_false(p:Editable())
+    assert.same({ ranks = { [0] = true }, raidlead = false }, p:Grants("weights"))
+    local before = count(db)
+    local ok, err = p:Publish({ weights = { ranks = { [1] = true } } })
+    assert.is_false(ok)
+    assert.is_truthy(err:find("/gh lbdemo off", 1, true))
+    assert.equal(before, count(db))
+    assert.equal(0, sent)
+    ns.Leaderboard.Demo.Set(ns, false)
+    assert.equal(real, lb.permissions)
   end)
 
   it("demo mode writes no history and History is an empty read", function()

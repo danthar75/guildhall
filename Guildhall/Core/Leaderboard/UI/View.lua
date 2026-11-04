@@ -70,10 +70,11 @@ local function isOfficer()
   return s ~= nil and s.roster:IsOfficer(s.playerChar) == true
 end
 
--- Who may retake a saved month. Task 16 switches this to a rank permission.
+-- Who may retake a saved month: ranks granted "retake" (guild master only by default).
 local function canRetake()
-  local s = services()
-  return s ~= nil and s.roster:IsOfficer(s.playerChar) == true
+  local s, l = services(), lb()
+  local p = l and l.permissions
+  return s ~= nil and p ~= nil and p:Can(s.playerChar, "retake") == true
 end
 
 -- Formatting ----------------------------------------------------------------------------

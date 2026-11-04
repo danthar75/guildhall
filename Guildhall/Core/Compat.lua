@@ -120,12 +120,28 @@ function Compat:GetNumGuildMembers()
 end
 
 -- Returns only what Roster needs, each already passed through Safe (nil when secret):
--- name, rankIndex, isOnline. Returns nothing when the API is missing.
+-- name, rankIndex, isOnline, rankName. Returns nothing when the API is missing.
 function Compat:GetGuildRosterInfo(i)
   local f = self.env.GetGuildRosterInfo
   if not f then return nil end
-  local name, _, rankIndex, _, _, _, _, _, isOnline = f(i)
-  return self:Safe(name), self:Safe(rankIndex), self:Safe(isOnline)
+  local name, rankName, rankIndex, _, _, _, _, _, isOnline = f(i)
+  return self:Safe(name), self:Safe(rankIndex), self:Safe(isOnline), self:Safe(rankName)
+end
+
+-- The guild's rank names in rank order (index 1 is rank 0, the guild master), or nil when the
+-- API is missing, there are no ranks, or any value is secret.
+function Compat:GuildRanks()
+  local env = self.env
+  if not (env.GuildControlGetNumRanks and env.GuildControlGetRankName) then return nil end
+  local n = self:Safe((env.GuildControlGetNumRanks()))
+  if type(n) ~= "number" or n < 1 then return nil end
+  local out = {}
+  for i = 1, math.min(n, 10) do
+    local name = self:Safe((env.GuildControlGetRankName(i)))
+    if type(name) ~= "string" or name == "" then return nil end
+    out[i] = name
+  end
+  return out
 end
 
 -- Asks the server to refresh the roster (results arrive via GUILD_ROSTER_UPDATE).
