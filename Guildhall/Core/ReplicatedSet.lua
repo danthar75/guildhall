@@ -22,6 +22,8 @@ local function greater(a, b)
   return (a.char or "") > (b.char or "")
 end
 
+ReplicatedSet.Greater = greater
+
 local function finite(x)
   return type(x) == "number" and x == x and x ~= math.huge and x ~= -math.huge
 end
@@ -89,9 +91,10 @@ function Set:Purge()
   return n
 end
 
+-- Digest: id -> {v, t}. Missing compares (v, t) so same-version divergent copies still converge.
 function Set:Digest()
   local d = {}
-  for id, rec in pairs(self.store) do d[id] = rec.v end
+  for id, rec in pairs(self.store) do d[id] = { rec.v, rec.t } end
   return d
 end
 
@@ -99,9 +102,10 @@ function Set:Missing(digest)
   local now, out = self.now(), {}
   if type(digest) ~= "table" then digest = {} end
   for id, rec in pairs(self.store) do
-    local pv = digest[id]
-    if type(pv) ~= "number" then pv = nil end
-    if rec.exp > now and (pv == nil or pv < rec.v) then out[#out + 1] = rec end
+    local e = digest[id]
+    local pv, pt
+    if type(e) == "table" and finite(e[1]) and finite(e[2]) then pv, pt = e[1], e[2] end
+    if rec.exp > now and (pv == nil or rec.v > pv or (rec.v == pv and rec.t > pt)) then out[#out + 1] = rec end
   end
   table.sort(out, function(a, b) return a.id < b.id end)
   return out

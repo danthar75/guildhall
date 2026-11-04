@@ -30,6 +30,7 @@ function Sync:Start()
 end
 
 function Sync:Publish(rec)
+  -- Publish skips validate on purpose: the data is local.
   local status, old = self.set:Apply(rec)
   local reason = status == "invalid" and "malformed" or nil
   self.onApplied(rec, status, old, self.playerName or "self", reason)
@@ -72,40 +73,46 @@ function Sync:_flush()
   if #batch > 0 then self.comm:Send(self.module, "REC", { rs = batch }) end
 end
 
+-- Drop our pending copy only if the peer's is Greater or identical on the full (v, t, del, char) tuple.
 function Sync:_suppress(r)
   local pending = self.pending
-  if not pending or type(r.id) ~= "string" or type(r.v) ~= "number" then return end
+  if not pending or type(r.id) ~= "string" then return end
   local cur = pending[r.id]
-  if cur and r.v >= cur.v then pending[r.id] = nil end
+  if not cur then return end
+  local G = ns.ReplicatedSet.Greater
+  local same = r.v == cur.v and r.t == cur.t and (r.del or false) == (cur.del or false) and (r.char or "") == (cur.char or "")
+  if same or G(r, cur) then pending[r.id] = nil end
 end
 
 function Sync:_onRec(p, sender)
   if type(p) ~= "table" or type(p.rs) ~= "table" then return end
   for _, r in ipairs(p.rs) do
     if type(r) == "table" then
-      self:_suppress(r)
-      self:_applyOne(r, sender)
+      local status = self:_applyOne(r, sender)
+      if status ~= "invalid" then self:_suppress(r) end
     end
   end
 end
 
+-- Returns the reported status.
 function Sync:_applyOne(r, sender)
+  local reason
   if self.validate and type(r.id) == "string" then
-    local ok, valid, reason = pcall(self.validate, r, self.set:Get(r.id), sender)
+    local ok, valid, why = pcall(self.validate, r, self.set:Get(r.id), sender)
     if not ok then
       self.onApplied(r, "invalid", self.set:Get(r.id), sender, "validate error: " .. tostring(valid))
-      return
+      return "invalid"
     end
     if not valid then
-      self.onApplied(r, "invalid", self.set:Get(r.id), sender, reason)
-      return
+      self.onApplied(r, "invalid", self.set:Get(r.id), sender, why)
+      return "invalid"
     end
-    local status, old = self.set:Apply(r)
-    self.onApplied(r, status, old, sender, status == "invalid" and "malformed" or (status == "accepted" and reason or nil))
-    return
+    reason = why
   end
-  local status, old = self.set:Apply(r)
-  self.onApplied(r, status, old, sender, status == "invalid" and "malformed" or nil)
+  local status, old, why = self.set:Apply(r)
+  if status == "invalid" then reason = why or "malformed" elseif status ~= "accepted" then reason = nil end
+  self.onApplied(r, status, old, sender, reason)
+  return status
 end
 
 ns.Sync = Sync
