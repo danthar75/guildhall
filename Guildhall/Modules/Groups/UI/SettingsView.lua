@@ -23,23 +23,16 @@ local function on(w, event, fn)
   w:SetScript(event, function(...) return UI.Try(fn, ...) end)
 end
 
--- personal.groups with its defaults filled, or nil without SavedVariables.
+-- personal.groups with its defaults filled (Reminders.Defaults). Without SavedVariables, a fresh
+-- table of the defaults that nothing keeps, so the boxes show the defaults and save nothing.
 local function settings()
   local p = UI.Personal()
-  if type(p) ~= "table" then return nil end
-  local R = ns.Groups.Reminders
-  if R and R.Defaults then return R.Defaults(p) end
-  if type(p.groups) ~= "table" then p.groups = {} end
-  return p.groups
+  return ns.Groups.Reminders.Defaults(type(p) == "table" and p or {})
 end
 
 local function current()
   local g = settings()
-  return {
-    reminders = not (g and g.reminders == false),
-    sound = not (g and g.sound == false),
-    roles = g and type(g.roles) == "table" and g.roles or { d = true },
-  }
+  return { reminders = g.reminders ~= false, sound = g.sound ~= false, roles = g.roles }
 end
 
 local function checkbox(parent, label, x, y)
@@ -56,15 +49,13 @@ function SettingsView.Build(parent)
 
   section.reminders = checkbox(parent, "Remind me 15 min before runs I signed up for", 0, 0)
   on(section.reminders, "OnClick", function(self)
-    local g = settings()
-    if g then g.reminders = self:GetChecked() == true end
+    settings().reminders = self:GetChecked() == true
     section.refresh()
   end)
 
   section.sound, section.soundLabel = checkbox(parent, "Play a sound with reminders", 20, -26)
   on(section.sound, "OnClick", function(self)
-    local g = settings()
-    if g then g.sound = self:GetChecked() == true end
+    settings().sound = self:GetChecked() == true
   end)
 
   local head = UI.Text(parent, "GameFontNormal", "My usual roles")
@@ -74,8 +65,7 @@ function SettingsView.Build(parent)
   for i, r in ipairs(ROLES) do
     local cb = checkbox(parent, ROLE_NAME[r], (i - 1) * 110, -86)
     on(cb, "OnClick", function(self)
-      local g = settings()
-      local roles = g and type(g.roles) == "table" and g.roles or nil
+      local roles = settings().roles
       local want = self:GetChecked() == true
       local others = 0
       for _, o in ipairs(ROLES) do
@@ -87,7 +77,8 @@ function SettingsView.Build(parent)
         return
       end
       section.status:SetText("")
-      if roles then roles[r] = want or nil end
+      roles[r] = want or nil
+      section.refresh() -- shows what was kept (nothing, without SavedVariables)
     end)
     section.roles[r] = cb
   end

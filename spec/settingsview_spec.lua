@@ -218,7 +218,7 @@ describe("Change history view", function()
     end
     assert.same({ "Checklist Fire: added Fire Protection Potion x2" },
       cl({ lines = {} }, { lines = { { kind = "item", item = 13457, count = 2 } } }))
-    assert.same({ "Checklist Fire: removed item 999" },
+    assert.same({ "Checklist Fire: removed an item" },
       cl({ lines = { { kind = "item", item = 999, count = 1 } } }, { lines = {} }))
     assert.same({ "Checklist Fire: added All gear enchanted", "Checklist Fire: added \"Bring a soulstone\"" },
       cl({ lines = {} }, { lines = { { kind = "enchants" }, { kind = "manual", text = "Bring a soulstone" } } }))
@@ -227,13 +227,47 @@ describe("Change history view", function()
     assert.same({ "Checklist Fire: restored" }, cl({ deleted = true }, { deleted = false }))
     assert.same({ "Checklist Fire: made the default" }, cl({ default = false }, { default = true }))
     -- a bank entry the ledger no longer has, and reason edits
-    assert.same({ "Bank entry bank:o9: excluded" },
+    assert.same({ "Bank entry (no longer in the ledger): excluded" },
       D({ what = "bank", key = "bank:o9", before = { excluded = false }, after = { excluded = true } }))
     assert.same({ "Bank entry 2023-11-13 Bob 50g deposit: reason changed \194\183 b" },
       D({ what = "bank", key = "bank:o1", before = { reason = "a" }, after = { reason = "b" } }))
     assert.same({ "Bank entry 2023-11-13 Bob 50g deposit: reason removed" },
       D({ what = "bank", key = "bank:o1", before = { reason = "a" }, after = {} }))
     assert.same({}, errors)
+  end)
+
+  describe("never shows a raw id", function()
+    local function D(e) return ns.UI.HistoryView.Describe(e) end
+
+    it("a bank entry the ledger no longer has", function()
+      ns.leaderboard.ledger = { Contributions = function() return {} end }
+      assert.same({ "Bank entry (no longer in the ledger): excluded" },
+        D({ what = "bank", key = "bank:o9", before = { excluded = false }, after = { excluded = true } }))
+      assert.same({ "Bank entry (no longer in the ledger): counted again" },
+        D({ what = "bank", key = "bank:o9", before = { excluded = true }, after = { excluded = false } }))
+    end)
+
+    it("an item the client hasn't cached", function()
+      _G.GetItemInfo = function() return nil end
+      assert.same({ "Checklist Fire: an item 3 -> 5" }, D({ what = "checklist", key = "checklist:mc:fire",
+        before = { name = "Fire", lines = { { kind = "item", item = 4242, count = 3 } } },
+        after = { name = "Fire", lines = { { kind = "item", item = 4242, count = 5 } } } }))
+    end)
+
+    it("a weight type this version doesn't know", function()
+      assert.same({ "Leaderboard weight an unknown activity: 1 -> 2" },
+        D({ what = "weights", before = { ["future.kind"] = 1 }, after = { ["future.kind"] = 2 } }))
+    end)
+
+    it("a checklist with no name on either side", function()
+      assert.same({ "A checklist: deleted" },
+        D({ what = "checklist", key = "checklist:mc:fire", before = { deleted = false }, after = { deleted = true } }))
+    end)
+
+    it("a permission key this version doesn't list", function()
+      assert.same({ "Permission an unknown permission: added Officer" },
+        D({ what = "perms", before = {}, after = { ["future.key"] = { ranks = { 0, 1 }, raidlead = false } } }))
+    end)
   end)
 
   it("members can't see the change history", function()
@@ -381,6 +415,8 @@ describe("Groups settings", function()
     assert.is_true(section.roles.d:GetChecked())
     toggle(section.reminders, false) -- nowhere to save it, and no error
     toggle(section.roles.t, true)
+    assert.is_false(section.roles.t:GetChecked()) -- nothing was saved, so the box resets
+    assert.is_true(section.reminders:GetChecked())
     assert.same({}, errors)
   end)
 

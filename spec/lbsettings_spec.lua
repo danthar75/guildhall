@@ -249,7 +249,7 @@ describe("Leaderboard.SettingsView", function()
       local out = D({ what = "checklist", key = "mc", before = { name = "Molten Core", lines = { { kind = "item", item = 13457, count = 3 } } },
         after = { lines = { { kind = "item", item = 13457, count = 5 } } } })
       assert.same({ "Checklist Molten Core: Fire Protection Potion 3 -> 5" }, out)
-      assert.same({ "Checklist Molten Core: added item 999 x2" },
+      assert.same({ "Checklist Molten Core: added an item x2" },
         D({ what = "checklist", key = "mc", before = { name = "Molten Core" }, after = { lines = { { kind = "item", item = 999, count = 2 } } } }))
       assert.same({ "Checklist Old: renamed to New" }, D({ what = "checklist", key = "mc", before = { name = "Old" }, after = { name = "New" } }))
       assert.same({ "Checklist Molten Core: deleted" }, D({ what = "checklist", key = "mc", before = { name = "Molten Core" }, after = { deleted = true } }))
@@ -285,17 +285,17 @@ describe("Leaderboard.SettingsView", function()
         D({ what = "bank", key = "bank:o1", before = { excluded = false }, after = { excluded = true, reason = "moving guild funds" } }))
       assert.same({ "Bank entry Cat [Linen] x3 withdrawal: counted again" },
         D({ what = "bank", key = "bank:o2", before = { excluded = true }, after = { excluded = false } }))
-      assert.same({ "Bank entry bank:o9: excluded" },
+      assert.same({ "Bank entry (no longer in the ledger): excluded" },
         D({ what = "bank", key = "bank:o9", before = { excluded = false }, after = { excluded = true } }))
       assert.same({ "Bank entry 2023-11-14 Bob 50g deposit: reason changed \194\183 b" },
         D({ what = "bank", key = "bank:o1", before = { reason = "a" }, after = { reason = "b" } }))
       assert.same({ "Bank entry 2023-11-14 Bob 50g deposit: reason removed" },
         D({ what = "bank", key = "bank:o1", before = { reason = "a" }, after = {} }))
       -- a reason is shown escaped
-      assert.same({ "Bank entry bank:o9: excluded \194\183 a||b" },
+      assert.same({ "Bank entry (no longer in the ledger): excluded \194\183 a||b" },
         D({ what = "bank", key = "bank:o9", before = {}, after = { excluded = true, reason = "a|b" } }))
       ns.leaderboard.ledger = nil
-      assert.same({ "Bank entry bank:o1: counted again" },
+      assert.same({ "Bank entry (no longer in the ledger): counted again" },
         D({ what = "bank", key = "bank:o1", before = { excluded = true }, after = { excluded = false } }))
     end)
   end)

@@ -52,7 +52,7 @@ local function weightLabel(id)
   for _, def in ipairs(ns.Activity and ns.Activity.Types() or {}) do
     if def.id == id then return def.label end
   end
-  return tostring(id)
+  return "an unknown activity"
 end
 
 local function rankNames()
@@ -66,8 +66,12 @@ local function rankName(i)
   return rankNames()[i + 1] or ("Rank " .. tostring(i))
 end
 
+-- A key this version doesn't list (a newer client's) reads "an unknown permission", never its id.
 local function permLabel(key)
-  return ns.Permissions and ns.Permissions.Label(key) or tostring(key)
+  for _, k in ipairs(ns.Permissions and ns.Permissions.KEYS or {}) do
+    if k.key == key then return k.label end
+  end
+  return "an unknown permission"
 end
 
 -- One side of a permissions entry as a rank set and a raidlead flag; a missing grant is the
@@ -162,7 +166,7 @@ end
 local function itemText(id)
   local name = type(GetItemInfo) == "function" and GetItemInfo(id) or nil
   if type(name) == "string" and name ~= "" then return Util.Escape(name) end
-  return "item " .. tostring(id)
+  return "an item"
 end
 
 -- Item counts of a checklist side by item id, plus the other lines' display texts, as a set
@@ -185,8 +189,8 @@ end
 local function describeChecklist(e, out)
   local b = type(e.before) == "table" and e.before or {}
   local a = type(e.after) == "table" and e.after or {}
-  local raw = b.name or a.name or e.key or "?"
-  local head = "Checklist " .. Util.Escape(tostring(raw)) .. ": "
+  local name = b.name or a.name
+  local head = type(name) == "string" and ("Checklist " .. Util.Escape(name) .. ": ") or "A checklist: "
   if a.name ~= nil and b.name ~= nil and a.name ~= b.name then
     out[#out + 1] = head .. "renamed to " .. Util.Escape(tostring(a.name))
   end
@@ -255,7 +259,7 @@ function HistoryView.Describe(e)
     describeChecklist(e, out)
   elseif e.what == "bank" then
     local a = type(e.after) == "table" and e.after or {}
-    local head = "Bank entry " .. (bankEntryText(e.key) or Util.Escape(tostring(e.key))) .. ": "
+    local head = "Bank entry " .. (bankEntryText(e.key) or "(no longer in the ledger)") .. ": "
     local reason = type(a.reason) == "string" and a.reason ~= "" and (DOT .. Util.Escape(a.reason)) or ""
     if a.excluded == true then
       out[#out + 1] = head .. "excluded" .. reason
