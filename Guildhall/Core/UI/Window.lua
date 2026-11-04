@@ -131,7 +131,7 @@ local Window = {}
 UI.Window = Window
 
 local WIDTH, HEIGHT = 760, 500
-local frame, tabs, current
+local frame, tabs, current, titleText
 
 local function collectTabs()
   local list = {}
@@ -241,10 +241,8 @@ local function build()
   frame:Hide()
   if UISpecialFrames then table.insert(UISpecialFrames, "GuildhallMainFrame") end
 
-  local title = UI.Text(frame, "GameFontNormalLarge", ns.Theme.Get("title") or "Guildhall")
-  title:SetPoint("TOPLEFT", 16, -14)
-  local accent = ns.Theme.Get("accent")
-  if accent then title:SetTextColor(accent[1], accent[2], accent[3]) end
+  titleText = UI.Text(frame, "GameFontNormalLarge")
+  titleText:SetPoint("TOPLEFT", 16, -14)
 
   local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", -2, -2)
@@ -291,8 +289,15 @@ function Window:IsShown()
   return frame ~= nil and frame:IsShown()
 end
 
+local function applyTitle()
+  titleText:SetText(ns.Theme.Get("title") or "Guildhall")
+  local accent = ns.Theme.Get("accent")
+  if accent then titleText:SetTextColor(accent[1], accent[2], accent[3]) end
+end
+
 function Window:Refresh()
   if not (frame and frame:IsShown() and current) then return end
+  applyTitle()
   -- A tab that was waiting for guild data can build now.
   if current.waitingForGuild and ns.services then buildTab(current) end
   -- Hidden tabs refresh when selected, so only the visible one needs it now.

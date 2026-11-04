@@ -65,26 +65,35 @@ function SettingsView.Build(parent)
   view.change = UI.Button(content, "Change…", 100, function()
     if ns.Boot and ns.Boot.ChangeConsent then ns.Boot.ChangeConsent() end
   end)
-  view.change:SetPoint("TOPRIGHT", content, "TOPRIGHT", -10, 0)
-  view.change:SetPoint("TOP", view.chars, "TOP", 0, 2)
+  -- Single anchor: sets both axes, keeps the fixed 100 px width.
+  view.change:SetPoint("TOPLEFT", view.chars, "TOPRIGHT", 20, 2)
 
-  -- Module sections, built once.
+  -- Module sections. A section that fails to build (e.g. before guild data exists) is
+  -- rebuilt in a fresh frame on a later refresh once ns.services exists.
+  local function buildSection(sec)
+    if sec.frame then sec.frame:Hide() end
+    local section = CreateFrame("Frame", nil, content)
+    section:SetSize(WIDTH - 10, SECTION_DEFAULT_HEIGHT)
+    sec.frame = section
+    local ok, obj = pcall(sec.build, section)
+    if ok then
+      sec.obj, sec.failed, sec.failedWithServices = obj, nil, nil
+    else
+      ns.OnError(obj)
+      local msg = UI.Text(section, "GameFontDisable", "These settings could not be loaded yet.")
+      msg:SetPoint("TOPLEFT", 0, 0)
+      sec.obj, sec.failed, sec.failedWithServices = nil, true, ns.services ~= nil
+    end
+  end
+
   view.sections = {}
   for _, name in ipairs(ns.Modules()) do
     local def = ns.GetModule(name)
     local st = type(def) == "table" and def.settings
     if type(st) == "table" and type(st.build) == "function" then
-      local title = UI.Text(content, "GameFontNormalLarge", st.title or name)
-      local section = CreateFrame("Frame", nil, content)
-      section:SetSize(WIDTH - 10, SECTION_DEFAULT_HEIGHT)
-      local ok, obj = pcall(st.build, section)
-      if not ok then
-        ns.OnError(obj)
-        local msg = UI.Text(section, "GameFontDisable", "These settings could not be loaded yet.")
-        msg:SetPoint("TOPLEFT", 0, 0)
-        obj = nil
-      end
-      view.sections[#view.sections + 1] = { title = title, frame = section, obj = obj }
+      local sec = { title = UI.Text(content, "GameFontNormalLarge", st.title or name), build = st.build }
+      buildSection(sec)
+      view.sections[#view.sections + 1] = sec
     end
   end
 
@@ -108,6 +117,8 @@ function SettingsView.Build(parent)
     view.chars:SetText(chars)
     if ns.services then view.change:Show() else view.change:Hide() end
     for _, sec in ipairs(view.sections) do
+      -- Retry once services exist (only if the earlier failure happened without them).
+      if sec.failed and not sec.failedWithServices and ns.services then buildSection(sec) end
       local obj = sec.obj
       if type(obj) == "table" and type(obj.refresh) == "function" then UI.Try(obj.refresh, obj) end
     end

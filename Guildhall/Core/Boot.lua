@@ -225,14 +225,16 @@ local function start(guildKey)
   buildServices(guildKey)
   booted = true
   local s = ns.services
-  compat:RequestRoster()
-  s.roster:Refresh()
-  s.profile:SeeCharacter(s.playerChar)
-  if s.profile:NeedsConsent() then
-    Boot.ShowConsent()
-  else
-    Boot.PublishProfile()
+  -- Each core step is isolated so a failure in one still lets modules and sync start.
+  local function step(fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then ns.OnError(err) end
   end
+  step(s.roster.Refresh, s.roster) -- Refresh also requests the roster from the server
+  step(s.profile.SeeCharacter, s.profile, s.playerChar)
+  step(function()
+    if s.profile:NeedsConsent() then Boot.ShowConsent() else Boot.PublishProfile() end
+  end)
   for _, name in ipairs(ns.Modules()) do
     local def = ns.GetModule(name)
     if type(def) == "table" and type(def.OnLogin) == "function" then
@@ -240,8 +242,8 @@ local function start(guildKey)
       if not ok then ns.OnError(err) end
     end
   end
-  profileSync:Start()
-  refreshUI()
+  step(profileSync.Start, profileSync)
+  step(refreshUI)
 end
 
 -- One lookup. Returns true when there is nothing left to wait for.
@@ -265,7 +267,9 @@ local function retryLoop(attempt)
   if done then resolving = false; return end
   if attempt >= GUILD_RETRIES then
     resolving = false
-    if not noGuildNotified then
+    -- In an instance the guild name may just be secret: stay quiet; PLAYER_ENTERING_WORLD
+    -- and roster updates keep retrying.
+    if not noGuildNotified and not compat:IsRestricted("Map") and not compat:IsRestricted("Chat") then
       noGuildNotified = true
       print("|cffffd200Guildhall|r: you're not in a guild, so Guildhall is resting. Join a guild to use it.")
     end
