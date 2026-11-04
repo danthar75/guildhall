@@ -14,6 +14,8 @@ local ADDON, ns = ...
 --   * the raider is a credited attendee of a verified kill of that instance on the ask's server day;
 --   * a flexdone from the raider's profile (profile:OwnerOf(raider) == rec.by) with 0 <= at - ask.at <=
 --     900, or a flexok from the asker's profile (rec.by equal to the ask's rec.by), exists.
+-- One groups.flex per raider per instance per server day: the first qualifying ask by (at, id) counts, later
+-- ones get an uncounted row, why = "already credited tonight" (own chars only).
 -- An ask whose asker's profile owns the raider never counts. Uncounted rows ("waiting for the switch",
 -- "not permitted") go only to the raider's own chars (the deriving client's profile).
 --
@@ -116,7 +118,11 @@ function Flex.Derive(list, ctx)
   for _, rec in ipairs(list or {}) do
     if wellFormedAsk(rec) then asks[#asks + 1] = rec end
   end
-  table.sort(asks, function(a, b) return a.id < b.id end)
+  table.sort(asks, function(a, b)
+    if a.d.at ~= b.d.at then return a.d.at < b.d.at end
+    return a.id < b.id
+  end)
+  local credited = {}
 
   local leadersOf, attendees, out = {}, {}, {}
   for _, rec in ipairs(asks) do
@@ -145,7 +151,13 @@ function Flex.Derive(list, ctx)
           end
         end
         if done then
-          row.counted = true
+          local ck = d.raider .. "|" .. lk
+          if credited[ck] then
+            row.counted, row.why = false, "already credited tonight"
+          else
+            credited[ck] = true
+            row.counted = true
+          end
         else
           row.counted, row.why = false, "waiting for the switch"
         end
@@ -207,11 +219,7 @@ function F:Ask(raiderChar, instance, note)
   if not self.perms:Can(self.playerChar, "flex", { raidLeaders = leaders(instance, self:_today()) }) then
     return false, REFUSED
   end
-  local p = self.profile
-  if self:_ownChars()[raiderChar] or (p and p.OwnerOf and p:OwnerOf(raiderChar) ~= nil
-      and p:OwnerOf(raiderChar) == p:Id()) then
-    return false, "not yourself"
-  end
+  if self:_ownChars()[raiderChar] then return false, "not yourself" end
   local status, rec = self.obs:Publish({ kind = "flexask", raider = raiderChar, instance = instance, note = note,
     at = math.floor(self.now()) })
   if status ~= "accepted" then return false, status end
@@ -220,12 +228,15 @@ end
 
 -- The asker's "Switched" tick for one of their own asks.
 function F:Tick(askId)
+  local p = self.profile
+  local myId = p and p.Id and p:Id() or nil
+  if myId == nil then return false, "not ready" end
   local ask
   for _, rec in ipairs(self.obs:List("flexask")) do
     if rec.id == askId then ask = rec; break end
   end
   if not ask then return false, "no such ask" end
-  if ask.by ~= self.profile:Id() then return false, "not your ask" end
+  if ask.by ~= myId then return false, "not your ask" end
   local status = self.obs:Publish({ kind = "flexok", ask = askId, at = math.floor(self.now()) })
   if status ~= "accepted" then return false, status end
   return true

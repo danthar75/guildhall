@@ -277,4 +277,39 @@ describe("Groups Flex", function()
     raider.fx:OnSpecChanged()   -- nothing known before: the first reading is only remembered
     assert.equal(0, #raider.obs:List("flexdone"))
   end)
+
+  it("two asks in one night count once; asks on two nights count twice", function()
+    local raider, off = setup()
+    local _, a1 = off.fx:Ask("Raider-R", "mc")
+    clock.advance(10)
+    local _, a2 = off.fx:Ask("Raider-R", "mc")
+    clock.advance(10)
+    spec = 2
+    raider.fx:OnSpecChanged()
+    assert.equal(2, #raider.obs:List("flexdone"))
+    local out = derive(raider)
+    assert.equal(1, counted(out, "Raider-R"))
+    local first, second = out[1], out[2]
+    assert.equal("flex:" .. a1, first.ref)
+    assert.is_true(first.counted)
+    assert.equal("flex:" .. a2, second.ref)
+    assert.equal("already credited tonight", second.why)
+    -- next night
+    clock.advance(DAY)
+    verifiedKill(clock.now() - 600, "Gm-R", {})
+    off.fx:Ask("Raider-R", "mc")
+    clock.advance(10)
+    spec = 1
+    raider.fx:OnSpecChanged()
+    assert.equal(2, counted(derive(raider), "Raider-R"))
+  end)
+
+  it("Tick without a profile id is not ready", function()
+    local _, off = setup()
+    local _, id = off.fx:Ask("Raider-R", "mc")
+    off.fx.profile = nil
+    local ok, err = off.fx:Tick(id)
+    assert.is_false(ok)
+    assert.equal("not ready", err)
+  end)
 end)
