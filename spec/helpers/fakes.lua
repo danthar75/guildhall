@@ -98,8 +98,24 @@ function M.widgets()
     end })
   end
   W.new = new
+  -- Like the real client, an EditBox's SetText fires its OnTextChanged handler (userInput false).
+  local function fireOnSetText(w)
+    local handlers = {}
+    rawset(w, "SetScript", function(self, event, fn)
+      self.calls.SetScript = self.calls.SetScript or {}
+      table.insert(self.calls.SetScript, { event, fn })
+      handlers[event] = fn
+    end)
+    rawset(w, "SetText", function(self, text)
+      self.calls.SetText = self.calls.SetText or {}
+      table.insert(self.calls.SetText, { text })
+      self.text = text
+      if handlers.OnTextChanged then handlers.OnTextChanged(self, false) end
+    end)
+  end
   function W.CreateFrame(kind)
     local w = new(kind)
+    if kind == "EditBox" then fireOnSetText(w) end
     W.created[#W.created + 1] = { kind, w }
     return w
   end

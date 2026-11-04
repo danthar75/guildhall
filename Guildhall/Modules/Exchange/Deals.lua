@@ -230,6 +230,23 @@ function Deals.IsDuplicate(autoPaired, key, at)
   return false
 end
 
+-- The id a deal's contributions share: the listing and its first observation.
+function Deals.Ref(listing, firstObsId)
+  return "deal:" .. listing .. ":" .. tostring(firstObsId)
+end
+
+-- The pairs of one kind that count: { a, mate?, key, ref, dup } in a stable order. A manual
+-- deal that repeats an auto-paired one is marked dup and credited to nobody.
+local function dealPairs(kind, list, auto)
+  local out = {}
+  for _, p in ipairs(pairUp(kind, list)) do
+    p.ref = Deals.Ref(p.a.d.listing, p.a.id)
+    p.dup = kind == "manual" and Deals.IsDuplicate(auto, p.key, p.a.d.at)
+    out[#out + 1] = p
+  end
+  return out
+end
+
 -- Every paired deal (both sides observed) in the observations, as { ref, listing, seller, buyer,
 -- at, kind }. The ref matches the one the deriver puts on the deal's contributions.
 function Deals.PairedDeals(observations)
@@ -237,11 +254,11 @@ function Deals.PairedDeals(observations)
   if not observations then return out end
   local auto = Deals.AutoPaired(observations)
   for _, kind in ipairs({ "trade", "cod", "manual" }) do
-    for _, p in ipairs(pairUp(kind, observations:List(kind))) do
-      local d = p.a.d
-      if p.mate and not (kind == "manual" and Deals.IsDuplicate(auto, p.key, d.at)) then
-        out[#out + 1] = { ref = "deal:" .. d.listing .. ":" .. tostring(p.a.id), listing = d.listing,
-          seller = d.seller, buyer = d.buyer, at = d.at, kind = kind }
+    for _, p in ipairs(dealPairs(kind, observations:List(kind), auto)) do
+      if p.mate and not p.dup then
+        local d = p.a.d
+        out[#out + 1] = { ref = p.ref, listing = d.listing, seller = d.seller, buyer = d.buyer,
+          at = d.at, kind = kind }
       end
     end
   end
@@ -250,20 +267,16 @@ end
 
 local function derive(kind)
   return function(list, ctx)
-    local skip = kind == "manual" and Deals.AutoPaired(ctx and ctx.observations) or {}
+    local auto = kind == "manual" and Deals.AutoPaired(ctx and ctx.observations) or {}
     local out = {}
-    for _, p in ipairs(pairUp(kind, list)) do
-      local d = p.a.d
-      local ref = "deal:" .. d.listing .. ":" .. tostring(p.a.id)
-      local dup = kind == "manual" and Deals.IsDuplicate(skip, p.key, d.at)
-      if p.mate then
-        if not dup then
-          for _, c in ipairs(rows(d, ref, d.at, true, nil, { seller = true, buyer = true })) do out[#out + 1] = c end
-        end
-      elseif not dup then
-        local why = kind == "manual" and "waiting for confirmation" or "unpaired"
-        local sides = p.a.by == d.seller and { seller = true } or { buyer = true }
-        for _, c in ipairs(rows(d, ref, d.at, false, why, sides)) do out[#out + 1] = c end
+    for _, p in ipairs(dealPairs(kind, list, auto)) do
+      if not p.dup then
+        local d = p.a.d
+        local counted = p.mate ~= nil
+        local why = (not counted) and (kind == "manual" and "waiting for confirmation" or "unpaired") or nil
+        local sides = counted and { seller = true, buyer = true }
+          or (p.a.by == d.seller and { seller = true } or { buyer = true })
+        for _, c in ipairs(rows(d, p.ref, d.at, counted, why, sides)) do out[#out + 1] = c end
       end
     end
     return out

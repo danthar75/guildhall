@@ -205,11 +205,7 @@ local RECORD_ERRORS = {
   ["already recorded"] = "That deal was already recorded.",
 }
 
-local function profileName(id)
-  local s = ns.services
-  if ns.LbConfig and ns.LbConfig._displayName then return ns.LbConfig._displayName(s.profile, id) end
-  return Util.DisplayName(s.profile:CharsOf(id)[1] or id)
-end
+local function profileName(id) return H.nameOfProfile(id) end
 
 -- Pick list entries for the partner: every other guild profile with a live record, by name.
 -- Members hidden from the leaderboard are still listed: hiding only affects the boards, and
@@ -239,14 +235,28 @@ local function parseCount(text)
   return n
 end
 
--- Gold typed as "40" or "1.5" -> whole copper, or nil.
+-- Gold typed as "40", "1.5", "1,5", "40g", "1g 50s", "1g 50s 25c" or "50s" -> whole copper, or nil.
+local UNIT_COPPER = { g = 10000, s = 100, c = 1 }
 local function parseCopper(text)
-  local t = Util.Trim(text or "")
-  if not (t:match("^%d+%.?%d*$") or t:match("^%.%d+$")) then return nil end
-  local copper = math.floor(tonumber(t) * 10000 + 0.5)
-  if copper < 1 or copper > MAX_COPPER then return nil end
+  local t = Util.Trim(text or ""):lower()
+  local copper
+  local plain = t:gsub("^(%d+),(%d+)$", "%1.%2")
+  if plain:match("^%d+%.?%d*$") or plain:match("^%.%d+$") then
+    copper = math.floor(tonumber(plain) * 10000 + 0.5)
+  elseif t:match("^%d+%s*[gsc]") then
+    local rest, last, total = t, 0, 0
+    while rest ~= "" do
+      local n, unit, tail = rest:match("^(%d+)%s*([gsc])%s*(.*)$")
+      local order = unit and ({ g = 1, s = 2, c = 3 })[unit]
+      if not n or order <= last then return nil end
+      last, total, rest = order, total + tonumber(n) * UNIT_COPPER[unit], tail
+    end
+    copper = total
+  end
+  if not copper or copper < 1 or copper > MAX_COPPER then return nil end
   return copper
 end
+Details.ParseCopper = parseCopper
 
 local function rdError(text)
   rd.err:SetText(text or "")

@@ -155,6 +155,17 @@ describe("Exchange deals", function()
       for _, c in ipairs(one) do assert.equal("bob", c.counterparty) end
     end)
 
+    it("Ref builds the id the contributions and PairedDeals share", function()
+      assert.equal("deal:L1:o1", Deals.Ref("L1", "o1"))
+      local obs = { List = function(_, kind) return kind == "trade" and { rec("o1", "ann", d()), rec("o2", "bob", d()) } or {} end }
+      local deals = Deals.PairedDeals(obs)
+      assert.equal(1, #deals)
+      assert.equal("deal:L1:o1", deals[1].ref)
+      for _, c in ipairs(derive("trade", { rec("o1", "ann", d()), rec("o2", "bob", d()) })) do
+        assert.equal(deals[1].ref, c.ref)
+      end
+    end)
+
     it("two observations from the same profile never pair", function()
       local list = derive("trade", { rec("o1", "ann", d()), rec("o2", "ann", d({ at = 5001 })) })
       assert.equal(0, (sum(list, "exchange.sales", true)))

@@ -99,6 +99,15 @@ describe("Exchange board deal UI", function()
       assert.same({}, errors)
     end)
 
+    it("accepts gold written as 40g, 1g 50s 25c, 50s or with a decimal comma", function()
+      local cases = { ["40g"] = 400000, ["1g 50s"] = 15000, ["1g 50s 25c"] = 15025, ["50s"] = 5000,
+        ["1,5"] = 15000, ["2.25"] = 22500, ["25c"] = 25, [" 3G "] = 30000 }
+      for text, copper in pairs(cases) do assert.equal(copper, Details.ParseCopper(text), text) end
+      for _, bad in ipairs({ "", "g", "50s 1g", "1g 1g", "1,2,3", "-1", "0", "1.5g", "abc", "1x", "99999999999" }) do
+        assert.is_nil(Details.ParseCopper(bad), bad)
+      end
+    end)
+
     it("lists other guild profiles by name, hidden ones included", function()
       local items = Details.PartnerItems()
       local labels = {}
@@ -164,6 +173,19 @@ describe("Exchange board deal UI", function()
       Board.Refresh()
       assert.is_false(view.banner.shown)
       assert.is_nil(Board.Prompt())
+    end)
+
+    it("never shows a raw item id in the confirm line", function()
+      local p = pend("pBrakka", "pMe", "pBrakka")
+      p.listing.d.item = "2589" -- a purged listing's stand-in: the id as text
+      p.obs.d.item = 2589
+      pending = { p }
+      _G.GetItemInfo = nil
+      build()
+      assert.equal("Brakka says you bought an item (x40) for 40g. Confirm?", Board.Prompt().text)
+      _G.GetItemInfo = function(id) return id == 2589 and "Runecloth" or nil end
+      assert.equal("Brakka says you bought 40 Runecloth for 40g. Confirm?", Board.Prompt().text)
+      _G.GetItemInfo = nil
     end)
 
     it("every listing gets a Record a deal button", function()

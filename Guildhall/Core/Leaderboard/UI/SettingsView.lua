@@ -59,7 +59,7 @@ local function lastChanged()
 end
 
 function SettingsView.Build(parent)
-  local section = { boxes = {}, rows = {} }
+  local section = { boxes = {}, rows = {}, dirty = {} }
   local s = services()
   if not s then error("no guild services yet") end
 
@@ -89,10 +89,17 @@ function SettingsView.Build(parent)
   head:SetPoint("TOPLEFT", 4, y)
   local sub = UI.Text(parent, "GameFontDisableSmall", "(officers only · applies to the whole guild)")
   sub:SetPoint("LEFT", head, "RIGHT", 8, 0)
-  y = y - 24
+  y = y - 22
+  for _, h in ipairs({ { "Activity", 4 }, { "Weight", 270 }, { "Default", 350 } }) do
+    UI.Text(parent, "GameFontNormalSmall", h[1]):SetPoint("TOPLEFT", h[2], y)
+  end
+  y = y - 18
 
   local types = ns.Activity.Types()
+  -- Does nothing for a non-officer: the boxes are hidden, and setting their text must not
+  -- bring the Reset buttons back.
   local function recheck()
+    if not canEditWeights() then return end
     local bad = false
     for _, def in ipairs(types) do
       local box, row = section.boxes[def.id], section.rows[def.id]
@@ -119,7 +126,11 @@ function SettingsView.Build(parent)
     box:SetAutoFocus(false)
     box:SetMaxLetters(8)
     box:SetPoint("TOPLEFT", 270, ry)
-    on(box, "OnTextChanged", function() recheck() end)
+    -- OnTextChanged also fires for our own SetText; only a user edit (second argument) is dirty.
+    on(box, "OnTextChanged", function(_, userInput)
+      if userInput then section.dirty[def.id] = true end
+      recheck()
+    end)
     on(box, "OnEnterPressed", function(self) self:ClearFocus() end)
     on(box, "OnEscapePressed", function(self) self:ClearFocus() end)
     section.boxes[def.id] = box
@@ -127,7 +138,11 @@ function SettingsView.Build(parent)
     row.value:SetPoint("TOPLEFT", 276, ry - 3)
     row.default = UI.Text(parent, "GameFontDisableSmall", "default " .. tostring(def.weight))
     row.default:SetPoint("TOPLEFT", 350, ry - 4)
-    row.reset = UI.Button(parent, "Reset", 60, function() box:SetText(tostring(def.weight)) end)
+    row.reset = UI.Button(parent, "Reset", 60, function()
+      if not canEditWeights() then return end
+      section.dirty[def.id] = nil
+      box:SetText(tostring(def.weight))
+    end)
     row.reset:SetPoint("TOPLEFT", 440, ry + 1)
     section.rows[def.id] = row
   end
@@ -149,6 +164,7 @@ function SettingsView.Build(parent)
     for _, def in ipairs(types) do map[def.id] = parseWeight(section.boxes[def.id]:GetText()) end
     local ok, err = lb().config:PublishWeights(map)
     if ok then
+      section.dirty = {}
       section.status:SetText("Weights published.")
       section.refresh()
     else
@@ -176,7 +192,7 @@ function SettingsView.Build(parent)
     for _, def in ipairs(types) do
       local box, row = section.boxes[def.id], section.rows[def.id]
       local w = weights[def.id] or def.weight
-      if not (box.HasFocus and box:HasFocus()) then box:SetText(tostring(w)) end
+      if not section.dirty[def.id] and not (box.HasFocus and box:HasFocus()) then box:SetText(tostring(w)) end
       row.value:SetText(tostring(w))
       local c = sameNumber(w, def.weight) and WHITE or GOLD
       row.value:SetTextColor(c[1], c[2], c[3])

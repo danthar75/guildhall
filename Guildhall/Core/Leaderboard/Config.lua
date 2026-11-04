@@ -100,6 +100,10 @@ local function validateRecord(self, rec)
   if id == "weights" then
     if type(rec.d) ~= "table" then return false, "not a table" end
     if not validTz(rec.d.tz) then return false, "bad tz" end
+    if rec.d.changedBy ~= nil and (type(rec.d.changedBy) ~= "string" or #rec.d.changedBy > MAX_NAME) then
+      return false, "bad changedBy"
+    end
+    if rec.d.changedAt ~= nil and not finite(rec.d.changedAt) then return false, "bad changedAt" end
     return validWeights(rec.d.weights)
   end
   local ym = id:match("^month:(%d%d%d%d%-%d%d)$")
@@ -187,10 +191,15 @@ function C:Weights()
   return out
 end
 
--- Who last published the weights and when: { char, at }, or nil while only defaults apply.
+-- Who last changed the weights and when: { char, at }, or nil while only defaults apply. A tz
+-- refresh republishes the record but carries the original d.changedBy / d.changedAt over;
+-- records from before those existed fall back to the record's own author and time.
 function C:WeightsInfo()
   local rec = self.set:Get("weights")
-  if not rec or rec.del or type(rec.d) ~= "table" or type(rec.char) ~= "string" or not finite(rec.t) then return nil end
+  if not rec or rec.del or type(rec.d) ~= "table" then return nil end
+  local d = rec.d
+  if type(d.changedBy) == "string" and finite(d.changedAt) then return { char = d.changedBy, at = d.changedAt } end
+  if type(rec.char) ~= "string" or not finite(rec.t) then return nil end
   return { char = rec.char, at = rec.t }
 end
 
@@ -205,7 +214,8 @@ function C:PublishWeights(map)
   if not ok then return false, err end
   local tz = self.compat:ServerOffset()
   if tz == nil then tz = self:Tz() end
-  local good = self:_publish("weights", { weights = copy(map), tz = tz })
+  local good = self:_publish("weights", { weights = copy(map), tz = tz,
+    changedBy = self.playerChar, changedAt = self.now() })
   return good, (not good) and "not accepted" or nil
 end
 
@@ -219,7 +229,9 @@ function C:MaybeRefreshTz()
   if not d then return false end
   if finite(d.tz) and math.abs(offset - d.tz) < TZ_STEP then return false end
   local weights = type(d.weights) == "table" and copy(d.weights) or {}
-  return (self:_publish("weights", { weights = weights, tz = offset }))
+  local info = self:WeightsInfo() -- an older record without the fields is stamped from its own author
+  return (self:_publish("weights", { weights = weights, tz = offset,
+    changedBy = info and info.char, changedAt = info and info.at }))
 end
 
 function C:Month(ym)

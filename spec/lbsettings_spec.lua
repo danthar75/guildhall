@@ -59,10 +59,10 @@ describe("Leaderboard.SettingsView", function()
     for _, c in ipairs(w.calls.SetScript or {}) do if c[1] == event then h = c[2] end end
     return h
   end
-  local function type_(id, text)
+  local function type_(id, text) -- the user typing: SetText fires the handler as programmatic, so call it with userInput
     local box = section.boxes[id]
     box:SetText(text)
-    handler(box, "OnTextChanged")(box)
+    handler(box, "OnTextChanged")(box, true)
   end
   local function becomeOfficer()
     officer = true
@@ -73,6 +73,12 @@ describe("Leaderboard.SettingsView", function()
     assert.is_false(buttons["Publish weights"].shown)
     assert.is_false(section.boxes["exchange.sales"].shown)
     assert.same({}, errors)
+  end)
+
+  it("a non-officer never gets Reset buttons back from a box's OnTextChanged", function()
+    section.refresh() -- SetText on each box fires OnTextChanged, as in the client
+    for id in pairs(section.rows) do assert.is_not_true(section.rows[id].reset.shown) end
+    assert.is_not_true(buttons["Publish weights"].shown)
   end)
 
   it("an officer sees Publish and the edit boxes", function()
@@ -115,6 +121,32 @@ describe("Leaderboard.SettingsView", function()
     type_("exchange.sales", ".5")
     buttons["Publish weights"].onClick()
     assert.equal(0.5, pubMap["exchange.sales"])
+  end)
+
+  it("a refresh leaves an edited, unpublished box alone until Publish or Reset", function()
+    becomeOfficer()
+    type_("exchange.sales", "7")
+    section.refresh()
+    assert.equal("7", section.boxes["exchange.sales"]:GetText())
+    buttons["Publish weights"].onClick()
+    weights["exchange.sales"] = 7
+    section.refresh()
+    assert.equal("7", section.boxes["exchange.sales"]:GetText())
+    weights["exchange.sales"] = 6
+    section.refresh() -- not dirty any more: follows the published value
+    assert.equal("6", section.boxes["exchange.sales"]:GetText())
+    type_("exchange.gold.earned", "3")
+    buttons["Reset"].onClick() -- the last row's Reset
+    weights["exchange.gold.earned"] = 0.1
+    section.refresh()
+    assert.equal("0.1", section.boxes["exchange.gold.earned"]:GetText())
+  end)
+
+  it("has the Activity, Weight and Default header row", function()
+    local seen = {}
+    ns.UI.Text = function(_, _, text) local t = W.new("FontString"); t.text = text; seen[text or ""] = true; return t end
+    ns.Leaderboard.SettingsView.Build(W.new("Frame"))
+    assert.is_true(seen["Activity"] and seen["Weight"] and seen["Default"])
   end)
 
   it("names who last changed the weights, with the publish date", function()

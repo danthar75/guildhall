@@ -360,6 +360,23 @@ local function nameOfProfile(id)
   return ns.Util.DisplayName(tostring(id))
 end
 
+Board.H.nameOfProfile = nameOfProfile
+
+-- A name for an item given as a link, a typed name, or a bare item id. Never a raw id: an id
+-- the client does not know yet gives nil.
+local function itemName(item)
+  if type(item) == "string" and not item:match("^%d+$") then return escape(Util.ItemName(item)) end
+  local id = tonumber(item)
+  local getInfo = id and ((C_Item and C_Item.GetItemInfo) or GetItemInfo)
+  if getInfo then
+    local ok, name = pcall(getInfo, id)
+    if ok and type(name) == "table" then name = name.itemName end
+    if ok and type(name) == "string" and name ~= "" then return escape(name) end
+  end
+  return nil
+end
+Board.ItemName = itemName
+
 -- The line at the top of the board, or nil: a deal someone recorded that waits for my
 -- confirmation (first), else the "Sold?" question for a paired sale of my WTS listing.
 -- { kind = "confirm"|"sold", text, obsId?, listingId?, more? }. The sold prompt is held in the
@@ -374,9 +391,10 @@ function Board.Prompt()
     local d = p.obs.d
     local verb = d.buyer == me and "bought" or "sold"
     local item = type(p.listing.d) == "table" and p.listing.d.item or d.item
+    local name = itemName(item) or itemName(d.item)
     return { kind = "confirm", obsId = p.obs.id, more = #pending - 1,
-      text = escape(nameOfProfile(p.obs.by)) .. " says you " .. verb .. " " .. d.count .. " "
-        .. escape(Util.ItemName(tostring(item))) .. " for " .. goldText(d.copper) .. ". Confirm?" }
+      text = escape(nameOfProfile(p.obs.by)) .. " says you " .. verb .. " "
+        .. (name and (d.count .. " " .. name) or ("an item (x" .. d.count .. ")")) .. " for " .. goldText(d.copper) .. ". Confirm?" }
   end
   local held = view and view.sold
   if held then
@@ -389,7 +407,7 @@ function Board.Prompt()
   end
   if held then
     return { kind = "sold", listingId = held.listing.id,
-      text = "Sold? " .. escape(Util.ItemName(tostring(held.listing.d.item))) }
+      text = "Sold?" .. (itemName(held.listing.d.item) and (" " .. itemName(held.listing.d.item)) or "") }
   end
   return nil
 end

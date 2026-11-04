@@ -117,6 +117,26 @@ describe("Leaderboard Config", function()
     assert.same({ char = "Boss-Realm", at = clock.now() }, cfg:WeightsInfo())
   end)
 
+  it("PublishWeights stores who changed it and when, and a tz refresh keeps both", function()
+    offset = 0
+    clock.advance(100)
+    assert.is_true((cfg:PublishWeights({ sales = 7 })))
+    local at = clock.now()
+    local d = cfg.set:Get("weights").d
+    assert.equal("Boss-Realm", d.changedBy)
+    assert.equal(at, d.changedAt)
+    clock.advance(5000)
+    offset = 3600
+    assert.is_true(cfg:MaybeRefreshTz())
+    assert.same({ char = "Boss-Realm", at = at }, cfg:WeightsInfo())
+    assert.equal(3600, cfg:Tz())
+  end)
+
+  it("WeightsInfo falls back to the record's author and time for older records", function()
+    assert.equal("accepted", apply(rec("weights", 1, "Boss-Realm", { weights = { sales = 9 } })))
+    assert.same({ char = "Boss-Realm", at = clock.now() }, cfg:WeightsInfo())
+  end)
+
   it("MaybeSaveMonth waits for the 3-day grace", function()
     local l = ledger({ p1 = { sales = 3 } })
     clock.advance(utc(2026, 11, 4, 0) - 1 - clock.now())

@@ -155,6 +155,22 @@ describe("Boot", function()
     assert.equal(1, n)
   end)
 
+  it("opting out publishes the hidden flag even though the characters are unchanged", function()
+    local sv = ns.services
+    local id = sv.profile:Id()
+    local before = sv.profileSet:Get(id)
+    assert.is_not_nil(before)
+    assert.is_nil(before.d.hidden)
+    local sentBefore = #sent
+    sv.profile:SetHidden(true)
+    ns.Boot.PublishProfile()
+    local after = sv.profileSet:Get(id)
+    assert.is_true(after.d.hidden)
+    assert.is_true(after.v > before.v)
+    wait(5)
+    assert.is_true(#sent > sentBefore) -- and it went out to guildmates
+  end)
+
   it("one throwing module handler does not stop the next, and the error is reported", function()
     fire("PROBE", 1)
     assert.equal(1, #probeCalls)

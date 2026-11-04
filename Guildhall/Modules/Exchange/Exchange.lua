@@ -31,7 +31,12 @@ function ns.Exchange.Create(ctx)
   db.declined = db.declined or {}
   db.prompted = db.prompted or {} -- deal ref -> time the "Sold?" prompt was first offered
   self.db = db
+  self.soldDirty = true -- NextSoldPrompt rescans only after listings or observations change
+  if ns.Events and ns.Events.On then
+    ns.Events:On("ObservationsChanged", function() self.soldDirty = true end)
+  end
   self.listings = ns.ReplicatedSet.new(SET_NAME, db.listings, { now = ctx.now, onChange = function()
+    self.soldDirty = true
     changed()
     if self.started then self:_queueWitness() end
   end })
@@ -262,6 +267,7 @@ function Ex:ConfirmDeal(obsId)
     if p.obs.id == obsId then
       local status = self.ctx.observations:Publish(ns.Exchange.Deals.Rebuild(p.obs.d, self.now()))
       if status ~= "accepted" then return false, status end
+      self.soldDirty = true
       return true
     end
   end
@@ -298,13 +304,15 @@ end
 -- (the UI keeps showing it until dismissed). Nil when there is nothing to ask.
 function Ex:NextSoldPrompt()
   local obs = self.ctx.observations
-  if not obs then return nil end
+  if not obs or not self.soldDirty then return nil end
+  self.soldDirty = false
   local me, now = self.profile:Id(), self.now()
   for _, deal in ipairs(ns.Exchange.Deals.PairedDeals(obs)) do
     local listing = self.listings:Get(deal.listing)
     if not self.db.prompted[deal.ref] and now - deal.at <= CONFIRM_WINDOW and listing and listing.by == me
         and listing.del ~= true and listing.exp > now and type(listing.d) == "table" and listing.d.kind == "WTS" then
       self.db.prompted[deal.ref] = now
+      self.soldDirty = true -- another deal may be waiting behind this one
       return { ref = deal.ref, listing = listing }
     end
   end

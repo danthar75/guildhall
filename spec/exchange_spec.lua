@@ -722,6 +722,21 @@ describe("Exchange", function()
         assert.is_nil(a.ex:NextSoldPrompt())
       end)
 
+      it("rescans only after listings or observations change", function()
+        local a = paired()
+        local calls, orig = 0, nil
+        orig = a.ns.Exchange.Deals.PairedDeals
+        a.ns.Exchange.Deals.PairedDeals = function(...) calls = calls + 1; return orig(...) end
+        a.ex:NextSoldPrompt() -- offers the deal (a rescan)
+        a.ex:NextSoldPrompt() -- the second rescan finds nothing and clears the flag
+        local n = calls
+        for _ = 1, 5 do a.ex:NextSoldPrompt() end
+        assert.equal(n, calls)
+        a.ex.soldDirty = true -- what an ExchangeChanged / ObservationsChanged does
+        a.ex:NextSoldPrompt()
+        assert.equal(n + 1, calls)
+      end)
+
       it("does not offer it again after a reload, nor for an LF listing", function()
         local a, b, rec = paired()
         a.ex:NextSoldPrompt()
