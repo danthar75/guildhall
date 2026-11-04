@@ -31,8 +31,23 @@ function Util.DisplayName(name)
   return name:match("^([^%-]+)%-") or name
 end
 
+-- True only for exactly one whole item link: a colour code (|cAARRGGBB or |cnNAME:), one
+-- |Hitem:...|h[Name]|h|r and nothing else. The name may hold quality-tier atlases
+-- (|A:...|a) but no other escape. Anything else must be shown through Util.Escape.
 function Util.IsItemLink(s)
-  return type(s) == "string" and s:find("|Hitem:", 1, true) ~= nil
+  if type(s) ~= "string" then return false end
+  local rest = s:match("^|c%x%x%x%x%x%x%x%x(.*)$") or s:match("^|cn[%w_]+:(.*)$")
+  if not rest then return false end
+  local name = rest:match("^|Hitem:[%-%d:]+|h%[(.-)%]|h|r$")
+  if not name then return false end
+  name = name:gsub("|A:[%w_%-%.:]+|a", "")
+  return name ~= "" and not name:find("[|%]]")
+end
+
+-- Text with every "|" doubled, so WoW renders it literally (no colours, textures or links).
+function Util.Escape(s)
+  if s == nil then return "" end
+  return (tostring(s):gsub("|", "||"))
 end
 
 function Util.ItemIdFromLink(s)

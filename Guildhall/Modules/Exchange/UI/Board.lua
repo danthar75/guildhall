@@ -33,7 +33,7 @@ local function on(w, event, fn)
   w:SetScript(event, function(...) return UI.Try(fn, ...) end)
 end
 
-local function escape(s) return (tostring(s or ""):gsub("|", "||")) end
+local escape = Util.Escape
 local function bare(name) return type(name) == "string" and ns.Util.DisplayName(name) or nil end
 
 local function services() return ns.services end

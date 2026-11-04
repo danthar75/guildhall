@@ -144,7 +144,7 @@ end
 
 local function confirm(which, rec)
   if not (StaticPopup_Show and StaticPopupDialogs and StaticPopupDialogs[which]) then return false end
-  StaticPopup_Show(which, Util.ItemName(rec.d.item or ""), nil, rec.id)
+  StaticPopup_Show(which, escape(Util.ItemName(rec.d.item or "")), nil, rec.id)
   return true
 end
 
