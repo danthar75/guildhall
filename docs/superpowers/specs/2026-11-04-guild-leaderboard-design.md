@@ -213,8 +213,8 @@ So withdraw-and-redeposit loops add nothing (user's blacklist case).
 - **UI:** the period buttons gain "Past months ▾". Picking a month shows that month's saved top 5, labelled "Saved <date> by <officer>", with each activity's top 5 available through the board picker. Old months can't be recalculated, so a player who wasn't in the top 5 isn't shown for that month.
 
 **Periods:**
-- This week. The week starts at the weekly reset, approximated as Tuesday 15:00 UTC for US. The exact reset rule is left to the builder, ideally from the client.
-- This month (calendar month, server time).
+- This week, starting at the client's weekly reset.
+- This month: a calendar month on the guild's server clock (user). Stored times stay UTC. The officer-published config record carries the server's UTC offset, so every client agrees on month edges. Details are in the plan.
 - All time (the last 400 days).
 
 ## UI (my call, to be mocked up before building)

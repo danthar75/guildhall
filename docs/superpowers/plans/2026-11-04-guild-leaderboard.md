@@ -69,11 +69,13 @@ It is built so the coming contests module can reuse its query layer.
 
 ## Rulings made while planning (spec silent or ambiguous)
 
-- **Period boundaries use UTC** for both weeks and months:
-  - week = Tuesday 15:00 UTC
-  - month = UTC calendar month
-
-  Every client must agree on boundaries for month records to match. "Server time" isn't consistently available on a realmless client. *Cost if wrong:* edges shift by a few hours for some guilds; the fix is one function.
+- **Period boundaries use the guild's server time (user).**
+  - All stored times stay UTC epoch seconds (`GetServerTime()`). Only period boundaries are shifted.
+  - **Month:** a calendar month on the server clock. The offset is `serverOffset = C_DateAndTime.GetServerTimeLocal() - GetServerTime()`, rounded to 15 minutes.
+  - **Week:** starts at the client's weekly reset. That is `now + C_DateAndTime.GetSecondsUntilWeeklyReset() - 604800`, rounded to the hour.
+  - **One source of truth (my call):** the weights config record carries `d.tz = serverOffset`, stamped by the officer client that publishes or refreshes it. Every client uses the record's `tz` once one exists, so all clients agree on month edges even if one client's clock API differs. Each month record also stores its own `from` and `to`, so it is self-describing.
+  - **Fallback order:** record `tz`, then the local `GetServerTimeLocal` offset, then 0 (UTC). For the week: the reset API, then Tuesday 15:00 UTC.
+  - *Cost if wrong:* a DST change moves the offset by an hour. Officers' clients refresh `tz` on login when it differs by ≥ 15 minutes, so month edges follow the server's clock change within a login.
 - **Bank merge tolerance.** The game reports "N hours ago", so two readers can compute `approxAt` hours that differ by one. Readings match if all other fields are equal and their hour buckets differ by ≤ 1, matched greedily one-to-one, oldest first. *Cost if wrong:* rare double counts or missed pairs near hour edges.
 - **Opt-out syncs.** It is stored on the profile record as `d.hidden = true`, so every client hides the same people. It is account-wide (`personal.profile.hidden`).
 - **Demo data never leaves the client.** `/gh lbdemo` builds fake observations in memory only: never stored, never synced. The tab shows a "Demo data" banner until `/gh lbdemo off` or `/reload`.
@@ -245,11 +247,12 @@ In `spec/sync_spec.lua`, a new `describe("day buckets")`, using the existing two
 **Interfaces:**
 - Consumes: `ledger:Query` (Task 3), `Activity.Types`, and a `weights` table (Task 9; tests pass a plain table).
 - Produces:
-  - `Scoring.Period(key: "week"|"month"|"all", now) -> from, to`:
-    - Week starts Tuesday 15:00 UTC.
-    - Month is the UTC calendar month.
+  - `Scoring.Period(key: "week"|"month"|"all", now, clock) -> from, to`. `clock = { tz: seconds, weekStart: epoch|nil }`, built by `Scoring.Clock(cfg, compat, now)` following the ruling's fallback order:
+    - Week starts at `clock.weekStart`, or Tuesday 15:00 UTC when that is nil.
+    - Month is the calendar month of `t + tz`.
     - `all` = `now - 34560000`, `now + 1`.
-  - `Scoring.MonthRange(ym: "2026-11") -> from, to`, and `Scoring.MonthKey(t) -> "YYYY-MM"` in UTC.
+  - `Scoring.MonthRange(ym: "2026-11", tz) -> from, to` (epoch UTC), and `Scoring.MonthKey(t, tz) -> "YYYY-MM"`.
+  - `Compat:ServerOffset() -> seconds|nil` and `Compat:SecondsUntilWeeklyReset() -> seconds|nil`, with nil when the API is missing or secret.
   - `Scoring.Points(totalsForProfile, weights) -> number`: sums `value × weight` over types, with gold types converting copper to gold first; `self` types are skipped. It rounds to 1 decimal for display only.
   - `Scoring.Board(result, board: "overall"|activityId, weights, opts) -> array of { profile, value, rank }`:
     - Sorted descending; equal values share a rank; ties are ordered by profile id.
@@ -259,14 +262,16 @@ In `spec/sync_spec.lua`, a new `describe("day buckets")`, using the existing two
   - `Scoring.Breakdown(ledger, profile, from, to, weights) -> { lines = { {type, value, weight, points} }, total, items = { [type] = rows }, notCounted = rows }`.
 
 - [ ] **Step 1: Failing tests.**
-  - "week starts Tuesday 15:00 UTC": 2026-11-03 14:59:59 UTC is in the previous week, and 15:00:00 starts a new one.
-  - "month boundaries are UTC; an observation at 23:59:59 on 10-31 counts in October (Review Focus 3)"
+  - "with no reset API the week starts Tuesday 15:00 UTC": 2026-11-03 14:59:59 UTC is in the previous week, and 15:00:00 starts a new one.
+  - "the week starts at the reset API's time when present"
+  - "month edges follow tz": with tz = -28800 (UTC-8), 2026-11-01 07:59:59 UTC counts in October, and 08:00:00 counts in November (Review Focus 3)
+  - "Clock prefers the record's tz over the local offset, then falls back to 0"
   - "Points converts copper and applies weights": 340 g earned at 0.1 gives 34.
   - "weight 0 drops a type from overall but not from its own board"
   - "ties share a rank"
   - "hidden and zero profiles are not ranked"
   - "CanSeeBreakdown: self yes, officer yes, other no"
-- [ ] **Step 2: Fail. Step 3: Implement** with pure arithmetic from the epoch (day = floor(t / 86400); 1970-01-01 was a Thursday). Use `date("!*t", t)` for year and month, and nothing local-time. **Step 4: Pass. Step 5: Commit** "Leaderboard core: scoring, UTC periods, visibility".
+- [ ] **Step 2: Fail. Step 3: Implement** with pure arithmetic from the epoch. Shift by `tz` first, then `date("!*t", t + tz)` gives the year and month. Never use local-time functions. **Step 4: Pass. Step 5: Commit** "Leaderboard core: scoring, UTC periods, visibility".
 
 ### Task 5: Exchange deal matching and the trade window
 
@@ -420,12 +425,13 @@ In `spec/sync_spec.lua`, a new `describe("day buckets")`, using the existing two
     - The payload shape must be valid.
     - For month records, a record whose id already exists is accepted only if `d.retake == true` and it is Greater.
   - **`cfg:Weights() -> { [typeId] = number }`.** It merges `Activity` defaults with the record, so types missing from the record use their defaults. Weights must be finite and in 0..1000; anything else is invalid.
-  - **`cfg:PublishWeights(map) -> ok, err`.** Officers only.
+  - **`cfg:PublishWeights(map) -> ok, err`.** Officers only. It stamps `d.tz = compat:ServerOffset()`.
+  - **`cfg:Tz() -> seconds|nil`.** This is the record's `tz`. On an officer's login, `cfg:MaybeRefreshTz()` republishes the weights record unchanged except `tz` when the local offset differs by ≥ 900 s, or when no record exists yet and the local offset is known.
   - **`cfg:Month(ym) -> d|nil`** and **`cfg:Months() -> array`** of ym, newest first.
   - **`cfg:MaybeSaveMonth(ledger, now)`.** It runs on login for officers. For the newest finished month that has no record, once `now ≥ monthEnd + 259200`, it publishes:
 
     ```
-    { month = ym, goldKept, overall = top5, boards = { [typeId] = top5 }, weights, savedBy = myChar, savedAt = now }
+    { month = ym, from, to, tz, goldKept, overall = top5, boards = { [typeId] = top5 }, weights, savedBy = myChar, savedAt = now }
     ```
 
     Each `top5` is an array of `{ profile, name, value, rank }`, where `name` is the profile's display char at save time.
@@ -440,6 +446,7 @@ In `spec/sync_spec.lua`, a new `describe("day buckets")`, using the existing two
   - "a second save for the same month is ignored"
   - "a retake replaces it"
   - "a month record keeps its numbers after weights change"
+  - "MaybeRefreshTz republishes only when the offset moves ≥ 15 min"
 - [ ] **Step 2–4: Fail, implement, pass.** **Step 5: Commit** "Leaderboard core: officer weights and frozen month records".
 
 ### Task 10: Wiring: module events, syncs list, the Leaderboard module
