@@ -324,4 +324,38 @@ describe("Leaderboard.BankReview", function()
       for str in src:gmatch('"([^"\n]*)"') do assert.is_true(isAllowed(str), path .. ": " .. str) end
     end
   end)
+
+  it("a member's excluded and unpaired rows appear under one player entry (real Ledger)", function()
+    loadAddonFile(ns, "Guildhall/Core/Leaderboard/Ledger.lua")
+    ns.Observations = { KINDS = { bank = true } }
+    ns.Activity.Register({ id = "bank.gold", label = "Bank gold", unit = "gold", verify = "paired", weight = 0.2, order = 60 })
+    local contribs = {
+      { type = "bank.gold", char = "Bob-Realm", value = 10000, at = NOV, ref = "bank:a", counted = true, net = true },
+      { type = "bank.gold", char = "Bob-Realm", value = 20000, at = NOV - 60, ref = "bank:b", counted = false,
+        why = "unpaired", net = true },
+      { type = "bank.gold", char = "Cat-Realm", value = 30000, at = NOV - 120, ref = "bank:c", counted = true, net = true },
+    }
+    ns.Activity.RegisterDeriver("bank", function() return contribs end)
+    excl["bank:a"] = { excluded = true, reason = "moving guild funds", by = "Gm-Realm", at = 1 }
+    local owners = { ["Bob-Realm"] = "pBob", ["Cat-Realm"] = "pCat" }
+    ns.leaderboard.ledger = ns.Ledger.new({
+      observations = { List = function() return { {} } end, changes = 0 },
+      profile = {
+        OwnerOf = function(_, ch) return owners[ch] end,
+        CharsOf = function(_, id) return id == "pBob" and { "Bob-Realm" } or { "Cat-Realm" } end,
+      },
+      roster = { RankIndex = function() return nil end, ConfigList = function() return {} end },
+      now = ns.services.now, config = ns.leaderboard.config,
+    })
+    BR.Open()
+    BR._panel().playerBtn.onClick()
+    local labels = {}
+    for _, it in ipairs(picked.items) do labels[#labels + 1] = it.label end
+    assert.same({ "All players", "Bob", "Cat" }, labels)
+    picked.onPick("p:pBob")
+    assert.same({ "bank:a", "bank:b" }, shownRefs())
+    assert.equal("excluded: moving guild funds", lineOf("bank:a").cells.status:GetText())
+    assert.equal("not verified yet", lineOf("bank:b").cells.status:GetText())
+    assert.same({}, errors)
+  end)
 end)

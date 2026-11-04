@@ -336,9 +336,14 @@ function SettingsView.Build(parent)
   section.error = UI.Text(parent, "GameFontNormalSmall", "")
   section.error:SetTextColor(1, 0.35, 0.35)
   section.error:SetPoint("LEFT", section.publish, "RIGHT", 10, 0)
+  -- bounded on the right so it never runs under the Bank review button
+  section.error:SetWidth(WIDTH - 120 - 144 - 10)
+  section.error:SetJustifyH("LEFT")
+  if section.error.SetWordWrap then section.error:SetWordWrap(false) end
   section.error:Hide()
   section.status = UI.Text(parent, "GameFontDisableSmall", "")
   section.status:SetPoint("TOPLEFT", 4, y - 28)
+  section.status:SetWidth(WIDTH)
   section.changed = UI.Text(parent, "GameFontDisableSmall", "")
   section.changed:SetPoint("TOPLEFT", 4, y - 44)
 

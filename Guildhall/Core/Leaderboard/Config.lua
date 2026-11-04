@@ -140,8 +140,9 @@ local function validSummary(x)
     and finite(x.savedAt))
 end
 
+-- "bank:" plus an observation id ("<profile hex>:o<time>_<n>", Observations _nextId).
 local function validRef(ref)
-  return type(ref) == "string" and #ref <= MAX_REF and ref:match("^bank:.") ~= nil
+  return type(ref) == "string" and #ref <= MAX_REF and ref:match("^bank:[%w:_]+$") ~= nil
 end
 
 -- A stored reason: nil, or 1..80 bytes with no surrounding whitespace.

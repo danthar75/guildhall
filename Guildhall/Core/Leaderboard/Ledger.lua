@@ -101,8 +101,10 @@ function L:Query(q)
     local itemOk = q.item == nil or c.item == nil or q.item(c.item)
     if inWindow and typeOk and itemOk then
       local counted, why, profile = c.counted, c.why, c.profile
+      -- Every row with a character names its profile (the bank review groups by it); only a
+      -- counted one is then checked against the rank exclusions and credited.
+      if c.char ~= nil then profile = self:_resolve(c.char) end
       if counted and c.char ~= nil then
-        profile = self:_resolve(c.char)
         local rank = ctx.roster:RankIndex(c.char)
         if rank ~= nil and excludeRanks[rank] then
           counted, why = false, "rank excluded"

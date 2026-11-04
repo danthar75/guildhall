@@ -255,4 +255,16 @@ describe("Ledger", function()
       assert.equal(100, ledger:Query({}).byProfile.ann["bank.gold"])
     end)
   end)
+
+  it("every row with a character names its profile, without changing what counts", function()
+    add({ type = "bank.gold", char = "Ann-R", value = 50, net = true, ref = "bank:u", counted = false, why = "unpaired" })
+    add({ type = "bank.gold", char = "Ghost-R", value = 20, net = true, ref = "bank:g", counted = false, why = "unpaired" })
+    local r = ledger:Query({ includeUncounted = true })
+    local by = {}
+    for _, row in ipairs(r.rows) do by[row.ref] = row end
+    assert.equal("ann", by["bank:u"].profile)
+    assert.is_nil(by["bank:g"].profile)
+    assert.same({}, r.byProfile)
+    assert.is_nil(r.guild["bank.gold"])
+  end)
 end)
