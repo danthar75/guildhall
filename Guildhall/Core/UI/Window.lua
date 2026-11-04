@@ -78,6 +78,14 @@ function UI.CreatePanel(name, width, height, title)
   f:SetScript("OnDragStart", f.StartMoving)
   f:SetScript("OnDragStop", f.StopMovingOrSizing)
   UI.ApplyBackdrop(f)
+  -- The dialog background texture is partly transparent; panels open on top of the main
+  -- window, so give them a solid fill underneath or the board shows through.
+  if f.CreateTexture then
+    local fill = f:CreateTexture(nil, "BACKGROUND", nil, -8)
+    fill:SetPoint("TOPLEFT", 4, -4)
+    fill:SetPoint("BOTTOMRIGHT", -4, 4)
+    if fill.SetColorTexture then fill:SetColorTexture(0.06, 0.06, 0.08, 1) end
+  end
   f.title = UI.Text(f, "GameFontNormalLarge", title or "")
   f.title:SetPoint("TOPLEFT", 14, -12)
   local accent = ns.Theme.Get("accent")
