@@ -12,8 +12,15 @@ Labels:
   - A version with no "What's new" entry (a small fix) doesn't reopen it (my call).
 - **Account-wide flag (my call).** Alts don't see it again. Stored as `personal.welcome = { seen = "<last version seen>" }`.
 
+## About tab (user)
+The same information is always available in an **About** tab, the last tab after Settings (my call on placement).
+- **Content:** it shows the same header, feature list, gnome line and credit as the welcome screen.
+- **History:** instead of only unseen news, it lists every `WhatsNew.lua` entry, newest first.
+- **Button:** it has a "Show welcome screen" button.
+- **Shared code:** the welcome screen and the About tab build their content with the same function (`UI.AboutContent(parent, opts)`), so they can never drift apart (my call).
+
 ## Getting it back (user)
-- a "Show welcome screen" button in Settings
+- a "Show welcome screen" button in Settings and in the About tab
 - the `/gh welcome` command
 - a "Show this next time" checkbox on the screen itself (my call)
 
