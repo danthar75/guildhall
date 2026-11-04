@@ -29,7 +29,7 @@ Guildhall adds a guild-only group finder. It makes runs easy to post, join, sche
      - an optional note
    - Guildmates sign up with one or more roles.
 2. **Ready now (user pick 1).** One click marks you available, with your roles, level and an optional "free for N hours". Posters see who's available before posting.
-3. **Exchange tie-in (user pick 2).** A post can link the run's key item or quest need (for example "need Seal of Ascension frags") to the Exchange board.
+3. **Exchange tie-in (user pick 2).** A post can name the run's key item or quest need, for example "need Seal of Ascension frags". In the post this shows as a link: clicking it opens the Exchange board searched for that item. A "Post an LF on the Exchange" button opens the Exchange form pre-filled, and the poster submits it as usual. Nothing is created automatically, and Exchange consent rules apply unchanged (my call, from the builder check).
 4. **Reminders (user pick 3).**
    - 15 minutes before a scheduled run, signed-up players get a chat line and an optional sound.
    - The poster also sees "3 of 5 signed up, 2 online".
@@ -75,6 +75,9 @@ A kill counts only if **more than half** of the group are guild members: 3 of 5 
 - **The observation.** Each client publishes `{ kind = "kill", instance, encounter, members = [...], guildCount, at }`. This adds a new observation kind, plus a field shape for the member list. Observations currently allow only `items` as a nested array, so `Observations.Validate` needs extending (it's left to the builder to bound the list at 40 names, each ≤ 64 bytes).
 - **Pairing.** A kill is verified when **two different profiles** report the same instance, encounter, and `at` within 10 minutes (my call), with overlapping member lists.
 - **Credit.** Every member who belongs to a consenting Guildhall profile in this guild gets credit. Non-guild members and non-users are ignored.
+- **Raid attendance without a signup (my call, from the builder check).** Guild members in the group at a verified kill get `groups.raidboss` credit whether or not they signed up. That is the user's "showing up" credit. Signing up first only adds the separate `groups.signedup` credit.
+- **Full clear (my call).** A full clear counts once per lockout week, so it can be spread over several nights. It needs a verified kill of every boss in that instance's table within one weekly reset period.
+- **Leader flags (my call).** The group snapshot also records who is the raid leader and who are assistants. Leaders and assistants are readable for your own group.
 
 ### Restrictions on Forever
 - Inside dungeons and raids, addon messages may be held back. Observations queue in Comm and send when restrictions lift, which already works.
@@ -92,6 +95,7 @@ A kill counts only if **more than half** of the group are guild members: 3 of 5 
 | `groups.signedup` (signed up through Guildhall or the calendar and then showed up) | count | 1 |
 
 `groups.signedup` uses the `paired` verification level: the signup record plus a verified kill containing that player.
+- **Calendar signups (my call, from the builder check).** Each player's own client reads its own calendar invite status ("accepted" or "signed up") outside instances. It publishes a `signup` observation `{ event title, start, status }`. The signup is the player's own claim, which is harmless, because it only earns credit when paired with a kill verified by others. Guildhall signups are already synced records.
 
 ## Raids (user)
 
@@ -113,6 +117,7 @@ A kill counts only if **more than half** of the group are guild members: 3 of 5 
   - free-text manual items, such as world buffs
 - **Automatic check.** Each raider's client checks its own bags (`GetItemCount`) and equipped gear (whether each enchantable slot's item link has an enchant) when the raid forms or at the ready check, before the first pull. It reports the result as an observation.
 - **Leadership view.** Leadership sees the roster with ✓/✗ per person and what's missing.
+- **What a checklist belongs to (my call, from the builder check).** One checklist per **instance** (for example Molten Core), reused every week. A calendar event or Guildhall raid post may pick a different saved checklist for that night. When a raid forms, each raider's client checks the checklist of the instance named by the active event or post, or else of the instance they enter.
 - **Confirmation.** A "Prepared" checkbox per raider is pre-ticked from the automatic check, and leadership can override it. **Only the leadership tick earns credit** (the `confirmed` verification level), so a modified client can't fake it.
 - **History.** Every checklist change goes into the shared change history (user).
 
@@ -120,6 +125,7 @@ A kill counts only if **more than half** of the group are guild members: 3 of 5 
 - **The request.** Someone allowed to (see permissions) clicks "Ask to switch" on a raider, with an optional note like "heal for this boss".
 - **Detection.** The raider's client sees the spec actually change (`ACTIVE_TALENT_GROUP_CHANGED` or the client's equivalent). **Whether Forever has dual spec must be checked in game.**
 - **Credit.** The request plus the observed switch, within 15 minutes (my call), earns `groups.flex` credit.
+- **Fallback if Forever has no dual spec (my call, from the builder check).** Flex becomes leadership-confirmed: whoever asked ticks "switched" afterwards, the same as "Prepared", with no automatic detection. The task is built so detection plugs in when dual spec exists.
 
 ## Permissions (core; user)
 
@@ -133,6 +139,7 @@ A kill counts only if **more than half** of the group are guild members: 3 of 5 
   - later, create contests
 - **Defaults.** Every permission defaults to the officer ranks (`[Guildhall officers=N]`) until someone changes it.
 - **Only the guild master (rank 0) can change permissions** (user).
+- **Checking "raid leader and assistants" (my call, from the builder check).** Other clients accept a confirmation or "Ask to switch" from a non-officer only when that player is shown as leader or assistant in the leader flags of a **paired** kill snapshot of the same raid that night. That needs reports from two different players. Otherwise the confirmation is ignored.
 - **Storage.** Permissions are stored as a guild-master-authored config record in `core.config`. Other clients accept it only from rank 0.
 - **Migration.** The leaderboard's officer checks (weights, retakes) move to these permissions.
 
@@ -141,7 +148,9 @@ A kill counts only if **more than half** of the group are guild members: 3 of 5 
 - **What's recorded.** Every change to officer-controlled settings becomes an append-only, synced history record: what changed, the before and after values, who changed it, and when. That covers permissions, checklists, weights and month retakes.
 - **Who sees it.** The guild master and officers can review it in Settings ("in case we get a bad egg", user).
 - **Tamper resistance.** History records never expire and can never be replaced.
-- The leaderboard plan's Task 14 builds the first version (weights and retakes). This module extends it.
+- The leaderboard plan's Task 14 builds the first version, covering weights and retakes. That task was added on the `feature/leaderboard` branch. This module extends it to permissions and checklists, and moves the leaderboard's officer checks onto permissions.
+- **Strength (my call, from the builder check).** History is an audit trail between honest clients, consistent with the parent design's trust model that guildmates' clients aren't modified. The "bad egg" is an officer misusing an honest client, and the history makes that visible to the guild master. To stop a change from slipping through without a record, every officer config change and its history entry are published as **one record**: the config record carries `before`, `after` and `by`, and every version of it is kept. A guard against modified clients is out of scope.
+- **Retention (my call).** History is kept for 2 years, about 200 bytes per change.
 
 ## UI (my call; to be mocked up before building)
 
