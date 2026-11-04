@@ -7,6 +7,14 @@ function Util.Trim(s)
   return (tostring(s):gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+-- Hash: a deterministic string hash in [0, 2147483647). Plain arithmetic, no bit library,
+-- so every client (Mainline or Classic) computes the same value.
+function Util.Hash(s)
+  local h = 0
+  for i = 1, #s do h = (h * 31 + s:byte(i)) % 2147483647 end
+  return h
+end
+
 function Util.DeepCopy(t)
   if type(t) ~= "table" then return t end
   local out = {}

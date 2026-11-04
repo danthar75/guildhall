@@ -1,6 +1,11 @@
 describe("Util", function()
   local U
   before_each(function() local ns = {}; loadAddonFile(ns, "Guildhall/Core/Util.lua"); U = ns.Util end)
+  it("Hash is deterministic and spreads", function()
+    assert.equal(U.Hash("abc"), U.Hash("abc"))
+    assert.are_not.equal(U.Hash("abc"), U.Hash("abd"))
+    assert.is_true(U.Hash(string.rep("z", 500)) < 2147483647)
+  end)
   it("FullName normalizes", function()
     assert.equal("Thálwyn-ArgentDawn", U.FullName("Thálwyn", "Argent Dawn"))
     assert.equal("Brakka-Realm", U.FullName("Brakka-Realm", "Other"))
