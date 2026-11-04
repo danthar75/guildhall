@@ -75,6 +75,7 @@ function Details.Show(rec)
     det.alts:SetText("")
     det.body:SetText(ns.exchange and "Select a listing to see its details." or "")
     det.dot:Hide(); det.q:Hide()
+    if det.iconBtn then det.iconBtn:Hide(); det.iconBtn.item = nil end
     return
   end
   local ex, d, now = ns.exchange, rec.d, s.now()
@@ -82,6 +83,11 @@ function Details.Show(rec)
   local mine = not imported and s.profile:IsMine(rec.by)
   local status, char = ex:Status(rec)
   det.head:SetText((TAG[d.kind] or escape(d.kind)) .. "  " .. itemText(d))
+  if det.iconBtn then
+    det.icon:SetTexture(UI.ItemIcon(d.item))
+    det.iconBtn.item = d.item
+    det.iconBtn:Show()
+  end
   local whoName = char or (not imported and rec.char) or nil
   if whoName then
     setDot(det.dot, det.q, status)
@@ -206,20 +212,30 @@ end
 
 function Details.Build(boardView, det, inner)
   view = boardView
+  -- Item icon (hover: standard item tooltip); the header lines sit to its right.
+  det.iconBtn = CreateFrame("Button", nil, det)
+  det.iconBtn:SetSize(40, 40)
+  det.iconBtn:SetPoint("TOPLEFT", 12, -12)
+  det.icon = det.iconBtn:CreateTexture(nil, "ARTWORK")
+  det.icon:SetAllPoints(det.iconBtn)
+  det.iconBtn:SetScript("OnEnter", function(self) UI.Try(UI.ItemTooltip, self, self.item) end)
+  det.iconBtn:SetScript("OnLeave", function() UI.Try(function() if GameTooltip then GameTooltip:Hide() end end) end)
+  det.iconBtn:Hide()
+  local x = 62
   det.head = UI.Text(det, "GameFontNormalLarge")
-  det.head:SetPoint("TOPLEFT", 12, -12)
-  det.head:SetWidth(inner)
+  det.head:SetPoint("TOPLEFT", x, -12)
+  det.head:SetWidth(inner - (x - 12))
   det.dot = det:CreateTexture(nil, "ARTWORK")
   det.dot:SetSize(8, 8)
-  det.dot:SetPoint("TOPLEFT", 14, -42)
+  det.dot:SetPoint("TOPLEFT", x + 2, -42)
   det.q = UI.Text(det, "GameFontDisableSmall", "?")
-  det.q:SetPoint("TOPLEFT", 14, -40)
+  det.q:SetPoint("TOPLEFT", x + 2, -40)
   det.who = UI.Text(det, "GameFontHighlight")
-  det.who:SetPoint("TOPLEFT", 28, -38)
-  det.who:SetWidth(inner - 16)
+  det.who:SetPoint("TOPLEFT", x + 16, -38)
+  det.who:SetWidth(inner - (x - 12) - 16)
   det.alts = UI.Text(det, "GameFontHighlightSmall")
-  det.alts:SetPoint("TOPLEFT", 12, -58)
-  det.alts:SetWidth(inner)
+  det.alts:SetPoint("TOPLEFT", x, -58)
+  det.alts:SetWidth(inner - (x - 12))
   det.body = UI.Text(det, "GameFontHighlight")
   det.body:SetPoint("TOPLEFT", 12, -84)
   det.body:SetWidth(inner)

@@ -54,6 +54,30 @@ function UI.Text(parent, font, text)
   return fs
 end
 
+-- Icon texture for a listing's item: the item's own icon for an item link, otherwise a
+-- question mark (typed names, Discord imports, items the client hasn't cached).
+UI.UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
+function UI.ItemIcon(item)
+  local id = ns.Util.IsItemLink(item) and ns.Util.ItemIdFromLink(item) or nil
+  if id then
+    for _, f in ipairs({ C_Item and C_Item.GetItemIconByID, GetItemIcon }) do
+      if type(f) == "function" then
+        local ok, icon = pcall(f, id)
+        if ok and icon then return icon end
+      end
+    end
+  end
+  return UI.UNKNOWN_ICON
+end
+
+-- Shows the standard item tooltip for an item link; does nothing for plain names.
+function UI.ItemTooltip(owner, item)
+  if not (GameTooltip and ns.Util.IsItemLink(item)) then return end
+  GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+  GameTooltip:SetHyperlink(item)
+  GameTooltip:Show()
+end
+
 function UI.Button(parent, text, width, onClick)
   local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
   b:SetSize(width or 100, 22)
