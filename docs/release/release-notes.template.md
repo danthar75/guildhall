@@ -1,4 +1,6 @@
-## Guildhall {{VERSION}}
+## Guildhall {{VERSION}} (beta)
+
+> **Beta.** Guildhall is being tested in the guild Emergence, so expect rough edges. Please report problems to Dor in game or on the guild Discord, or open an issue here.
 
 An in-game LF / WTS board for your guild on WoW Forever. Post what you're buying or selling, see who's online, and whisper, mail or copy a listing for Discord in one click. Everyone in the guild who runs Guildhall sees the same board.
 

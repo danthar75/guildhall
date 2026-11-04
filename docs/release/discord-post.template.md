@@ -1,4 +1,6 @@
-**Guildhall {{VERSION}} is out: our #exchange board, inside the game** 🛡️
+**Guildhall {{VERSION}} (beta) is out: our #exchange board, inside the game** 🛡️
+
+It is a beta: we are testing it here in Emergence first, so expect rough edges and tell @Dor what breaks.
 
 Post LF / WTS in game, see who's online, and whisper, mail or copy a listing for Discord in one click. Everyone running Guildhall sees the same board.
 

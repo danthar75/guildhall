@@ -120,3 +120,7 @@ Needs Forever. Account A and account B are your two accounts, both in the guild 
 - [ ] **Month save waits for sync to settle.** On A (guild master or officer), stay offline for a few days of a finished month, then log in at least 3 days after the month ends while B is online. Expected: the month is not saved at 90 s while observations are still arriving; it is saved once the Log has been quiet for a minute (within 15 min of login), and Past months then matches what B shows. If sync never goes quiet within 15 min, nothing is saved that session.
 - [ ] **Fresh install catches up on permission-dependent records.** With a rank granted "Review bank contributions" and an exclusion made by that rank, install Guildhall fresh on B (delete its SavedVariables) and log in. Expected: within about two minutes B shows the exclusion (the member's score drops on B too) with no /reload, and B's Log shows at most one "author lacks permission" line for it.
 - [ ] **Long message check (later).** In a test guild (or later, once the real guild has 5 or more saved months), install Guildhall fresh on one account and log in. Expected: it receives every saved month, with none missing from Past months.
+
+### Beta label
+
+- [ ] **Beta label shows.** On the character screen's AddOns list the addon reads "Guildhall (Beta)". The welcome screen and About tab show "Version 0.1.0 (beta)" and the orange beta note.
