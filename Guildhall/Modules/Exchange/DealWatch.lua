@@ -8,7 +8,8 @@ local ADDON, ns = ...
 -- CoD mail: DealWatch:InstallHooks() (Task 10 calls it at login) post-hooks SendMail,
 -- TakeInboxItem and AutoLootMailItem (hooksecurefunc only, bodies pcall'd). A seller's send is
 -- snapshotted in the SendMail post-hook and published on MAIL_SEND_SUCCESS; a buyer's take reads
--- the inbox header cached at MAIL_INBOX_UPDATE (the post-hook runs after the mail is gone).
+-- the CoD header at that index (still there in the post-hook), recorded as a pending take keyed by
+-- signature; MAIL_INBOX_UPDATE publishes it only if a mail with that signature has vanished.
 -- Reads the globals ERR_TRADE_COMPLETE and LE_GAME_ERR_TRADE_COMPLETE (from ctx.env, default _G).
 -- Never calls a restricted or action API. A secret value anywhere means no snapshot, no
 -- observation.
@@ -20,7 +21,7 @@ local W = {}
 W.__index = W
 
 function DealWatch.new(ctx)
-  return setmetatable({ ctx = ctx, snap = nil, partner = nil, sendSnap = nil, preSnap = nil, inbox = {} }, W)
+  return setmetatable({ ctx = ctx, snap = nil, partner = nil, sendSnap = nil, preSnap = nil, pending = {}, counts = {}, published = {} }, W)
 end
 
 local function accepted(v) return v == 1 or v == true end
@@ -58,17 +59,40 @@ function W:_publishCod(transfer)
   ctx.observations:Publish(Deals.Observation("cod", listing, transfer))
 end
 
-function W:_onSendMail()
-  local snap = self.ctx.compat:SendMailSnapshot() or self.preSnap
+function W:_onSendMail(recipient)
+  local ctx = self.ctx
+  local snap = ctx.compat:SendMailSnapshot()
+  local pre = self.preSnap
   self.preSnap = nil
+  if not snap and pre and ctx.now() - pre.t <= 1 then
+    local to = ctx.compat:Safe(recipient)
+    if type(to) == "string" and ctx.roster:Norm(to) == ctx.roster:Norm(pre.snap.to) then snap = pre.snap end
+  end
   self.sendSnap = snap
 end
 
+-- Identifies a CoD mail by what it says, not where it sits (indexes shift).
+local function signature(mail)
+  local parts = {}
+  for i, it in ipairs(mail.items) do parts[i] = it.id .. "x" .. it.n end
+  return mail.sender .. "|" .. mail.cod .. "|" .. table.concat(parts, ",")
+end
+
+local PUBLISHED_TTL = 3600
+
+-- A take hook only means a request was sent. Record it; MAIL_INBOX_UPDATE decides if it worked.
 function W:_onTake(index)
   local ctx = self.ctx
-  local mail = self.inbox[index]
+  local mail = ctx.compat:InboxCod(index)
   if not mail then return end
-  self.inbox[index] = nil   -- one observation per mail
+  local sig, now = signature(mail), ctx.now()
+  local seen = self.published[sig]
+  if seen and now - seen < PUBLISHED_TTL then return end
+  self.pending[#self.pending + 1] = { sig = sig, mail = mail }
+end
+
+function W:_publishTaken(mail)
+  local ctx = self.ctx
   local me = ctx.profile:Id()
   local theirs = ctx.profile:OwnerOf(ctx.roster:Norm(mail.sender))
   if not me or not theirs then return end
@@ -87,14 +111,38 @@ function W:_sendSuccess()
     giveCopper = 0, getCopper = snap.cod, at = ctx.now() })
 end
 
+-- Rebuilds the signature counts, then settles pending takes: a take succeeded when fewer mails
+-- with its signature remain than before (at most one publication per vanished mail).
 function W:_cacheInbox()
-  local compat = self.ctx.compat
-  local cache = {}
+  local compat, ctx = self.ctx.compat, self.ctx
+  local counts = {}
   for i = 1, compat:InboxCount() do
     local mail = compat:InboxCod(i)
-    if mail then cache[i] = mail end
+    if mail then
+      local sig = signature(mail)
+      counts[sig] = (counts[sig] or 0) + 1
+    end
   end
-  self.inbox = cache
+  local pending, before = self.pending, self.counts
+  self.pending, self.counts = {}, counts
+  local groups, order = {}, {}
+  for _, p in ipairs(pending) do
+    local g = groups[p.sig]
+    if not g then g = { n = 0, mail = p.mail }; groups[p.sig] = g; order[#order + 1] = p.sig end
+    g.n = g.n + 1
+  end
+  local now = ctx.now()
+  for sig, t in pairs(self.published) do
+    if now - t >= PUBLISHED_TTL then self.published[sig] = nil end
+  end
+  for _, sig in ipairs(order) do
+    local g = groups[sig]
+    local drop = (before[sig] or g.n) - (counts[sig] or 0)
+    for _ = 1, math.min(g.n, drop) do
+      self.published[sig] = now
+      self:_publishTaken(g.mail)
+    end
+  end
 end
 
 -- Post-hooks only; every body is pcall'd so a hook can never raise into Blizzard code.
@@ -104,12 +152,15 @@ function W:InstallHooks()
   local hook = ctx.hooksecurefunc or _G.hooksecurefunc
   if not hook then return false end
   local function guard(fn) return function(...) pcall(fn, ...) end end
-  hook("SendMail", guard(function() self:_onSendMail() end))
-  hook("TakeInboxItem", guard(function(index) self:_onTake(index) end))
-  hook("AutoLootMailItem", guard(function(index) self:_onTake(index) end))
+  if env.SendMail then hook("SendMail", guard(function(to) self:_onSendMail(to) end)) end
+  if env.TakeInboxItem then hook("TakeInboxItem", guard(function(index) self:_onTake(index) end)) end
+  if env.AutoLootMailItem then hook("AutoLootMailItem", guard(function(index) self:_onTake(index) end)) end
   local btn = env.SendMailMailButton
   if btn and btn.HookScript then
-    btn:HookScript("PreClick", guard(function() self.preSnap = ctx.compat:SendMailSnapshot() end))
+    btn:HookScript("PreClick", guard(function()
+      local snap = ctx.compat:SendMailSnapshot()
+      self.preSnap = snap and { snap = snap, t = ctx.now() } or nil
+    end))
   end
   return true
 end

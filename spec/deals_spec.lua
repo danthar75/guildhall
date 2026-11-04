@@ -215,7 +215,7 @@ describe("Exchange deals", function()
     before_each(function()
       loadAddonFile(ns, "Guildhall/Modules/Exchange/DealWatch.lua")
       published, now, hooks, scripts = {}, 5000, {}, {}
-      env = {}
+      env = { SendMail = function() end, TakeInboxItem = function() end, AutoLootMailItem = function() end }
       mailSnap = { to = "Bob-R", cod = 50000, items = { { id = 2589, n = 20 } } }
       inbox = {}
       listings = { { id = "L1", v = 1, t = 1000, by = "ann", char = "Ann-R", exp = 700000, del = false,
@@ -251,17 +251,153 @@ describe("Exchange deals", function()
       assert.equal(1, #published)
     end)
 
-    it("buyer taking a CoD item from a cached header publishes once", function()
-      inbox[1] = { sender = "Bob-R", cod = 50000, items = { { id = 2589, n = 20 } } }
-      -- the buyer is "ann", the sender "bob": the listing is owned by bob
+    local function codMail(o)
+      local m = { sender = "Bob-R", cod = 50000, items = { { id = 2589, n = 20 } } }
+      for k, v in pairs(o or {}) do m[k] = v end
+      return m
+    end
+
+    it("buyer take publishes once the next inbox update shows the mail gone", function()
+      inbox[1] = codMail()
       listings[1].by, listings[1].char = "bob", "Bob-R"
       local w = build()
       w:OnEvent("MAIL_INBOX_UPDATE")
       hooks.TakeInboxItem(1, 1)
       hooks.AutoLootMailItem(1)
+      assert.equal(0, #published)   -- a request only; nothing yet
+      inbox[1] = nil
+      w:OnEvent("MAIL_INBOX_UPDATE")
       assert.equal(1, #published)
       assert.same({ kind = "cod", listing = "L1", seller = "bob", buyer = "ann", item = 2589, count = 20,
         copper = 50000, at = 5000 }, published[1])
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(1, #published)
+    end)
+
+    it("a take whose next update still shows the same CoD header publishes nothing", function()
+      inbox[1] = codMail()
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(0, #published)
+    end)
+
+    it("a failed take then a successful retry publishes exactly once", function()
+      inbox[1] = codMail()
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      w:OnEvent("MAIL_INBOX_UPDATE")   -- failed
+      hooks.TakeInboxItem(1, 1)
+      hooks.AutoLootMailItem(1)
+      inbox[1] = nil
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(1, #published)
+    end)
+
+    it("two CoD mails taken before one inbox update publish both, matched by signature", function()
+      inbox[1] = codMail()
+      inbox[2] = codMail({ sender = "Bob-R", cod = 70000, items = { { id = 2589, n = 5 } } })
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      listings[1].d.qty = 20
+      listings[2] = { id = "L2", v = 1, t = 1000, by = "bob", char = "Bob-R", exp = 700000, del = false,
+        d = { kind = "WTS", item = LINK2, qty = 5, cod = true, created = 1000 } }
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 1)
+      -- an addon takes mail 1 and mail 2 back to back; indexes shift by the next event
+      hooks.TakeInboxItem(2, 1)
+      inbox = {}
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(2, #published)
+      table.sort(published, function(x, y) return x.count > y.count end)
+      assert.equal(50000, published[1].copper)
+      assert.equal(70000, published[2].copper)
+    end)
+
+    it("taking attachment 2 first on a two-attachment mail publishes all items once the CoD clears", function()
+      inbox[1] = codMail({ items = { { id = 2589, n = 20 }, { id = 2589, n = 20 } } })
+      listings[1].by, listings[1].char = "bob", "Bob-R"
+      listings[1].d.qty = 40
+      local w = build()
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      hooks.TakeInboxItem(1, 2)
+      inbox[1] = nil   -- cod now 0: InboxCod no longer reports it
+      w:OnEvent("MAIL_INBOX_UPDATE")
+      assert.equal(1, #published)
+      assert.equal(40, published[1].count)
+    end)
+
+    it("a send whose recipient differs from the PreClick snapshot discards it", function()
+      env.SendMailMailButton = { HookScript = function(_, n, fn) scripts[n] = fn end }
+      local w = build()
+      scripts.PreClick()
+      mailSnap = nil
+      hooks.SendMail("Carl-R", "s", "b")
+      w:OnEvent("MAIL_SEND_SUCCESS")
+      assert.equal(0, #published)
+    end)
+
+    it("a stale PreClick snapshot (over 1 s old) is discarded", function()
+      env.SendMailMailButton = { HookScript = function(_, n, fn) scripts[n] = fn end }
+      local w = build()
+      scripts.PreClick()
+      mailSnap = nil
+      now = now + 2
+      hooks.SendMail("Bob-R", "s", "b")
+      w:OnEvent("MAIL_SEND_SUCCESS")
+      assert.equal(0, #published)
+    end)
+
+    it("a missing global is not hooked and never raises", function()
+      env.AutoLootMailItem = nil
+      assert.has_no.errors(function() build() end)
+      assert.is_nil(hooks.AutoLootMailItem)
+      assert.is_function(hooks.SendMail)
+    end)
+
+    local function realCompat(env2)
+      local cns = {}
+      loadAddonFile(cns, "Guildhall/Core/Util.lua")
+      loadAddonFile(cns, "Guildhall/Core/Compat.lua")
+      return cns.Compat.new(env2)
+    end
+
+    it("SendMailSnapshot: secret cod, link or count gives nil; unparseable link gives nil", function()
+      local function mk(over)
+        local e = { SendMailNameEditBox = { GetText = function() return "Bob-R" end },
+          GetSendMailCOD = function() return 50000 end,
+          GetSendMailItemLink = function(i) if i == 1 then return LINK2 end end,
+          GetSendMailItem = function() return "x", 2589, nil, 20 end,
+          issecretvalue = function() return false end }
+        for k, v in pairs(over) do e[k] = v end
+        return realCompat(e)
+      end
+      assert.equal(50000, mk({}):SendMailSnapshot().cod)
+      assert.is_nil(mk({ issecretvalue = function(v) return v == 50000 end }):SendMailSnapshot())
+      assert.is_nil(mk({ issecretvalue = function(v) return v == LINK2 end }):SendMailSnapshot())
+      assert.is_nil(mk({ issecretvalue = function(v) return v == 20 end }):SendMailSnapshot())
+      assert.is_nil(mk({ GetSendMailItemLink = function(i) if i == 1 then return LINK2 end
+        if i == 2 then return "garbage" end end }):SendMailSnapshot())
+    end)
+
+    it("InboxCod: a secret attachment link or an unparseable link gives nil", function()
+      local function mk(over)
+        local e = { GetInboxHeaderInfo = function() return nil, nil, "Bob-R", "s", 0, 50000 end,
+          GetInboxItemLink = function(_, i) if i == 1 then return LINK2 end end,
+          GetInboxItem = function() return "x", 2589, nil, 20 end,
+          issecretvalue = function() return false end }
+        for k, v in pairs(over) do e[k] = v end
+        return realCompat(e)
+      end
+      assert.equal(50000, mk({}):InboxCod(1).cod)
+      assert.is_nil(mk({ issecretvalue = function(v) return v == LINK2 end }):InboxCod(1))
+      assert.is_nil(mk({ GetInboxItemLink = function(_, i) if i == 2 then return "garbage" end
+        if i == 1 then return LINK2 end end }):InboxCod(1))
     end)
 
     it("CoD observations 29 days apart pair; 31 days apart don't", function()
@@ -309,6 +445,7 @@ describe("Exchange deals", function()
       assert.has_no.errors(function()
         w:OnEvent("MAIL_INBOX_UPDATE")
         hooks.TakeInboxItem(1, 1)
+        w:OnEvent("MAIL_INBOX_UPDATE")
       end)
       assert.equal(0, #published)
     end)

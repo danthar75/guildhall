@@ -220,7 +220,8 @@ function Compat:SendMailSnapshot()
       n = self:Safe(n)
       if n == nil then return nil end
       local id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
-      if id and type(n) == "number" and n > 0 then items[#items + 1] = { id = id, n = n } end
+      if not id then return nil end   -- an unreadable link: no partial snapshot
+      if type(n) == "number" and n > 0 then items[#items + 1] = { id = id, n = n } end
     end
   end
   if #items == 0 then return nil end
@@ -251,7 +252,8 @@ function Compat:InboxCod(index)
       n = self:Safe(n)
       if n == nil then return nil end
       local id = type(link) == "string" and ns.Util.ItemIdFromLink(link) or nil
-      if id and type(n) == "number" and n > 0 then items[#items + 1] = { id = id, n = n } end
+      if not id then return nil end   -- an unreadable link: no partial snapshot
+      if type(n) == "number" and n > 0 then items[#items + 1] = { id = id, n = n } end
     end
   end
   if #items == 0 then return nil end
